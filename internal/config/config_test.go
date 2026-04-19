@@ -248,11 +248,92 @@ func TestDBPath_FlagWins(t *testing.T) {
 	}
 }
 
-func TestDBPath_DefaultsUseFingerprint(t *testing.T) {
+func TestDBPath_EnvOverridesDefault(t *testing.T) {
+	vault := t.TempDir()
+	cfg, err := Load(LoadOpts{
+		VaultFlag: vault, DBEnv: "/tmp/from-env.sqlite",
+		HomeDir: t.TempDir(), CacheDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DBPath != "/tmp/from-env.sqlite" {
+		t.Errorf("DBPath = %q, want env value", cfg.DBPath)
+	}
+}
+
+func TestDBPath_YAMLDBFieldOverridesDefault(t *testing.T) {
+	vault := t.TempDir()
+	writeFile(t, filepath.Join(vault, ".pql.yaml"), "db: custom/path.sqlite\n")
+	cfg, err := Load(LoadOpts{
+		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := filepath.Join(vault, "custom", "path.sqlite")
+	if cfg.DBPath != want {
+		t.Errorf("DBPath = %q, want %q (vault-relative)", cfg.DBPath, want)
+	}
+}
+
+func TestDBPath_DefaultsToInVaultPqlDir(t *testing.T) {
+	vault := t.TempDir()
+	cfg, err := Load(LoadOpts{
+		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := filepath.Join(vault, ".pql", "index.sqlite")
+	if cfg.DBPath != want {
+		t.Errorf("DBPath = %q, want in-vault %q", cfg.DBPath, want)
+	}
+	// .pql/ should have been created so the path is actually usable.
+	if info, err := os.Stat(filepath.Join(vault, ".pql")); err != nil || !info.IsDir() {
+		t.Errorf(".pql/ not created: %v", err)
+	}
+}
+
+func TestDBPath_FallsBackToCacheOnReadOnlyVault(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses permission checks; cannot test fallback")
+	}
+	vault := t.TempDir()
+	cache := t.TempDir()
+	// Strip write permission so MkdirAll(<vault>/.pql) returns EACCES.
+	if err := os.Chmod(vault, 0o555); err != nil {
+		t.Fatalf("chmod readonly: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(vault, 0o755) }) // so t.TempDir cleanup works
+
+	cfg, err := Load(LoadOpts{
+		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: cache,
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !strings.HasPrefix(cfg.DBPath, filepath.Join(cache, "pql")) {
+		t.Errorf("DBPath = %q, want fallback under %s/pql", cfg.DBPath, cache)
+	}
+	if !strings.HasSuffix(cfg.DBPath, "index.sqlite") {
+		t.Errorf("DBPath = %q, want suffix index.sqlite", cfg.DBPath)
+	}
+}
+
+func TestDBPath_FallbackUsesPerVaultSubdir(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses permission checks; cannot test fallback")
+	}
 	cache := t.TempDir()
 	v1 := t.TempDir()
 	v2 := t.TempDir()
-
+	for _, v := range []string{v1, v2} {
+		if err := os.Chmod(v, 0o555); err != nil {
+			t.Fatalf("chmod %s: %v", v, err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(v, 0o755) })
+	}
 	c1, err := Load(LoadOpts{VaultFlag: v1, HomeDir: t.TempDir(), CacheDir: cache})
 	if err != nil {
 		t.Fatalf("Load v1: %v", err)
@@ -262,23 +343,24 @@ func TestDBPath_DefaultsUseFingerprint(t *testing.T) {
 		t.Fatalf("Load v2: %v", err)
 	}
 	if c1.DBPath == c2.DBPath {
-		t.Errorf("different vaults shared a DB path: %s", c1.DBPath)
-	}
-	if !strings.HasPrefix(c1.DBPath, filepath.Join(cache, "pql")) {
-		t.Errorf("DBPath %q not under %s/pql", c1.DBPath, cache)
-	}
-	if !strings.HasSuffix(c1.DBPath, ".sqlite") {
-		t.Errorf("DBPath %q does not end in .sqlite", c1.DBPath)
+		t.Errorf("different vaults shared fallback DB path: %s", c1.DBPath)
 	}
 }
 
-func TestDBPath_HomeDirInjectionMatchesPlatform(t *testing.T) {
-	// Skip on platforms without a defined sub-path so we don't bake assumptions.
+func TestDBPath_HomeDirFallbackMatchesPlatform(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses permission checks; cannot test fallback")
+	}
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 		t.Skipf("unsupported GOOS %q", runtime.GOOS)
 	}
 	vault := t.TempDir()
 	home := t.TempDir()
+	if err := os.Chmod(vault, 0o555); err != nil {
+		t.Fatalf("chmod readonly: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(vault, 0o755) })
+
 	cfg, err := Load(LoadOpts{VaultFlag: vault, HomeDir: home})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -294,6 +376,42 @@ func TestDBPath_HomeDirInjectionMatchesPlatform(t *testing.T) {
 	}
 	if !strings.HasPrefix(cfg.DBPath, wantPrefix) {
 		t.Errorf("DBPath = %q, want prefix %q", cfg.DBPath, wantPrefix)
+	}
+}
+
+func TestLoad_RespectGitignoreField(t *testing.T) {
+	vault := t.TempDir()
+	writeFile(t, filepath.Join(vault, ".pql.yaml"), "respect_gitignore: true\n")
+	cfg, err := Load(LoadOpts{
+		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.RespectGitignore {
+		t.Error("RespectGitignore not loaded from YAML")
+	}
+}
+
+func TestHash_RespectGitignoreAffectsHash(t *testing.T) {
+	a := defaults()
+	b := defaults()
+	b.RespectGitignore = true
+	ah, _ := a.Hash()
+	bh, _ := b.Hash()
+	if ah == bh {
+		t.Errorf("RespectGitignore toggle did not change hash (%s)", ah)
+	}
+}
+
+func TestHash_DBFieldDoesNotAffectHash(t *testing.T) {
+	a := defaults()
+	b := defaults()
+	b.DB = "/somewhere/else.sqlite"
+	ah, _ := a.Hash()
+	bh, _ := b.Hash()
+	if ah != bh {
+		t.Errorf("DB field changed hash but shouldn't (only WHERE not WHAT): %s vs %s", ah, bh)
 	}
 }
 

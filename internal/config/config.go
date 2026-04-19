@@ -53,13 +53,15 @@ type Config struct {
 	ConfigPath string         `yaml:"-"` // empty if no file was loaded
 
 	// User-tunable.
-	Frontmatter string            `yaml:"frontmatter"`
-	Wikilinks   string            `yaml:"wikilinks"`
-	Tags        TagsConfig        `yaml:"tags"`
-	Exclude     []string          `yaml:"exclude"`
-	Aliases     map[string]string `yaml:"aliases"`
-	GitMetadata bool              `yaml:"git_metadata"`
-	FTS         bool              `yaml:"fts"`
+	DB               string            `yaml:"db"` // optional override of the default index path; vault-relative if not absolute
+	Frontmatter      string            `yaml:"frontmatter"`
+	Wikilinks        string            `yaml:"wikilinks"`
+	Tags             TagsConfig        `yaml:"tags"`
+	Exclude          []string          `yaml:"exclude"`
+	Aliases          map[string]string `yaml:"aliases"`
+	RespectGitignore bool              `yaml:"respect_gitignore"` // honor .gitignore files in addition to .pqlignore
+	GitMetadata      bool              `yaml:"git_metadata"`
+	FTS              bool              `yaml:"fts"`
 }
 
 // LoadOpts feeds Load. All Flag/Env fields can be empty; Load applies the
@@ -109,7 +111,7 @@ func Load(opts LoadOpts) (*Config, error) {
 		return nil, err
 	}
 
-	dbPath, err := resolveDBPath(opts, vd.Path)
+	dbPath, err := resolveDBPath(opts, vd.Path, cfg.DB)
 	if err != nil {
 		return nil, err
 	}
@@ -122,22 +124,26 @@ func Load(opts LoadOpts) (*Config, error) {
 // indexer records this in index_meta.config_hash; if it changes between
 // invocations a full reindex is the safe response.
 func (c *Config) Hash() (string, error) {
+	// DB is intentionally excluded — it determines WHERE the index lives,
+	// not WHAT gets indexed, so changing it shouldn't trigger a reindex.
 	view := struct {
-		Frontmatter string            `json:"frontmatter"`
-		Wikilinks   string            `json:"wikilinks"`
-		Tags        TagsConfig        `json:"tags"`
-		Exclude     []string          `json:"exclude"`
-		Aliases     map[string]string `json:"aliases"`
-		GitMetadata bool              `json:"git_metadata"`
-		FTS         bool              `json:"fts"`
+		Frontmatter      string            `json:"frontmatter"`
+		Wikilinks        string            `json:"wikilinks"`
+		Tags             TagsConfig        `json:"tags"`
+		Exclude          []string          `json:"exclude"`
+		Aliases          map[string]string `json:"aliases"`
+		RespectGitignore bool              `json:"respect_gitignore"`
+		GitMetadata      bool              `json:"git_metadata"`
+		FTS              bool              `json:"fts"`
 	}{
-		Frontmatter: c.Frontmatter,
-		Wikilinks:   c.Wikilinks,
-		Tags:        c.Tags,
-		Exclude:     c.Exclude,
-		Aliases:     c.Aliases,
-		GitMetadata: c.GitMetadata,
-		FTS:         c.FTS,
+		Frontmatter:      c.Frontmatter,
+		Wikilinks:        c.Wikilinks,
+		Tags:             c.Tags,
+		Exclude:          c.Exclude,
+		Aliases:          c.Aliases,
+		RespectGitignore: c.RespectGitignore,
+		GitMetadata:      c.GitMetadata,
+		FTS:              c.FTS,
 	}
 	b, err := json.Marshal(view)
 	if err != nil {
