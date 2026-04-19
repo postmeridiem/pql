@@ -1,0 +1,39 @@
+# Build artefacts
+/bin/
+/dist/
+/mql
+/mql.exe
+
+# Test + coverage output
+*.test
+*.out
+coverage.*
+/tmp/
+
+# Go module cache fragments (usually outside repo, defensive)
+/vendor/
+
+# SQLite index files should never land here, but defensive
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Claude Code user-specific settings
+.claude/settings.local.json
