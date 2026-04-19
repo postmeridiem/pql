@@ -34,7 +34,7 @@ Three artefacts, one repo:
 
 ## Architecture
 
-Go 1.22+, single module, no cgo.
+Go 1.25+, single module, no cgo.
 
 > The package layout below is the original v1 sketch. The current canonical layout lives in `project-structure.md`, which splits `query/`, `connect/`, and `intent/` as separate concerns and adds `extractor/` registry, `telemetry/`, and `fixture/` packages. Use that document as the source of truth for new code.
 

@@ -52,7 +52,7 @@ Don't bump for:
   "version": "v0.1.3",
   "commit": "abc1234",
   "date": "2026-04-19T16:00:00Z",
-  "go_version": "go1.22.5",
+  "go_version": "go1.25.0",
   "schema_version": 1
 }
 ```

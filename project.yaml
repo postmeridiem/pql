@@ -27,7 +27,7 @@ module: github.com/postmeridiem/pql
 schema_version: 1
 
 # Toolchain. Mirror in go.mod when bumping.
-go_version: ">=1.22"
+go_version: ">=1.25"
 
 maintainers:
   - name: Jeroen Schweitzer
