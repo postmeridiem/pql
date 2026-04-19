@@ -1,0 +1,37 @@
+filters:
+  and:
+    - note.type == "council-session"
+properties:
+  note.date:
+    displayName: Date
+  note.problem:
+    displayName: Question
+  note.winner:
+    displayName: Winner
+  note.tied:
+    displayName: Tied
+  note.tie_broken_by_user:
+    displayName: User tiebreak?
+  note.had_research_gap_round:
+    displayName: Extra research?
+  note.had_phase1_clarification:
+    displayName: Phase-1 clarif?
+  note.had_phase2_clarification:
+    displayName: Phase-2 clarif?
+  note.had_phase3_clarification:
+    displayName: Phase-3 clarif?
+  note.tags:
+    displayName: Tags
+views:
+  - type: table
+    name: All sessions
+    order:
+      - file.name
+      - date
+      - problem
+      - winner
+      - tied
+      - tags
+    sort:
+      - property: date
+        direction: DESC

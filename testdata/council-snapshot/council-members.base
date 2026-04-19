@@ -1,0 +1,28 @@
+filters:
+  and:
+    - note.type == "council-member"
+properties:
+  note.name:
+    displayName: Name
+  note.prior_job:
+    displayName: Prior job
+  note.lens:
+    displayName: Lens
+  note.voting:
+    displayName: Votes?
+  note.model:
+    displayName: Model
+views:
+  - type: table
+    name: The Council
+    order:
+      - name
+      - prior_job
+      - lens
+      - voting
+      - model
+    sort:
+      - property: voting
+        direction: DESC
+      - property: name
+        direction: ASC

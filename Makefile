@@ -86,4 +86,15 @@ profile-mem: ## Memory profile against the largest fixture vault.
 clean: ## Remove build artefacts.
 	rm -rf $(BIN_DIR) dist/
 
+COUNCIL_SRC ?= /var/mnt/data/projects/council
+.PHONY: refresh-fixtures
+refresh-fixtures: ## Re-copy the Council vault snapshot into testdata/. Manual; never runs in CI.
+	@test -d "$(COUNCIL_SRC)" || { echo "COUNCIL_SRC=$(COUNCIL_SRC) not found"; exit 1; }
+	rm -rf testdata/council-snapshot/{members,sessions}
+	rm -f  testdata/council-snapshot/{council-members.base,council-sessions.base,README.md}
+	cp -r "$(COUNCIL_SRC)/members" "$(COUNCIL_SRC)/sessions" testdata/council-snapshot/
+	cp    "$(COUNCIL_SRC)/council-members.base" "$(COUNCIL_SRC)/council-sessions.base" testdata/council-snapshot/
+	cp    "$(COUNCIL_SRC)/README.md" testdata/council-snapshot/
+	@echo "Snapshot refreshed. Review with: git diff testdata/council-snapshot/"
+
 .DEFAULT_GOAL := help
