@@ -33,7 +33,7 @@ pql backlinks members/vaasa/persona.md
 pql schema
 ```
 
-One static Go binary. Drop into `~/.local/bin/`. Keeps a SQLite index under `~/.cache/pql/`. No network, no daemon, no Obsidian dependency.
+One static Go binary. Drop into `~/.local/bin/`. Keeps a SQLite index in `<vault>/.pql/` (analogous to `.git/`); falls back to your user cache directory when the vault is read-only. No network, no daemon, no Obsidian dependency. See [`docs/vault-layout.md`](docs/vault-layout.md) for the full convention.
 
 ## Status
 

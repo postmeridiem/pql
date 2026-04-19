@@ -1,6 +1,6 @@
 # `pql` — Project Query Language for structured prose repos
 
-A Go CLI that indexes and queries any repo containing Markdown files with YAML frontmatter, wikilinks, tags, and Obsidian Bases. Ships as a single static binary, maintains a SQLite index under `~/.cache/pql/`, exposes a SQL-derived query dialect (PQL — see [`docs/pql-grammar.md`](../pql-grammar.md)), and is designed to be drop-in for AI agents (Claude Code, primarily) that need structural introspection without brute-force grep+read.
+A Go CLI that indexes and queries any repo containing Markdown files with YAML frontmatter, wikilinks, tags, and Obsidian Bases. Ships as a single static binary, maintains a SQLite index in `<vault>/.pql/` (with a user-cache fallback for read-only vaults — see [`vault-layout.md`](../vault-layout.md)), exposes a SQL-derived query dialect (PQL — see [`pql-grammar.md`](../pql-grammar.md)), and is designed to be drop-in for AI agents (Claude Code, primarily) that need structural introspection without brute-force grep+read.
 
 > **Status note (2026-04):** this document is the original v1 design. Some of its framing has been superseded by `design-philosophy.md` (the binary as a *ranker* with intent-level surfaces) and the project structure approved in `project-structure.md`. The PQL DSL described below remains valid as the "flat" / escape-hatch surface; intent-level commands sit *above* it. Read all three documents together.
 
@@ -29,7 +29,7 @@ There's a gap: **structural, cross-file querying of a prose-structured repositor
 Three artefacts, one repo:
 
 1. **`pql` binary** — single static Go executable, cross-compiled to `linux/{amd64,arm64}`, `darwin/{amd64,arm64}`, `windows/amd64`. Distributed via GitHub Releases at https://github.com/postmeridiem/pql with SHA256 sums and cosign signatures.
-2. **SQLite index** at `~/.cache/pql/<vault-fingerprint>.sqlite` (XDG-cache on Linux, `~/Library/Caches/pql/` on macOS, `%LocalAppData%/pql/` on Windows). Regenerable from the vault; never lives inside the vault.
+2. **SQLite index** at `<vault>/.pql/index.sqlite` by default (analogous to `.git/`); falls back to a per-user cache dir when the vault is read-only. Either way, regenerable from the vault. Full convention in [`vault-layout.md`](../vault-layout.md).
 3. **Claude Code skill** at `skill/SKILL.md` inside this repo, with install instructions. Dropped into any project's `.claude/skills/pql/` or the user's `~/.claude/skills/pql/`. Documents trigger phrases, common query recipes, anti-patterns, and the install check.
 
 ## Architecture
@@ -457,4 +457,5 @@ These become the fixture set for integration tests — real, complex, hand-autho
 - **Query language name:** PQL (Project Query Language)
 - **Config file:** `.pql.yaml`
 - **Env vars:** `PQL_VAULT`, `PQL_DB`, `PQL_CONFIG`
-- **Cache dir:** `$XDG_CACHE_HOME/pql/` (Linux), `~/Library/Caches/pql/` (macOS), `%LocalAppData%/pql/` (Windows)
+- **Per-vault state:** `<vault>/.pql/` (default; see [`vault-layout.md`](../vault-layout.md))
+- **User-cache fallback:** `$XDG_CACHE_HOME/pql/<fingerprint>/` (Linux), `~/Library/Caches/pql/<fingerprint>/` (macOS), `%LocalAppData%/pql/<fingerprint>/` (Windows)
