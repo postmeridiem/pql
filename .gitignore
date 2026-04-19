@@ -1,8 +1,8 @@
 # Build artefacts
 /bin/
 /dist/
-/mql
-/mql.exe
+/pql
+/pql.exe
 
 # Test + coverage output
 *.test

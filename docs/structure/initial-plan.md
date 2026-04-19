@@ -1,6 +1,8 @@
-# `mql` — Markdown Query Language for structured prose repos
+# `pql` — Project Query Language for structured prose repos
 
-A Go CLI that indexes and queries any repo containing Markdown files with YAML frontmatter, wikilinks, tags, and Obsidian Bases. Ships as a single static binary, maintains a SQLite index under `~/.cache/mql/`, exposes a Dataview-compatible query dialect, and is designed to be drop-in for AI agents (Claude Code, primarily) that need structural introspection without brute-force grep+read.
+A Go CLI that indexes and queries any repo containing Markdown files with YAML frontmatter, wikilinks, tags, and Obsidian Bases. Ships as a single static binary, maintains a SQLite index under `~/.cache/pql/`, exposes a Dataview-compatible query dialect, and is designed to be drop-in for AI agents (Claude Code, primarily) that need structural introspection without brute-force grep+read.
+
+> **Status note (2026-04):** this document is the original v1 design. Some of its framing has been superseded by `design-philosophy.md` (the binary as a *ranker* with intent-level surfaces) and the project structure approved in `project-structure.md`. The PQL DSL described below remains valid as the "flat" / escape-hatch surface; intent-level commands sit *above* it. Read all three documents together.
 
 ## Context and problem
 
@@ -11,12 +13,12 @@ Markdown knowledge bases — Obsidian vaults, Zettelkasten, personal wikis, even
 - **jq / yq** handle single structured files, not cross-file queries.
 - **Code-aware tools** (tree-sitter, LSP, ast-grep) target source code, not prose.
 
-There's a gap: **structural, cross-file querying of a prose-structured repository from outside any specific editor.** That's what `mql` fills. AI agents driving these repos today walk the tree by hand — grepping, reading, guessing — and burn context on work that should be one query. `mql` is the tool-shaped hole in that workflow.
+There's a gap: **structural, cross-file querying of a prose-structured repository from outside any specific editor.** That's what `pql` fills. AI agents driving these repos today walk the tree by hand — grepping, reading, guessing — and burn context on work that should be one query. `pql` is the tool-shaped hole in that workflow.
 
 ## Non-goals (explicit)
 
 - Not a Dataview replacement inside Obsidian. It *imitates* DQL from outside.
-- Not a generic "query anything" tool. Code → use tree-sitter/LSP. Configs → use jq/yq. Raw text → use ripgrep. `mql` is for Markdown + frontmatter + wikilinks + tags + Bases.
+- Not a generic "query anything" tool. Code → use tree-sitter/LSP. Configs → use jq/yq. Raw text → use ripgrep. `pql` is for Markdown + frontmatter + wikilinks + tags + Bases.
 - Not a write tool. Queries and introspection only. Edits go through the filesystem directly (which Obsidian's watcher picks up).
 - No `dataviewjs` or JavaScript evaluation.
 - No inline-field parsing (`Rating:: 5` mid-paragraph) in v1. Revisit if users demand it.
@@ -26,36 +28,38 @@ There's a gap: **structural, cross-file querying of a prose-structured repositor
 
 Three artefacts, one repo:
 
-1. **`mql` binary** — single static Go executable, cross-compiled to `linux/{amd64,arm64}`, `darwin/{amd64,arm64}`, `windows/amd64`. Distributed via GitHub Releases with SHA256 sums; Homebrew tap once stable.
-2. **SQLite index** at `~/.cache/mql/<vault-fingerprint>.sqlite` (XDG-cache on Linux, `~/Library/Caches/mql/` on macOS, `%LocalAppData%/mql/` on Windows). Regenerable from the vault; never lives inside the vault.
-3. **Claude Code skill** at `skill/SKILL.md` inside this repo, with install instructions. Dropped into any project's `.claude/skills/mql/` or the user's `~/.claude/skills/mql/`. Documents trigger phrases, common query recipes, anti-patterns, and the install check.
+1. **`pql` binary** — single static Go executable, cross-compiled to `linux/{amd64,arm64}`, `darwin/{amd64,arm64}`, `windows/amd64`. Distributed via GitHub Releases at https://github.com/postmeridiem/pql with SHA256 sums and cosign signatures.
+2. **SQLite index** at `~/.cache/pql/<vault-fingerprint>.sqlite` (XDG-cache on Linux, `~/Library/Caches/pql/` on macOS, `%LocalAppData%/pql/` on Windows). Regenerable from the vault; never lives inside the vault.
+3. **Claude Code skill** at `skill/SKILL.md` inside this repo, with install instructions. Dropped into any project's `.claude/skills/pql/` or the user's `~/.claude/skills/pql/`. Documents trigger phrases, common query recipes, anti-patterns, and the install check.
 
 ## Architecture
 
 Go 1.22+, single module, no cgo.
 
+> The package layout below is the original v1 sketch. The current canonical layout lives in `project-structure.md`, which splits `query/`, `connect/`, and `intent/` as separate concerns and adds `extractor/` registry, `telemetry/`, and `fixture/` packages. Use that document as the source of truth for new code.
+
 ```
-mql/
-├── cmd/mql/main.go              # CLI entrypoint, flag parsing, subcommand dispatch
+pql/
+├── cmd/pql/main.go              # CLI entrypoint, flag parsing, subcommand dispatch
 ├── internal/
-│   ├── config/                  # .mql.yaml resolution, vault-root discovery, env handling
+│   ├── config/                  # .pql.yaml resolution, vault-root discovery, env handling
 │   ├── index/                   # vault walker, frontmatter parser, link extractor, tag extractor
 │   ├── store/                   # SQLite schema, migrations, CRUD, query helpers
-│   ├── lex/                     # MQL lexer
-│   ├── parse/                   # MQL parser → AST
+│   ├── lex/                     # PQL lexer
+│   ├── parse/                   # PQL parser → AST
 │   ├── eval/                    # AST evaluator against the store
-│   ├── base/                    # Obsidian .base YAML → MQL AST
+│   ├── base/                    # Obsidian .base YAML → PQL AST
 │   └── render/                  # JSON / JSONL / table / CSV output
 ├── skill/SKILL.md               # Claude Code skill package
 ├── docs/
-│   ├── structure/initial-plan.md   # this file
-│   ├── mql-grammar.md              # language spec (written alongside the parser)
-│   ├── skill.md                    # skill install + usage
-│   └── cli.md                      # subcommand reference
+│   ├── structure/initial-plan.md    # this file
+│   ├── pql-grammar.md               # language spec (written alongside the parser)
+│   ├── skill.md                     # skill install + usage
+│   └── cli.md                       # subcommand reference
 ├── examples/                    # example vaults + example queries for docs/tests
 ├── testdata/                    # fixture vaults for integration tests
 ├── .goreleaser.yaml
-├── .github/workflows/release.yaml
+├── ci/                          # provider-neutral CI scripts
 ├── go.mod
 ├── Makefile
 ├── README.md
@@ -72,45 +76,45 @@ mql/
 | CLI | `github.com/spf13/cobra` | Mature, widely understood |
 | Globs | `github.com/bmatcuk/doublestar/v4` | `**` globs for include/exclude |
 | Config file | `github.com/knadh/koanf/v2` | YAML-first, env-overlay friendly |
-| Release pipeline | GoReleaser + GitHub Actions | Idiomatic for Go CLI distribution |
+| Release pipeline | GoReleaser + GitHub Actions | Idiomatic for Go CLI distribution; publishes to GitHub Releases |
 
 Pinned minimums; avoid dependency bloat. Review every add against a simple "does this pull its weight?" bar.
 
 ### Build / release
 
-- `make build` → local dev binary at `./bin/mql`
+- `make build` → local dev binary at `./bin/pql`
 - `make test` → unit + integration tests against fixture vaults in `testdata/`
 - `make lint` → `golangci-lint run` with a strict config (errcheck, revive, gocritic, staticcheck)
-- `make release-snapshot` → dry-run GoReleaser build for all platforms
-- Tag push (`v0.X.Y`) → GitHub Actions runs GoReleaser → multi-platform binaries + SHA256 sums + Homebrew formula update
+- `make snapshot` → dry-run GoReleaser build for all platforms
+- Tag push (`v0.X.Y`) → GitHub Actions invokes `ci/release.sh` → GoReleaser → multi-platform binaries + SHA256 sums + cosign signatures, published to GitHub Releases. The Actions workflow is a thin wrapper around the script; switching CI providers later means swapping the wrapper, not the release logic.
 
 ## The CLI
 
-Design principle: **the default invocation is `mql <QUERY>`** — a positional MQL query. Subcommands handle setup, introspection, and operations that don't fit the query language.
+Design principle: **the default invocation is `pql <QUERY>`** — a positional PQL query. Subcommands handle setup, introspection, and operations that don't fit the query language.
 
 ### Subcommands
 
 ```
-mql init                       # create .mql.yaml in current dir; seed sensible defaults
-mql doctor                     # diagnose: resolved vault root, frontmatter dialect, index path, last scan, warnings
-mql index                      # force a full reindex; usually lazy
-mql schema                     # print the frontmatter schema inferred from the current vault
+pql init                       # create .pql.yaml in current dir; seed sensible defaults
+pql doctor                     # diagnose: resolved vault root, frontmatter dialect, index path, last scan, warnings
+pql index                      # force a full reindex; usually lazy
+pql schema                     # print the frontmatter schema inferred from the current vault
 
-mql files [glob]               # list markdown files matching glob (or all)
-mql meta <path>                # frontmatter + link metadata for a single file, as JSON
-mql tags                       # all tags with counts
-mql backlinks <path>           # files linking to <path>
-mql outlinks <path>            # files <path> links to
-mql base <name>                # execute an Obsidian .base file as an MQL query
+pql files [glob]               # list markdown files matching glob (or all)
+pql meta <path>                # frontmatter + link metadata for a single file, as JSON
+pql tags                       # all tags with counts
+pql backlinks <path>           # files linking to <path>
+pql outlinks <path>            # files <path> links to
+pql base <name>                # execute an Obsidian .base file as a PQL query
 
-mql <QUERY>                    # run MQL, positional arg
-mql --file <path>              # run MQL from a file (for queries with regex, nested quotes, or >80 chars)
-mql --stdin                    # run MQL from stdin
+pql <QUERY>                    # run PQL, positional arg
+pql --file <path>              # run PQL from a file (for queries with regex, nested quotes, or >80 chars)
+pql --stdin                    # run PQL from stdin
 
-mql shell                      # interactive SQLite REPL against the index (read-only; escape hatch)
-mql self-update                # update binary from GitHub Releases
-mql completions bash|zsh|fish|powershell
-mql version --build-info       # version, build date, Go version, schema version
+pql shell                      # interactive SQLite REPL against the index (read-only; escape hatch)
+pql self-update                # update binary from the configured release endpoint
+pql completions bash|zsh|fish|powershell
+pql version --build-info       # version, build date, Go version, schema version
 ```
 
 ### Global flags
@@ -123,7 +127,8 @@ mql version --build-info       # version, build date, Go version, schema version
 --table             # human-readable ad-hoc table (colour auto-detect; --no-color override)
 --csv               # CSV for spreadsheet import
 --select <jsonpath> # project into a JSONPath expression (avoids piping to jq for simple cases)
---limit <n>         # clamp output rows; overrides MQL LIMIT
+--limit <n>         # clamp output rows; overrides PQL LIMIT
+--flat-search       # disable connect/ enrichment; return raw query results only (see project-structure.md)
 --quiet             # suppress stderr warnings
 --verbose           # verbose diagnostics on stderr
 ```
@@ -136,27 +141,27 @@ mql version --build-info       # version, build date, Go version, schema version
   - `0` — success with ≥1 match
   - `2` — success with 0 matches (intentional; not an error)
   - `64` (EX_USAGE) — bad CLI flag
-  - `65` (EX_DATAERR) — MQL parse or evaluation error
+  - `65` (EX_DATAERR) — PQL parse or evaluation error
   - `66` (EX_NOINPUT) — vault root not found / unreadable
   - `69` (EX_UNAVAILABLE) — index corruption / migration failure
   - `70` (EX_SOFTWARE) — internal error
 
-This contract is what makes `mql` safe for Claude Code to call: exit 2 is distinct from exit 65, so a zero-row query never masquerades as a bug.
+This contract is what makes `pql` safe for Claude Code to call: exit 2 is distinct from exit 65, so a zero-row query never masquerades as a bug.
 
 ### Vault-root discovery
 
 In order:
 1. `--vault <path>` flag
-2. `$MQL_VAULT` env var
+2. `$PQL_VAULT` env var
 3. Walk cwd up until a `.obsidian/` directory is found
 4. Walk cwd up until a `.git/` directory is found (generic repo fallback)
 5. Current working directory (with a stderr warning)
 
-`mql doctor` prints which rule matched.
+`pql doctor` prints which rule matched.
 
 ### Config file
 
-Optional `.mql.yaml` at the resolved vault root, or `~/.config/mql/config.yaml` global:
+Optional `.pql.yaml` at the resolved vault root, or `~/.config/pql/config.yaml` global:
 
 ```yaml
 frontmatter: yaml              # yaml | toml (+++)
@@ -174,9 +179,9 @@ git_metadata: true             # populate file.gitmtime, file.gitauthor via git 
 fts: false                     # opt-in FTS5 index on note bodies
 ```
 
-`mql init` seeds this with project-appropriate defaults.
+`pql init` seeds this with project-appropriate defaults.
 
-## The query language (MQL)
+## The query language (PQL)
 
 A Dataview-compatible dialect, explicit about what's in and what's out. The goal is: queries copied from an Obsidian dataview block should mostly Just Work, and new queries can be written by anyone familiar with DQL.
 
@@ -250,7 +255,7 @@ Every one of these errors with `exit 65` and a clear message pointing at this li
 - Inline fields in prose (`Rating:: 5` mid-paragraph)
 - `dataviewjs` / any JavaScript evaluation
 - Embeds and transclusions (`![[...]]`)
-- Non-Obsidian markdown dialects (Logseq, Bear, Roam) — plugin hook in v2
+- Non-Obsidian markdown dialects (Logseq, Bear, Roam) — extractor-registry hook in v2
 
 ### Example queries
 
@@ -280,7 +285,7 @@ CREATE TABLE index_meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
--- keys: schema_version, mql_version, config_hash, last_full_scan
+-- keys: schema_version, pql_version, config_hash, last_full_scan
 
 CREATE TABLE files (
     path          TEXT PRIMARY KEY,
@@ -329,7 +334,7 @@ CREATE TABLE headings (
 CREATE TABLE bases (
     name      TEXT PRIMARY KEY,       -- .base file name without extension
     path      TEXT NOT NULL,
-    ast_json  TEXT NOT NULL,          -- parsed Base → MQL AST
+    ast_json  TEXT NOT NULL,          -- parsed Base → PQL AST
     mtime     INTEGER NOT NULL
 );
 
@@ -359,15 +364,15 @@ All writes in a single `BEGIN IMMEDIATE` transaction per invocation. Readers are
 
 ## Obsidian Bases as first-class queries
 
-`.base` files are YAML with `filters`, `properties`, `views`, `sort`. The base parser reads them, compiles to MQL AST, and runs through the evaluator.
+`.base` files are YAML with `filters`, `properties`, `views`, `sort`. The base parser reads them, compiles to PQL AST, and runs through the evaluator.
 
 ```
-mql base council-sessions
-mql base council-sessions --view "All sessions"
-mql base                             # list known bases
+pql base council-sessions
+pql base council-sessions --view "All sessions"
+pql base                             # list known bases
 ```
 
-This means any Base you maintain in Obsidian becomes a callable, scriptable query from outside. The Council project already maintains `council-sessions.base` and `council-members.base`; those become programmatically reachable on day one of mql integration.
+This means any Base you maintain in Obsidian becomes a callable, scriptable query from outside. The Council project already maintains `council-sessions.base` and `council-members.base`; those become programmatically reachable on day one of pql integration.
 
 ## Claude Code integration
 
@@ -376,19 +381,19 @@ This means any Base you maintain in Obsidian becomes a callable, scriptable quer
 `skill/SKILL.md` (distributed with releases) contains:
 
 - **Trigger phrases:** "query the vault", "find notes where…", "which sessions/members…", "run a Base", "inspect frontmatter"
-- **Precondition check:** confirm `mql` is on `$PATH` via `command -v mql`. If absent, the skill aborts and tells the user how to install.
-- **Schema discovery:** the skill opens with "run `mql schema` first" so the agent knows which `type:` values and fields exist in *this* vault.
+- **Precondition check:** confirm `pql` is on `$PATH` via `command -v pql`. If absent, the skill aborts and tells the user how to install.
+- **Schema discovery:** the skill opens with "run `pql schema` first" so the agent knows which `type:` values and fields exist in *this* vault.
 - **Cookbook:** 15–20 canonical patterns — per-type listings, backlink walks, tag intersections, time-bounded recent-activity queries, Base invocations.
 - **Output contract:** JSON shape, exit codes (especially: 2 = zero-match, not an error), stderr-is-JSON.
 - **Anti-patterns:**
   - No pipes to `jq` inline — use `--select` instead.
   - Queries >80 chars or with regex → `--file`, not positional.
-  - No env-var prefix on the command (`FOO=bar mql …` breaks permission matching).
-  - Set `MQL_VAULT` in the shell profile, not per-invocation.
-- **When NOT to use mql:**
-  - Raw text search inside note bodies → Grep/ripgrep (unless FTS is enabled, then `mql` can).
+  - No env-var prefix on the command (`FOO=bar pql …` breaks permission matching).
+  - Set `PQL_VAULT` in the shell profile, not per-invocation.
+- **When NOT to use pql:**
+  - Raw text search inside note bodies → Grep/ripgrep (unless FTS is enabled, then `pql` can).
   - Single file's full content → Read directly.
-  - Code structure → tree-sitter / LSP, not `mql`.
+  - Code structure → tree-sitter / LSP, not `pql`.
 
 ### Permissions
 
@@ -398,16 +403,16 @@ The consuming project's `.claude/settings.json` gets:
 {
   "permissions": {
     "allow": [
-      "Bash(mql)",
-      "Bash(mql *)"
+      "Bash(pql)",
+      "Bash(pql *)"
     ]
   }
 }
 ```
 
-Two entries because the wildcard form requires at least one argument after `mql`; the bare form covers `mql --help` / `mql doctor` / etc.
+Two entries because the wildcard form requires at least one argument after `pql`; the bare form covers `pql --help` / `pql doctor` / etc.
 
-No `mql`-related deny rules. It's read-only against the filesystem; nothing to deny.
+No `pql`-related deny rules. It's read-only against the filesystem; nothing to deny.
 
 ## Distribution
 
@@ -425,16 +430,16 @@ GoReleaser + GitHub Actions. On tag push (`v0.X.Y`):
 
 1. Build for all five platforms in parallel.
 2. Strip binaries (`-ldflags="-s -w"`); resulting binary ~8–12 MB.
-3. Generate SHA256SUMS file; optionally cosign-sign.
-4. Publish to GitHub Releases with auto-generated release notes.
-5. Update Homebrew tap formula (`<user>/homebrew-mql`) pinned to the new tag.
+3. Generate SHA256SUMS file + SBOM; cosign-sign artefacts.
+4. Publish to GitHub Releases at https://github.com/postmeridiem/pql with auto-generated release notes.
+
+The GitHub Actions workflow is a thin wrapper around `ci/release.sh`. Switching CI providers later means swapping the wrapper, not the release logic.
 
 ### Install paths
 
-- **Manual:** `curl -L https://github.com/<user>/mql/releases/latest/download/mql-$(uname -s)-$(uname -m) -o ~/.local/bin/mql && chmod +x ~/.local/bin/mql`
-- **Homebrew:** `brew install <user>/mql/mql`
-- **Go toolchain:** `go install github.com/<user>/mql/cmd/mql@latest` (for developers who have Go; not the primary channel)
-- **Self-update:** `mql self-update` once a user has v0.1 installed — hits the GitHub Releases API, downloads + replaces atomically, verifies SHA256.
+- **Manual:** download the `pql-<os>-<arch>` binary from https://github.com/postmeridiem/pql/releases/latest; verify SHA256; `chmod +x`; place on `$PATH` (e.g. `~/.local/bin/`).
+- **Go toolchain:** `go install github.com/postmeridiem/pql/cmd/pql@latest` for developers who have Go.
+- **Self-update:** `pql self-update` once a user has v0.1 installed — hits the GitHub Releases API, downloads + replaces atomically, verifies SHA256.
 
 ## Roadmap
 
@@ -445,8 +450,8 @@ GoReleaser + GitHub Actions. On tag push (`v0.X.Y`):
 - [ ] YAML frontmatter parser
 - [ ] Wikilink + tag extractor
 - [ ] SQLite schema + migrations
-- [ ] `mql init`, `mql doctor`, `mql schema`
-- [ ] `mql files`, `mql meta`, `mql tags`, `mql backlinks`, `mql outlinks`
+- [ ] `pql init`, `pql doctor`, `pql schema`
+- [ ] `pql files`, `pql meta`, `pql tags`, `pql backlinks`, `pql outlinks`
 - [ ] JSON / JSONL / `--pretty` output
 - [ ] Integration test against a fixture vault (including the Council's `members/` + `sessions/` shape)
 - [ ] First GoReleaser dry-run build
@@ -463,14 +468,14 @@ GoReleaser + GitHub Actions. On tag push (`v0.X.Y`):
 
 ### v0.3 — "Bases + polish" (Days 8–10)
 
-- [ ] `.base` file parser → MQL AST
-- [ ] `mql base <name>` execution
-- [ ] `.mql.yaml` config layer with alias expansion
+- [ ] `.base` file parser → PQL AST
+- [ ] `pql base <name>` execution
+- [ ] `.pql.yaml` config layer with alias expansion
 - [ ] Git metadata ingestion (opt-in)
-- [ ] `mql shell` (interactive SQLite REPL against the index)
+- [ ] `pql shell` (interactive SQLite REPL against the index)
 - [ ] Shell completions (bash, zsh, fish, powershell)
-- [ ] `mql version --build-info`
-- [ ] Full GoReleaser pipeline in CI, first tagged release
+- [ ] `pql version --build-info`
+- [ ] Full GoReleaser pipeline behind `ci/release.sh`, first tagged release
 - [ ] Skill package finalised and released alongside binary
 
 ### v0.4 and beyond — "when it bites" (not committed to a date)
@@ -478,21 +483,19 @@ GoReleaser + GitHub Actions. On tag push (`v0.X.Y`):
 - [ ] `GROUP BY` + aggregation functions
 - [ ] FTS5 body search (opt-in via config)
 - [ ] `self-update` command
-- [ ] Homebrew tap
 - [ ] TOML frontmatter support (`+++` Hugo-style)
 - [ ] `FLATTEN` if we ever need it
 - [ ] Inline-field parsing if anyone asks
-- [ ] Logseq/Roam dialect plugins via a small parser-registration interface
+- [ ] Logseq/Roam dialect plugins via the extractor registry
 
 ## Open questions to resolve before coding
 
-1. **Repository ownership / namespace.** GitHub username to host under — affects import path (`github.com/<user>/mql`), Homebrew tap name, release URLs. Decide before `go mod init`.
-2. **License.** MIT is the obvious choice for a developer CLI tool; Apache-2.0 if patent grant matters. Pick one before first commit of any code.
-3. **Module import path.** Tied to ownership; `github.com/<user>/mql` is the default.
-4. **Skill-package distribution channel.** Inside the `mql` repo at `skill/` is decided. Question remaining: do we ship it zipped in GitHub Releases (`mql-skill-v0.1.tar.gz`) alongside the binaries, or only as a path to copy-from? Start with "just copy the directory"; revisit once there's a convention for Claude Code skill marketplaces.
-5. **Tag syntax ambiguity.** Obsidian allows `#tag` inside code fences and inline code. Dataview excludes those from tag indexing. Decide: match Dataview's rule (probably yes).
-6. **Link target resolution.** Obsidian resolves `[[Note]]` using "shortest path that unambiguously identifies" — i.e., basename match, falling back to path disambiguation. Implement that exact algorithm (important for Base compatibility) — but needs a small dedicated tie-breaker module.
-7. **`file.inlinks` / `file.outlinks` — alias-aware?** If a note is linked with `[[Note|alias]]`, is "alias" recorded? Probably yes; accessible via a function (`alias(link)`) rather than polluting the default. Not critical to decide on day 1.
+1. **Repository ownership / canonical Git host.** Decided: GitHub at https://github.com/postmeridiem/pql. Module path: `github.com/postmeridiem/pql`.
+2. **License.** Decided: MIT. See `LICENSE`.
+3. **Skill-package distribution channel.** Inside the `pql` repo at `skill/` is decided. Question remaining: ship it as an asset on each release alongside the binaries, or only as a path to copy from? Start with "just copy the directory"; revisit once there's a convention for Claude Code skill marketplaces.
+4. **Tag syntax ambiguity.** Obsidian allows `#tag` inside code fences and inline code. Dataview excludes those from tag indexing. Decide: match Dataview's rule (probably yes).
+5. **Link target resolution.** Obsidian resolves `[[Note]]` using "shortest path that unambiguously identifies" — i.e., basename match, falling back to path disambiguation. Implement that exact algorithm (important for Base compatibility) — but needs a small dedicated tie-breaker module.
+6. **`file.inlinks` / `file.outlinks` — alias-aware?** If a note is linked with `[[Note|alias]]`, is "alias" recorded? Probably yes; accessible via a function (`alias(link)`) rather than polluting the default. Not critical to decide on day 1.
 
 ## Reference: the Council vault as first customer
 
@@ -513,12 +516,12 @@ This project is motivated by the Council repo at `/var/mnt/data/projects/council
 
 Plus two Obsidian Bases: `council-sessions.base` and `council-members.base`.
 
-These become the fixture set for integration tests — real, complex, hand-authored frontmatter across 40+ files, with wikilinks, tags, and two real Bases. Any regression in mql that breaks Council queries fails CI.
+These become the fixture set for integration tests — real, complex, hand-authored frontmatter across 40+ files, with wikilinks, tags, and two real Bases. Any regression in pql that breaks Council queries fails CI.
 
 ## Appendix: naming
 
-- **Binary name:** `mql` (final)
-- **Query language name:** MQL (Markdown Query Language)
-- **Config file:** `.mql.yaml`
-- **Env vars:** `MQL_VAULT`, `MQL_DB`, `MQL_CONFIG`
-- **Cache dir:** `$XDG_CACHE_HOME/mql/` (Linux), `~/Library/Caches/mql/` (macOS), `%LocalAppData%/mql/` (Windows)
+- **Binary name:** `pql` (final)
+- **Query language name:** PQL (Project Query Language)
+- **Config file:** `.pql.yaml`
+- **Env vars:** `PQL_VAULT`, `PQL_DB`, `PQL_CONFIG`
+- **Cache dir:** `$XDG_CACHE_HOME/pql/` (Linux), `~/Library/Caches/pql/` (macOS), `%LocalAppData%/pql/` (Windows)
