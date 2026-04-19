@@ -1,6 +1,6 @@
 # `pql` — Project Query Language for structured prose repos
 
-A Go CLI that indexes and queries any repo containing Markdown files with YAML frontmatter, wikilinks, tags, and Obsidian Bases. Ships as a single static binary, maintains a SQLite index under `~/.cache/pql/`, exposes a Dataview-compatible query dialect, and is designed to be drop-in for AI agents (Claude Code, primarily) that need structural introspection without brute-force grep+read.
+A Go CLI that indexes and queries any repo containing Markdown files with YAML frontmatter, wikilinks, tags, and Obsidian Bases. Ships as a single static binary, maintains a SQLite index under `~/.cache/pql/`, exposes a SQL-derived query dialect (PQL — see [`docs/pql-grammar.md`](../pql-grammar.md)), and is designed to be drop-in for AI agents (Claude Code, primarily) that need structural introspection without brute-force grep+read.
 
 > **Status note (2026-04):** this document is the original v1 design. Some of its framing has been superseded by `design-philosophy.md` (the binary as a *ranker* with intent-level surfaces) and the project structure approved in `project-structure.md`. The PQL DSL described below remains valid as the "flat" / escape-hatch surface; intent-level commands sit *above* it. Read all three documents together.
 
@@ -17,7 +17,7 @@ There's a gap: **structural, cross-file querying of a prose-structured repositor
 
 ## Non-goals (explicit)
 
-- Not a Dataview replacement inside Obsidian. It *imitates* DQL from outside.
+- Not a Dataview replacement. PQL is its own SQL-derived language and runs outside Obsidian; Dataview lives inside the app and stays there. Inspiration credit in the README.
 - Not a generic "query anything" tool. Code → use tree-sitter/LSP. Configs → use jq/yq. Raw text → use ripgrep. `pql` is for Markdown + frontmatter + wikilinks + tags + Bases.
 - Not a write tool. Queries and introspection only. Edits go through the filesystem directly (which Obsidian's watcher picks up).
 - No `dataviewjs` or JavaScript evaluation.
@@ -183,96 +183,29 @@ fts: false                     # opt-in FTS5 index on note bodies
 
 ## The query language (PQL)
 
-A Dataview-compatible dialect, explicit about what's in and what's out. The goal is: queries copied from an Obsidian dataview block should mostly Just Work, and new queries can be written by anyone familiar with DQL.
+> **Superseded.** The original v1 sketch in this section described a Dataview-compatible dialect (`LIST FROM "folder" WHERE … SORT …`). PQL has since been redesigned as a SQL-derived language: `SELECT … [FROM …] WHERE … ORDER BY … LIMIT …`, with `files` as the default table, frontmatter via `fm.<key>`, and tags / inlinks / outlinks / headings as array columns. The full v1 spec — EBNF, virtual columns, operators, functions, examples, `.base` compilation, and a DQL→PQL migration table — lives in [`docs/pql-grammar.md`](../pql-grammar.md).
 
-### Grammar (v1)
+A handful of taster queries against the Council vault for orientation:
 
-```
-query        := resultMode source [where] [sort] [limit]
-resultMode   := "LIST" | "TABLE" [fieldSpec ("," fieldSpec)*]
-fieldSpec    := expr ["AS" ident]
+```sql
+SELECT name WHERE folder = 'members' AND fm.voting = true ORDER BY name
 
-source       := "FROM" srcExpr
-srcExpr      := srcAtom (("AND" | "OR") srcAtom)*
-srcAtom      := srcFolder | srcTag | srcInlink | srcOutlink | "NOT" srcAtom | "(" srcExpr ")"
-srcFolder    := STRING                    -- "path/to/folder"
-srcTag       := "#" ident ("/" ident)*
-srcInlink    := "[[" ident "]]"           -- files linking TO this note
-srcOutlink   := "outgoing" "(" "[[" ident "]]" ")"
+SELECT name, fm.winner, fm.tied
+WHERE 'council-session' IN tags AND fm.tied = true
+ORDER BY fm.date DESC
 
-where        := "WHERE" expr
-sort         := "SORT" sortItem ("," sortItem)*
-sortItem     := expr ["ASC" | "DESC"]
-limit        := "LIMIT" INT
+SELECT path AS session, fm.votes
+WHERE folder GLOB 'sessions/*'
+ORDER BY mtime DESC LIMIT 5
 
-expr         := orExpr
-orExpr       := andExpr ("OR" andExpr)*
-andExpr      := notExpr ("AND" notExpr)*
-notExpr      := ["NOT"] cmp
-cmp          := unary (("=" | "!=" | "<" | "<=" | ">" | ">=" | "=~" | "IN" | "CONTAINS") unary)?
-unary        := ["-"] primary
-primary      := literal | ident | fieldRef | call | "(" expr ")"
-fieldRef     := ident ("." ident)*        -- e.g. file.name, file.tags
-call         := ident "(" [expr ("," expr)*] ")"
+SELECT name WHERE folder = 'members' AND name REGEXP '^Dr\.'
 
-literal      := STRING | INT | FLOAT | BOOL | DATE | DURATION | REGEX | LIST
-LIST         := "[" [expr ("," expr)*] "]"
-REGEX        := "/" ... "/" | "regex" "(" STRING ")"
+SELECT name, length(outlinks) AS outlink_count
+WHERE folder = 'sessions' AND mtime > date('now', '-30 days')
+ORDER BY outlink_count DESC
 ```
 
-### Supported functions
-
-- String: `length`, `lower`, `upper`, `contains`, `startswith`, `endswith`, `split`, `trim`, `regex_match`
-- List: `length`, `contains`, `any`, `all`, `join`
-- Date: `date(today)`, `date(now)`, `date("YYYY-MM-DD")`, `year`, `month`, `day`, `weekday`
-- Duration: `dur("7 days")`, arithmetic `date(today) - dur("7d")`
-- Aggregation (v1.1, not v1.0): `count`, `sum`, `min`, `max` — only once GROUP BY lands
-
-### Virtual `file.*` fields
-
-| Field | Type |
-|---|---|
-| `file.name` | string (basename without `.md`) |
-| `file.path` | string (relative to vault root) |
-| `file.folder` | string |
-| `file.link` | wikilink (renderable in output) |
-| `file.mtime` | datetime |
-| `file.ctime` | datetime |
-| `file.size` | int (bytes) |
-| `file.tags` | list of strings |
-| `file.inlinks` | list of paths |
-| `file.outlinks` | list of paths |
-| `file.headings` | list of strings |
-| `file.gitmtime` | datetime (if `git_metadata: true`) |
-| `file.gitauthor` | string |
-
-### Explicitly unsupported in v1
-
-Every one of these errors with `exit 65` and a clear message pointing at this list:
-
-- `TASK` and `CALENDAR` result modes
-- `GROUP BY` and `FLATTEN`
-- Inline fields in prose (`Rating:: 5` mid-paragraph)
-- `dataviewjs` / any JavaScript evaluation
-- Embeds and transclusions (`![[...]]`)
-- Non-Obsidian markdown dialects (Logseq, Bear, Roam) — extractor-registry hook in v2
-
-### Example queries
-
-```
-LIST FROM "members" WHERE voting = true SORT name ASC
-
-TABLE winner, date, tied FROM #council-session WHERE tied = true SORT date DESC
-
-TABLE file.link AS session, votes FROM "sessions" SORT file.mtime DESC LIMIT 5
-
-LIST FROM "members" WHERE name =~ /^Dr\./
-
-TABLE file.name, length(file.outlinks) AS outlinks
-  FROM "sessions"
-  WHERE file.mtime > date(today) - dur("30 days")
-  SORT outlinks DESC
-```
+The grammar doc is the source of truth from here on; the SQLite schema below remains current.
 
 ## The SQLite index
 
@@ -300,7 +233,7 @@ CREATE TABLE frontmatter (
     path        TEXT NOT NULL REFERENCES files(path) ON DELETE CASCADE,
     key         TEXT NOT NULL,
     value_json  TEXT NOT NULL,       -- canonical typed value
-    value_text  TEXT,                -- for text ops / LIKE / =~
+    value_text  TEXT,                -- for text ops / LIKE / REGEXP
     value_num   REAL,                -- for numeric comparisons
     PRIMARY KEY (path, key)
 );
@@ -459,10 +392,11 @@ The GitHub Actions workflow is a thin wrapper around `ci/release.sh`. Switching 
 ### v0.2 — "query language" (Days 3–7)
 
 - [ ] Lexer + recursive-descent parser for the v1 grammar above
-- [ ] AST evaluator: FROM sources, WHERE expressions, SORT, LIMIT
-- [ ] All supported functions (string, list, date, duration, regex)
-- [ ] LIST and TABLE output modes, field aliasing
-- [ ] Clear parse-error messages with line/col pointers
+- [ ] AST evaluator: SELECT projections, FROM resolution (default `files`), WHERE, ORDER BY, LIMIT/OFFSET
+- [ ] Operators: comparison, `LIKE`/`GLOB`/`REGEXP`, `IN`/`BETWEEN`, `IS [NOT] NULL`
+- [ ] Functions per `docs/pql-grammar.md` (string, array, date, math, type, path)
+- [ ] `fm.<key>` frontmatter access; tag/link array columns
+- [ ] Clear parse-error messages with line/col pointers (`pql.lex.*`, `pql.parse.*`, `pql.eval.*`)
 - [ ] `--file` and `--stdin` input modes
 - [ ] `--select` JSONPath projection
 
@@ -480,11 +414,10 @@ The GitHub Actions workflow is a thin wrapper around `ci/release.sh`. Switching 
 
 ### v0.4 and beyond — "when it bites" (not committed to a date)
 
-- [ ] `GROUP BY` + aggregation functions
-- [ ] FTS5 body search (opt-in via config)
+- [ ] `JOIN`, `GROUP BY`, aggregation functions, subqueries
+- [ ] FTS5 body search (opt-in via config) wired to `body MATCH '…'`
 - [ ] `self-update` command
 - [ ] TOML frontmatter support (`+++` Hugo-style)
-- [ ] `FLATTEN` if we ever need it
 - [ ] Inline-field parsing if anyone asks
 - [ ] Logseq/Roam dialect plugins via the extractor registry
 
@@ -495,7 +428,7 @@ The GitHub Actions workflow is a thin wrapper around `ci/release.sh`. Switching 
 3. **Skill-package distribution channel.** Inside the `pql` repo at `skill/` is decided. Question remaining: ship it as an asset on each release alongside the binaries, or only as a path to copy from? Start with "just copy the directory"; revisit once there's a convention for Claude Code skill marketplaces.
 4. **Tag syntax ambiguity.** Obsidian allows `#tag` inside code fences and inline code. Dataview excludes those from tag indexing. Decide: match Dataview's rule (probably yes).
 5. **Link target resolution.** Obsidian resolves `[[Note]]` using "shortest path that unambiguously identifies" — i.e., basename match, falling back to path disambiguation. Implement that exact algorithm (important for Base compatibility) — but needs a small dedicated tie-breaker module.
-6. **`file.inlinks` / `file.outlinks` — alias-aware?** If a note is linked with `[[Note|alias]]`, is "alias" recorded? Probably yes; accessible via a function (`alias(link)`) rather than polluting the default. Not critical to decide on day 1.
+6. **`inlinks` / `outlinks` — alias-aware?** If a note is linked with `[[Note|alias]]`, is "alias" recorded? Probably yes; accessible via a function (`alias(link)`) rather than polluting the default array. Not critical to decide on day 1.
 
 ## Reference: the Council vault as first customer
 

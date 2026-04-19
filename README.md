@@ -26,8 +26,8 @@ The dual-surface property happens to be handy in markdown-first workspaces (rese
 ## Quick idea
 
 ```sh
-pql 'LIST FROM "sessions" WHERE winner = "vaasa" SORT date DESC LIMIT 5'
-pql 'TABLE name, prior_job FROM #council-member WHERE voting = true SORT name ASC'
+pql "SELECT name, fm.winner WHERE folder = 'sessions' AND fm.winner = 'vaasa' ORDER BY fm.date DESC LIMIT 5"
+pql "SELECT name, fm.prior_job WHERE 'council-member' IN tags AND fm.voting = true ORDER BY name"
 pql base council-sessions
 pql backlinks members/vaasa/persona.md
 pql schema
