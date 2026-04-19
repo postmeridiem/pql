@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Early scaffolding.** The repo has the build skeleton (`Makefile`, `.goreleaser.yaml`, `.golangci.yaml`, `ci/*.sh`, `go.mod`, `cmd/pql/main.go`, `internal/{cli,version,diag}`), the docs structure, and the Claude scaffolding. The Tier-2 packages described in `docs/structure/project-structure.md` (`internal/store/`, `internal/index/`, `internal/query/…`, `internal/connect/…`, `internal/intent/…`) are **not yet scaffolded** — they land alongside their first feature so empty package directories don't sit in the tree.
 
 **Read these before designing or writing code:**
+- `project.yaml` — single source of truth for project metadata: name, description, current declared version, license, repo, module path, schema_version, maintainers. The Makefile sources `VERSION` from here; the skill checks `schema_version` against this. Bump fields here rather than scattering them.
 - `docs/structure/design-philosophy.md` — binding "why" doc. The binary is a *ranker* with intent-level surfaces. Generate vs rank as separate phases. Provenance is data. One SQLite store. No vectors. Narrow scope.
 - `docs/structure/project-structure.md` — canonical layout, build pipeline, test infrastructure, growth model.
 - `docs/structure/initial-plan.md` — original v1 plan (PQL grammar, SQLite schema, CLI specifics). Some framing superseded by the philosophy + structure docs; grammar/schema/exit-codes still authoritative.

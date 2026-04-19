@@ -1,0 +1,44 @@
+# pql — project manifest
+#
+# Single source of truth for project metadata. Read by:
+#   - the Makefile (VERSION ldflag)
+#   - the Claude Code skill (compatibility check)
+#   - any future consumer that needs to know "what is this project, what
+#     version of it is on disk right now"
+#
+# Convention: this file declares the version the codebase *claims to be*.
+# Local `make build` stamps that version + git short SHA + dirty marker
+# into the binary. Tagged releases (handled by goreleaser) use the git
+# tag itself for the binary's reported version; project.yaml's `version`
+# is bumped in the post-release commit.
+
+name: pql
+description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
+version: 0.1.0-dev
+status: pre-v0.1, scaffolding (build pipeline + design docs in place; v0.1 indexer features land next)
+
+repository: https://github.com/postmeridiem/pql
+license: MIT
+module: github.com/postmeridiem/pql
+
+# Index schema version exposed via `pql version --build-info`. Bumped when
+# the binary's expected SQLite schema changes. Mirror in
+# internal/version.SchemaVersion when bumping.
+schema_version: 1
+
+# Toolchain. Mirror in go.mod when bumping.
+go_version: ">=1.22"
+
+maintainers:
+  - name: Jeroen Schweitzer
+    email: jpmschweitzer@gmail.com
+
+keywords:
+  - markdown
+  - obsidian
+  - claude-code
+  - sqlite
+  - cli
+  - query-language
+  - ranker
+  - agent-tools
