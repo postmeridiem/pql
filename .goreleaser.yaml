@@ -37,7 +37,7 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: 'checksums.txt'
@@ -57,11 +57,10 @@ changelog:
       - 'Merge pull request'
       - 'Merge branch'
 
-# SBOM — every release ships one.
-sboms:
-  - artifacts: archive
-
-# cosign signing — keyless via OIDC. Wired in CI when the workflow lands.
+# SBOM and signing — wired in CI when ci/release.sh grows install steps for
+# syft and cosign. Local `make snapshot` shouldn't require either.
+# sboms:
+#   - artifacts: archive
 # signs:
 #   - cmd: cosign
 #     args:
