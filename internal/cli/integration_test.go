@@ -395,6 +395,75 @@ func TestIntegration_Meta_VaasaPersona(t *testing.T) {
 	}
 }
 
+func TestIntegration_Init_FreshDirectory(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("pql init: %v", err)
+	}
+	var result struct {
+		Directory string `json:"directory"`
+		Config    struct {
+			Path        string `json:"path"`
+			Created     bool   `json:"created"`
+			Overwritten bool   `json:"overwritten"`
+		} `json:"config"`
+		Gitignore struct {
+			Exists   bool `json:"exists"`
+			Appended bool `json:"appended"`
+		} `json:"gitignore"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if !result.Config.Created || result.Config.Overwritten {
+		t.Errorf("config = %#v, want Created=true", result.Config)
+	}
+	// Verify the file actually exists.
+	if _, err := os.Stat(filepath.Join(dir, ".pql.yaml")); err != nil {
+		t.Errorf(".pql.yaml not created: %v", err)
+	}
+	if result.Gitignore.Exists {
+		t.Errorf("gitignore.Exists should be false in fresh dir")
+	}
+}
+
+func TestIntegration_Init_ExistingConfigErrorsWithoutForce(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".pql.yaml"), []byte("frontmatter: toml\n"), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init")
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) {
+		t.Fatalf("expected exit error, got %v", err)
+	}
+	if ee.ExitCode() != 64 {
+		t.Errorf("exit = %d, want 64 (Usage)", ee.ExitCode())
+	}
+}
+
+func TestIntegration_Init_AppendsToExistingGitignore(t *testing.T) {
+	dir := t.TempDir()
+	gi := filepath.Join(dir, ".gitignore")
+	if err := os.WriteFile(gi, []byte("node_modules/\n"), 0o644); err != nil {
+		t.Fatalf("seed gitignore: %v", err)
+	}
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("pql init: %v", err)
+	}
+	body, _ := os.ReadFile(gi)
+	if !strings.Contains(string(body), ".pql/") {
+		t.Errorf(".pql/ not appended to gitignore: %s", body)
+	}
+}
+
 func TestIntegration_Schema_CouncilSnapshot(t *testing.T) {
 	vault := councilVault(t)
 	stdout, stderr, code := run(t, vault, "schema")
