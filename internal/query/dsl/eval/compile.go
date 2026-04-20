@@ -158,30 +158,28 @@ func (c *compiler) query(q *parse.Query) error {
 	return nil
 }
 
-// defaultAlias returns a friendly column name for a projection that
-// otherwise would inherit the raw SQL fragment as its column name.
-// Returns "" when the projection is a plain column reference (which gets
-// a sensible default from SQLite already).
+// defaultAlias returns a friendly column name for a projection.
+//
+// All Refs get aliased — for direct columns ("path") the alias is
+// redundant but harmless; for derived columns ("name", "folder") it's
+// load-bearing because the column would otherwise be named after the
+// long SUBSTR/INSTR SQL fragment. Calls get their function name as the
+// alias; literals inherit SQLite's natural numbering.
 func defaultAlias(e parse.Expr) string {
 	switch x := e.(type) {
 	case *parse.Ref:
-		// Refs with multiple parts (fm.voting) need an alias, otherwise the
-		// JSON output key becomes the full SQL subquery. Single-part refs
-		// (path, mtime) inherit their column name natively.
-		if len(x.Parts) >= 2 {
-			var b strings.Builder
-			for i, p := range x.Parts {
-				if i > 0 {
-					b.WriteByte('.')
-				}
-				if p.Name != "" {
-					b.WriteString(p.Name)
-				} else {
-					b.WriteString(p.Bracket)
-				}
+		var b strings.Builder
+		for i, p := range x.Parts {
+			if i > 0 {
+				b.WriteByte('.')
 			}
-			return b.String()
+			if p.Name != "" {
+				b.WriteString(p.Name)
+			} else {
+				b.WriteString(p.Bracket)
+			}
 		}
+		return b.String()
 	case *parse.Call:
 		return x.Name
 	}
@@ -259,7 +257,7 @@ func fileColumn(name string) (string, bool) {
 	case "name":
 		return `rtrim(substr(files.path, length(files.path) - instr(reverse(files.path) || '/', '/') + 2), '.md')`, true
 	case "folder":
-		return `substr(files.path, 1, length(files.path) - instr(reverse(files.path) || '/', '/') + 1 - 2)`, true
+		return `substr(files.path, 1, length(files.path) - instr(reverse(files.path) || '/', '/'))`, true
 	}
 	return "", false
 }
