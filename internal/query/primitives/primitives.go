@@ -37,3 +37,15 @@ type Backlink struct {
 	Line int    `json:"line"`
 	Via  string `json:"via"`
 }
+
+// Outlink is one outgoing reference: a link the queried file makes. Target
+// is the raw link target as it appears in the source (resolution not
+// applied — see initial-plan.md open question #6). Alias is the bracketed
+// alias (`[[Note|alias]]`) or empty. Line is 1-based; Via is "wiki",
+// "embed", or "md".
+type Outlink struct {
+	Target string `json:"target"`
+	Alias  string `json:"alias,omitempty"`
+	Line   int    `json:"line"`
+	Via    string `json:"via"`
+}

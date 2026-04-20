@@ -316,3 +316,62 @@ func TestIntegration_Backlinks_FindsSessionReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegration_Outlinks_RequiresPathArg(t *testing.T) {
+	vault := councilVault(t)
+	_, _, code := run(t, vault, "outlinks")
+	if code != 64 {
+		t.Errorf("exit = %d, want 64 (Usage)", code)
+	}
+}
+
+func TestIntegration_Outlinks_UnknownFileExits2(t *testing.T) {
+	vault := councilVault(t)
+	stdout, _, code := run(t, vault, "outlinks", "nope/nope.md")
+	if code != 2 {
+		t.Errorf("exit = %d, want 2", code)
+	}
+	if got := strings.TrimSpace(string(stdout)); got != "[]" {
+		t.Errorf("stdout = %q, want []", got)
+	}
+}
+
+func TestIntegration_Outlinks_OnSessionOutcome(t *testing.T) {
+	// The Council session outcome.md is a known-link-rich file.
+	vault := councilVault(t)
+	// Discover the actual session outcome path (only one session in fixture).
+	stdout, stderr, code := run(t, vault, "files", "sessions/*/outcome.md")
+	if code != 0 {
+		t.Fatalf("locate outcome: exit=%d stderr=%s", code, stderr)
+	}
+	var files []map[string]any
+	if err := json.Unmarshal(stdout, &files); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(files) == 0 {
+		t.Skip("no session outcome.md in fixture")
+	}
+	target, _ := files[0]["path"].(string)
+
+	stdout, stderr, code = run(t, vault, "outlinks", target)
+	if code != 0 && code != 2 {
+		t.Fatalf("outlinks: exit=%d stderr=%s", code, stderr)
+	}
+	if code == 2 {
+		t.Skipf("session outcome %s has no outlinks in this fixture", target)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	for i, r := range rows {
+		t1, _ := r["target"].(string)
+		if t1 == "" {
+			t.Errorf("row %d missing target: %#v", i, r)
+		}
+		via, _ := r["via"].(string)
+		if via != "wiki" && via != "embed" && via != "md" {
+			t.Errorf("row %d: unexpected via %q", i, via)
+		}
+	}
+}
