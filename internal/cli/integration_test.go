@@ -395,6 +395,138 @@ func TestIntegration_Meta_VaasaPersona(t *testing.T) {
 	}
 }
 
+func TestIntegration_Skill_StatusOnMissingExits2(t *testing.T) {
+	vault := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	cmd := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "status")
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) {
+		t.Fatalf("expected ExitError, got %v\nstderr: %s", err, errBuf.String())
+	}
+	if ee.ExitCode() != 2 {
+		t.Errorf("exit = %d, want 2 (missing == no-match)", ee.ExitCode())
+	}
+	var st map[string]any
+	if err := json.Unmarshal(outBuf.Bytes(), &st); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, outBuf.String())
+	}
+	if st["state"] != "missing" {
+		t.Errorf("state = %v, want missing", st["state"])
+	}
+}
+
+func TestIntegration_Skill_InstallIsIdempotent(t *testing.T) {
+	vault := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+
+	runSkill := func(args ...string) (int, []byte) {
+		full := append([]string{"--vault", vault, "--db", dbPath}, args...)
+		cmd := exec.Command(pqlBin, full...)
+		out, err := cmd.Output()
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return ee.ExitCode(), out
+		}
+		if err != nil {
+			t.Fatalf("invoke: %v", err)
+		}
+		return 0, out
+	}
+
+	if code, _ := runSkill("skill", "install"); code != 0 {
+		t.Errorf("first install exit = %d, want 0", code)
+	}
+	code, out := runSkill("skill", "status")
+	if code != 0 {
+		t.Errorf("status after install exit = %d, want 0", code)
+	}
+	var st map[string]any
+	_ = json.Unmarshal(out, &st)
+	if st["state"] != "current" {
+		t.Errorf("state after install = %v, want current", st["state"])
+	}
+	// Second install on a current state → still 0, still current.
+	if code, _ := runSkill("skill", "install"); code != 0 {
+		t.Errorf("idempotent install exit = %d, want 0", code)
+	}
+
+	// Verify the files landed at the documented path.
+	if _, err := os.Stat(filepath.Join(vault, ".claude", "skills", "pql", "SKILL.md")); err != nil {
+		t.Errorf("SKILL.md not at documented path: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(vault, ".claude", "skills", "pql", ".pql-install.json")); err != nil {
+		t.Errorf("lock file not at documented path: %v", err)
+	}
+}
+
+func TestIntegration_Skill_InstallRefusesModifiedWithoutForce(t *testing.T) {
+	vault := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+
+	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
+		t.Fatalf("seed install: %v", err)
+	}
+	skillFile := filepath.Join(vault, ".claude", "skills", "pql", "SKILL.md")
+	if err := os.WriteFile(skillFile, []byte("hand edited\n"), 0o644); err != nil {
+		t.Fatalf("hand-edit: %v", err)
+	}
+
+	cmd := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install")
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
+	err := cmd.Run()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) {
+		t.Fatalf("expected refusal, got %v", err)
+	}
+	if ee.ExitCode() != 64 {
+		t.Errorf("exit = %d, want 64 (Usage)", ee.ExitCode())
+	}
+	if !bytes.Contains(errBuf.Bytes(), []byte("modified")) {
+		t.Errorf("stderr should mention modified state: %s", errBuf.String())
+	}
+	// File should be unchanged.
+	body, _ := os.ReadFile(skillFile)
+	if string(body) != "hand edited\n" {
+		t.Errorf("file was overwritten despite refusal: %q", body)
+	}
+
+	// With --force it succeeds.
+	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install", "--force").Run(); err != nil {
+		t.Errorf("--force install failed: %v", err)
+	}
+}
+
+func TestIntegration_Skill_UninstallRemovesFiles(t *testing.T) {
+	vault := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	cmd := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "uninstall")
+	out, err := cmd.Output()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) {
+		t.Fatalf("expected ExitError (state=missing post-uninstall), got %v", err)
+	}
+	if ee.ExitCode() != 2 {
+		t.Errorf("exit = %d, want 2 (missing after uninstall)", ee.ExitCode())
+	}
+	var st map[string]any
+	_ = json.Unmarshal(out, &st)
+	if st["state"] != "missing" {
+		t.Errorf("state = %v, want missing", st["state"])
+	}
+	if _, err := os.Stat(filepath.Join(vault, ".claude", "skills", "pql", "SKILL.md")); !os.IsNotExist(err) {
+		t.Errorf("SKILL.md still exists after uninstall: %v", err)
+	}
+}
+
 func TestIntegration_Query_PositionalDSL(t *testing.T) {
 	vault := councilVault(t)
 	stdout, stderr, code := run(t, vault, "query", "SELECT path WHERE folder = 'members/vaasa' ORDER BY path")
