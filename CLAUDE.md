@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/structure/design-philosophy.md` — binding "why" doc. The binary is a *ranker* with intent-level surfaces. Generate vs rank as separate phases. Provenance is data. One SQLite store. No vectors. Narrow scope.
 - `docs/structure/project-structure.md` — canonical layout, build pipeline, test infrastructure, growth model.
 - `docs/structure/initial-plan.md` — original v1 plan (PQL grammar, SQLite schema, CLI specifics). Some framing superseded by the philosophy + structure docs; grammar/schema/exit-codes still authoritative.
-- `docs/vault-layout.md` — the three vault-level conventions (`.pql.yaml`, `.pqlignore`, `.pql/`). The index defaults to `<vault>/.pql/index.sqlite` (in-vault, like `.git/`); falls back to user cache on read-only vaults.
+- `docs/vault-layout.md` — the three vault-level conventions (`.pql/config.yaml`, `.pqlignore`, `.pql/`). The index defaults to `<vault>/.pql/index.sqlite` (in-vault, like `.git/`); falls back to user cache on read-only vaults.
 - `docs/pqlignore.md` — gitignore-compatible exclusion file spec.
 - `docs/watching.md` — `pql watch` toggle command spec. Explicit user invocation only; one watcher per vault; no daemon, no cross-vault registry.
 

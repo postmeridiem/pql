@@ -1,5 +1,5 @@
 // Package config resolves the vault root, the on-disk index path, and the
-// optional .pql.yaml that tunes indexer behaviour. The CLI calls Load(opts)
+// optional .pql/config.yaml that tunes indexer behaviour. The CLI calls Load(opts)
 // once per invocation; everything downstream (indexer, query, render) reads
 // the resulting Config.
 //
@@ -45,7 +45,7 @@ type TagsConfig struct {
 
 // Config is the resolved view that the rest of the binary reads from.
 // Source fields (Vault, DBPath, ConfigPath) record where things came from;
-// the rest are loaded from .pql.yaml with defaults applied.
+// the rest are loaded from .pql/config.yaml with defaults applied.
 type Config struct {
 	// Resolution metadata — populated by Load, not loaded from YAML.
 	Vault      VaultDiscovery `yaml:"-"`
@@ -80,7 +80,7 @@ type LoadOpts struct {
 	CacheDir string // for DB path (XDG cache lookup if empty)
 }
 
-// Load resolves the vault root, locates and loads the matching .pql.yaml (if
+// Load resolves the vault root, locates and loads the matching .pql/config.yaml (if
 // any), applies defaults, validates, and computes the index DB path. Returns
 // a fully-populated Config ready for the indexer/query layers.
 func Load(opts LoadOpts) (*Config, error) {
@@ -203,7 +203,7 @@ func (c *Config) validate() error {
 // Precedence:
 //  1. --config flag
 //  2. PQL_CONFIG env var
-//  3. <vault>/.pql.yaml (if it exists)
+//  3. <vault>/.pql/config.yaml (if it exists) — git-style "everything pql in one dir"
 //  4. <home>/.config/pql/config.yaml (if it exists)
 //  5. nothing — defaults only.
 func resolveConfigPath(opts LoadOpts, vaultPath string) (string, error) {
@@ -219,7 +219,7 @@ func resolveConfigPath(opts LoadOpts, vaultPath string) (string, error) {
 		}
 		return filepath.Clean(opts.ConfigEnv), nil
 	}
-	local := filepath.Join(vaultPath, ".pql.yaml")
+	local := filepath.Join(vaultPath, VaultStateDir, "config.yaml")
 	if _, err := os.Stat(local); err == nil {
 		return local, nil
 	} else if !errors.Is(err, os.ErrNotExist) {

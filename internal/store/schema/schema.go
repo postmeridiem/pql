@@ -2,7 +2,7 @@
 //
 // The store package applies these on a fresh database. The current vN.sql
 // is always applied; fts.sql is applied only when the user opts into FTS5
-// body search via .pql.yaml. The Version constant must match the file
+// body search via .pql/config.yaml. The Version constant must match the file
 // suffix; bump both together when the schema evolves.
 //
 // We never write migration code — every bump triggers a drop-and-rebuild

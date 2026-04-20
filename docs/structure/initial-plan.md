@@ -42,7 +42,7 @@ Go 1.25+, single module, no cgo.
 pql/
 ├── cmd/pql/main.go              # CLI entrypoint, flag parsing, subcommand dispatch
 ├── internal/
-│   ├── config/                  # .pql.yaml resolution, vault-root discovery, env handling
+│   ├── config/                  # .pql/config.yaml resolution, vault-root discovery, env handling
 │   ├── index/                   # vault walker, frontmatter parser, link extractor, tag extractor
 │   ├── store/                   # SQLite schema, migrations, CRUD, query helpers
 │   ├── lex/                     # PQL lexer
@@ -95,7 +95,7 @@ Design principle: **the default invocation is `pql <QUERY>`** — a positional P
 ### Subcommands
 
 ```
-pql init                       # create .pql.yaml in current dir; seed sensible defaults
+pql init                       # create .pql/config.yaml in current dir; seed sensible defaults
 pql doctor                     # diagnose: resolved vault root, frontmatter dialect, index path, last scan, warnings
 pql index                      # force a full reindex; usually lazy
 pql schema                     # print the frontmatter schema inferred from the current vault
@@ -161,7 +161,7 @@ In order:
 
 ### Config file
 
-Optional `.pql.yaml` at the resolved vault root, or `~/.config/pql/config.yaml` global:
+Optional `.pql/config.yaml` at the resolved vault root, or `~/.config/pql/config.yaml` global:
 
 ```yaml
 frontmatter: yaml              # yaml | toml (+++)
@@ -406,7 +406,7 @@ The GitHub Actions workflow is a thin wrapper around `ci/release.sh`. Switching 
 
 - [ ] `.base` file parser → PQL AST
 - [ ] `pql base <name>` execution
-- [ ] `.pql.yaml` config layer with alias expansion
+- [ ] `.pql/config.yaml` config layer with alias expansion
 - [ ] Git metadata ingestion (opt-in)
 - [ ] `pql shell` (interactive SQLite REPL against the index)
 - [ ] Shell completions (bash, zsh, fish, powershell)
@@ -457,7 +457,7 @@ These become the fixture set for integration tests — real, complex, hand-autho
 
 - **Binary name:** `pql` (final)
 - **Query language name:** PQL (Project Query Language)
-- **Config file:** `.pql.yaml`
+- **Config file:** `.pql/config.yaml`
 - **Env vars:** `PQL_VAULT`, `PQL_DB`, `PQL_CONFIG`
 - **Per-vault state:** `<vault>/.pql/` (default; see [`vault-layout.md`](../vault-layout.md))
 - **User-cache fallback:** `$XDG_CACHE_HOME/pql/<fingerprint>/` (Linux), `~/Library/Caches/pql/<fingerprint>/` (macOS), `%LocalAppData%/pql/<fingerprint>/` (Windows)

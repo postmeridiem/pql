@@ -24,7 +24,7 @@ const IndexFileName = "index.sqlite"
 // Precedence:
 //  1. --db flag (LoadOpts.DBFlag)
 //  2. PQL_DB env var (LoadOpts.DBEnv)
-//  3. db: field in .pql.yaml (cfgDB)
+//  3. db: field in .pql/config.yaml (cfgDB)
 //  4. <vault>/.pql/index.sqlite — created in place if writeable
 //  5. <cache>/pql/<sha256(vault)[:16]>/index.sqlite — fallback when the vault
 //     is read-only (EROFS / EACCES / EPERM)
@@ -41,7 +41,7 @@ func resolveDBPath(opts LoadOpts, vaultPath, cfgDB string) (string, error) {
 		return filepath.Clean(opts.DBEnv), nil
 	}
 	if cfgDB != "" {
-		// db: in .pql.yaml is interpreted relative to the vault root if not absolute.
+		// db: in .pql/config.yaml is interpreted relative to the vault root if not absolute.
 		if !filepath.IsAbs(cfgDB) {
 			cfgDB = filepath.Join(vaultPath, cfgDB)
 		}

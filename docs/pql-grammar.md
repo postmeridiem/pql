@@ -115,7 +115,7 @@ Array columns are queryable with `IN`, `NOT IN`, and the array helpers (`length`
 
 | Column | Type | Available when |
 |---|---|---|
-| `body` | text | `fts: true` in `.pql.yaml` — only valid on the right of `MATCH` |
+| `body` | text | `fts: true` in `.pql/config.yaml` — only valid on the right of `MATCH` |
 | `gitmtime` | datetime | `git_metadata: true` |
 | `gitauthor` | text | `git_metadata: true` |
 

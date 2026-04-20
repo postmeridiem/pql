@@ -4,16 +4,16 @@ Per-vault ignore file with **identical syntax and semantics to `.gitignore`**. T
 
 This document is the spec; the implementation lands under `internal/index/ignore/` as part of v0.1's walker work.
 
-## Why a separate file (not just `exclude:` in `.pql.yaml`)
+## Why a separate file (not just `exclude:` in `.pql/config.yaml`)
 
-The current `exclude:` field in `.pql.yaml` is a flat list of doublestar patterns. That's enough for "exclude `.obsidian/` and `node_modules/`" but breaks down for:
+The current `exclude:` field in `.pql/config.yaml` is a flat list of doublestar patterns. That's enough for "exclude `.obsidian/` and `node_modules/`" but breaks down for:
 
 - **Per-subtree rules.** "Index `members/` but not `members/*/scratch/`" is awkward as a single global glob list.
 - **Negations.** "Exclude `drafts/` except `drafts/published/`" needs `!` re-inclusion, which doublestar doesn't model.
 - **Familiarity.** Every developer reads `.gitignore` syntax fluently. Inventing a parallel system makes users translate their mental model for no gain.
 - **Reuse.** Vaults that are already git repos often have a `.gitignore` whose rules apply identically to indexing — see "Honoring `.gitignore`" below.
 
-`.pqlignore` and `.pql.yaml`'s `exclude:` coexist (additive) so existing configs keep working. See "Interaction with `exclude:`" below.
+`.pqlignore` and `.pql/config.yaml`'s `exclude:` coexist (additive) so existing configs keep working. See "Interaction with `exclude:`" below.
 
 ## Syntax
 
@@ -64,22 +64,22 @@ drafts/
 
 2. **Global `.pqlignore`** at `~/.config/pql/ignore` (mirrors `~/.config/git/ignore`). Optional. For personal cross-vault preferences.
 
-3. **`.gitignore` files in the vault**, but only when `respect_gitignore: true` in `.pql.yaml`. Off by default — explicit opt-in. Loaded with the same per-directory cascade git uses.
+3. **`.gitignore` files in the vault**, but only when `respect_gitignore: true` in `.pql/config.yaml`. Off by default — explicit opt-in. Loaded with the same per-directory cascade git uses.
 
 4. **Vault-root `.pqlignore`.** The primary file. Always honored when present.
 
 5. **Nested `.pqlignore` files in subdirectories.** Each subtree may have its own; rules apply only within that subtree. Same cascade behaviour as git.
 
-6. **`exclude:` patterns from `.pql.yaml`.** Concatenated as anchored gitignore patterns (see next section).
+6. **`exclude:` patterns from `.pql/config.yaml`.** Concatenated as anchored gitignore patterns (see next section).
 
 When evaluating a candidate path, sources are tested in order; the **last matching pattern wins**. So a `!drafts/published/` in the vault root can re-include something that a global `~/.config/pql/ignore` excluded.
 
-## Interaction with `exclude:` in `.pql.yaml`
+## Interaction with `exclude:` in `.pql/config.yaml`
 
 The `exclude:` field stays. It is **translated to gitignore patterns** at load time and appended after `.pqlignore` rules:
 
 ```yaml
-# .pql.yaml
+# .pql/config.yaml
 exclude:
   - "**/.obsidian/**"
   - "**/node_modules/**"
@@ -88,7 +88,7 @@ exclude:
 becomes (conceptually):
 
 ```gitignore
-# from .pql.yaml exclude:
+# from .pql/config.yaml exclude:
 **/.obsidian/**
 **/node_modules/**
 ```
@@ -102,7 +102,7 @@ Because the YAML rules come last in the load order, they take precedence over `.
 Off by default. Opt in via:
 
 ```yaml
-# .pql.yaml
+# .pql/config.yaml
 respect_gitignore: true
 ```
 
@@ -163,7 +163,7 @@ In:
 - Vault-root + nested cascade
 - `respect_gitignore: true` opt-in
 - Built-in non-overridable defaults
-- `exclude:` from `.pql.yaml` translated and appended
+- `exclude:` from `.pql/config.yaml` translated and appended
 
 Out (defer to later):
 - `~/.config/pql/ignore` global file (cheap to add; landing later avoids speculation about precedence ergonomics)
@@ -177,4 +177,4 @@ These are all additive — none requires schema or contract changes.
 
 - File name: `.pqlignore` (mirrors `.gitignore`, `.dockerignore`, `.npmignore`, `.eslintignore` — the convention is well-established).
 - Global location: `~/.config/pql/ignore` (mirrors git's `~/.config/git/ignore`).
-- The config flag opting into git rules is `respect_gitignore` (snake_case to match other `.pql.yaml` keys).
+- The config flag opting into git rules is `respect_gitignore` (snake_case to match other `.pql/config.yaml` keys).

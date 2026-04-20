@@ -66,7 +66,7 @@ pql/
 │   │   ├── conn.go                   # WAL, BEGIN IMMEDIATE per indexer invocation
 │   │   ├── fts.go
 │   │   └── repo/                     # narrow helpers per table
-│   ├── config/                       # .pql.yaml, env vars (PQL_VAULT/DB/CONFIG), vault-root discovery
+│   ├── config/                       # .pql/config.yaml, env vars (PQL_VAULT/DB/CONFIG), vault-root discovery
 │   ├── diag/                         # stderr JSON diagnostics + exit-code constants
 │   ├── telemetry/                    # per-phase timings (generate_ms, rank_ms, per-signal ms) on --verbose
 │   ├── fixture/                      # synthetic vault generators for eval

@@ -14,6 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/postmeridiem/pql/internal/cli/render"
+	"github.com/postmeridiem/pql/internal/config"
 	"github.com/postmeridiem/pql/internal/diag"
 	"github.com/postmeridiem/pql/internal/skill"
 )
@@ -93,11 +94,11 @@ func newInitCmd() *cobra.Command {
 		Short: "Bring this directory to a known-good pql project state (idempotent)",
 		Long: `Idempotent project fixer. Each step is safe to re-run:
 
-  - .pql.yaml      → created with defaults if missing; left alone if it
-                     exists (use --force to overwrite).
-  - .gitignore     → if one exists and doesn't already mention .pql/,
-                     append it. Never created from scratch.
-  - SKILL.md       → see --with-skill below.
+  - .pql/config.yaml → created with defaults if missing; left alone if it
+                       exists (use --force to overwrite).
+  - .gitignore       → if one exists and doesn't already mention .pql/,
+                       append it. Never created from scratch.
+  - SKILL.md         → see --with-skill below.
 
 Skill install behaviour follows --with-skill:
 
@@ -116,7 +117,7 @@ drift.`,
 				return &exitError{code: diag.NoInput, msg: err.Error()}
 			}
 
-			cfgPath := filepath.Join(dir, ".pql.yaml")
+			cfgPath := filepath.Join(dir, config.VaultStateDir, "config.yaml")
 			cfgStat, err := writeDefaultConfig(cfgPath, force)
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
@@ -149,7 +150,7 @@ drift.`,
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing .pql.yaml")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing .pql/config.yaml")
 	cmd.Flags().StringVar(&withSkill, "with-skill", "prompt", "skill install: yes | no | prompt (TTY)")
 	return cmd
 }
@@ -184,6 +185,8 @@ func initTargetDir(cmd *cobra.Command) (string, error) {
 // writeDefaultConfig is idempotent: if path exists and force is false,
 // nothing is written and Skipped=true. Hand-edited configs are
 // preserved by default; --force reseeds with the embedded defaults.
+//
+// Creates parent directories (e.g. <vault>/.pql/) as needed.
 func writeDefaultConfig(path string, force bool) (initConfigStat, error) {
 	stat := initConfigStat{Path: path}
 	_, err := os.Stat(path)
@@ -191,6 +194,9 @@ func writeDefaultConfig(path string, force bool) (initConfigStat, error) {
 	if exists && !force {
 		stat.Skipped = true
 		return stat, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return stat, fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 	}
 	if err := os.WriteFile(path, []byte(defaultConfigBody), 0o644); err != nil {
 		return stat, fmt.Errorf("write %s: %w", path, err)

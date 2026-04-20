@@ -4,11 +4,11 @@ When `pql` operates on a vault it looks for a small set of conventional files an
 
 | Name | Authored by | Purpose |
 |---|---|---|
-| `.pql.yaml` | User | Per-vault configuration. Optional. |
-| `.pqlignore` | User | Gitignore-syntax exclusions. Optional. Spec: [`pqlignore.md`](pqlignore.md). |
-| `.pql/` | pql | pql's per-vault state directory (SQLite index + future caches). Analogous to `.git/`. |
+| `.pql/` | pql | Per-vault state directory (SQLite index + future caches + the user-edited config.yaml). Analogous to `.git/`. |
+| `.pql/config.yaml` | User | Per-vault settings — overrides binary defaults. Optional. |
+| `.pqlignore` | User | Gitignore-syntax exclusions, at vault root. Optional. Spec: [`pqlignore.md`](pqlignore.md). |
 
-The convention follows the same shape developers already know from git: one user-authored config file, one user-authored ignore file, one tool-owned state directory. Users who recognise `.gitignore` + `.git/` will recognise `.pqlignore` + `.pql/` immediately.
+The convention follows the same shape developers already know from git: a single tool-managed state dir at the vault root that also hosts the user-edited config (just like `.git/` hosts `.git/config`), plus a `.gitignore`-shaped exclusions file at the root. Users who recognise `.gitignore` + `.git/config` + `.git/` will recognise `.pqlignore` + `.pql/config.yaml` + `.pql/` immediately.
 
 ## `.pql/` — per-vault state
 
@@ -51,7 +51,7 @@ Explicit control bypasses the default chain:
 
 - `--db <path>` flag → exact DB file path
 - `PQL_DB` env var → same
-- `db: <path>` in `.pql.yaml` → same, vault-scoped
+- `db: <path>` in `.pql/config.yaml` → same, vault-scoped
 
 In every case `<path>` is the DB **file** itself, not a directory; sidecar WAL/shm files land next to it.
 
@@ -64,11 +64,11 @@ No. Add `.pql/` to your repo's `.gitignore`. The index is regenerable from the v
 Gitignore-compatible file. Full spec: [`pqlignore.md`](pqlignore.md). Quick summary:
 
 - Vault-root `.pqlignore` is the primary file; nested `.pqlignore` files cascade like `.gitignore`.
-- Set `respect_gitignore: true` in `.pql.yaml` to honor `.gitignore` rules as well.
-- The `exclude:` list in `.pql.yaml` remains supported (additive, translated to gitignore-style patterns internally).
+- Set `respect_gitignore: true` in `.pql/config.yaml` to honor `.gitignore` rules as well.
+- The `exclude:` list in `.pql/config.yaml` remains supported (additive, translated to gitignore-style patterns internally).
 - A small set of paths (`.git/`, `.pql/`, sqlite sidecar files) is always excluded regardless of user config.
 
-## `.pql.yaml` — per-vault configuration
+## `.pql/config.yaml` — per-vault configuration
 
 Optional. When present, tunes the indexer and query layers for this vault.
 
@@ -95,7 +95,7 @@ aliases:
 A single `pql` invocation, in order:
 
 1. Resolve the vault root (CLI/env/walk-up — see `internal/config/discover.go`).
-2. Load `.pql.yaml` if present (vault-local, then `~/.config/pql/config.yaml` global).
+2. Load `.pql/config.yaml` if present (vault-local, then `~/.config/pql/config.yaml` global).
 3. Resolve the index location: `--db` / `PQL_DB` / `db:` override → otherwise `<vault>/.pql/index.sqlite` → fall back to user cache if the vault is read-only.
 4. Open or create the index, applying or verifying the v1 schema.
 5. Compose the active `.pqlignore` matcher stack: built-in defaults + `~/.config/pql/ignore` (planned) + nested `.pqlignore` files + `.gitignore` files (if `respect_gitignore: true`) + `exclude:` from YAML.

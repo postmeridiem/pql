@@ -43,7 +43,7 @@ type WalkOpts struct {
 	// VaultPath is the absolute root to walk. Required.
 	VaultPath string
 	// Exclude is the user's exclusion list (typically Config.Exclude from
-	// .pql.yaml). Doublestar patterns matched against vault-relative paths
+	// .pql/config.yaml). Doublestar patterns matched against vault-relative paths
 	// using forward slashes. Built-in excludes are always applied on top.
 	Exclude []string
 }

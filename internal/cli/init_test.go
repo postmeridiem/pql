@@ -9,7 +9,7 @@ import (
 
 func TestWriteDefaultConfig_CreatesNew(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".pql.yaml")
+	path := filepath.Join(dir, ".pql", "config.yaml")
 	stat, err := writeDefaultConfig(path, false)
 	if err != nil {
 		t.Fatalf("writeDefaultConfig: %v", err)
@@ -27,10 +27,13 @@ func TestWriteDefaultConfig_CreatesNew(t *testing.T) {
 }
 
 func TestWriteDefaultConfig_ExistingSkippedWithoutForce(t *testing.T) {
-	// Idempotent: existing .pql.yaml is preserved (Skipped=true), not
+	// Idempotent: existing .pql/config.yaml is preserved (Skipped=true), not
 	// overwritten and not errored.
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".pql.yaml")
+	path := filepath.Join(dir, ".pql", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	if err := os.WriteFile(path, []byte("frontmatter: toml\n"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -49,7 +52,8 @@ func TestWriteDefaultConfig_ExistingSkippedWithoutForce(t *testing.T) {
 
 func TestWriteDefaultConfig_ForceOverwrites(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".pql.yaml")
+	path := filepath.Join(dir, ".pql", "config.yaml")
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	os.WriteFile(path, []byte("frontmatter: toml\n"), 0o644)
 
 	stat, err := writeDefaultConfig(path, true)

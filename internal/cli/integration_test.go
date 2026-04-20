@@ -804,9 +804,9 @@ func TestIntegration_Init_FreshDirectory(t *testing.T) {
 	if !result.Config.Created || result.Config.Overwritten {
 		t.Errorf("config = %#v, want Created=true", result.Config)
 	}
-	// Verify the file actually exists.
-	if _, err := os.Stat(filepath.Join(dir, ".pql.yaml")); err != nil {
-		t.Errorf(".pql.yaml not created: %v", err)
+	// Verify the file actually exists at the new in-.pql/ location.
+	if _, err := os.Stat(filepath.Join(dir, ".pql", "config.yaml")); err != nil {
+		t.Errorf(".pql/config.yaml not created: %v", err)
 	}
 	if result.Gitignore.Exists {
 		t.Errorf("gitignore.Exists should be false in fresh dir")
@@ -815,8 +815,12 @@ func TestIntegration_Init_FreshDirectory(t *testing.T) {
 
 func TestIntegration_Init_IsIdempotentOnExistingConfig(t *testing.T) {
 	dir := t.TempDir()
+	configPath := filepath.Join(dir, ".pql", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	original := []byte("frontmatter: toml\n")
-	if err := os.WriteFile(filepath.Join(dir, ".pql.yaml"), original, 0o644); err != nil {
+	if err := os.WriteFile(configPath, original, 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
@@ -839,7 +843,7 @@ func TestIntegration_Init_IsIdempotentOnExistingConfig(t *testing.T) {
 	if !result.Config.Skipped || result.Config.Created || result.Config.Overwritten {
 		t.Errorf("config sub-stat = %#v, want Skipped=true (others false)", result.Config)
 	}
-	body, _ := os.ReadFile(filepath.Join(dir, ".pql.yaml"))
+	body, _ := os.ReadFile(configPath)
 	if !bytes.Equal(body, original) {
 		t.Errorf("existing config was modified: %q", body)
 	}

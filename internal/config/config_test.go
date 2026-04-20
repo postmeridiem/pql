@@ -130,7 +130,7 @@ func TestLoad_NoFile_AppliesDefaults(t *testing.T) {
 
 func TestLoad_LocalConfigOverridesDefaults(t *testing.T) {
 	vault := t.TempDir()
-	writeFile(t, filepath.Join(vault, ".pql.yaml"), `
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), `
 frontmatter: yaml
 wikilinks: pandoc
 tags:
@@ -169,7 +169,7 @@ aliases:
 
 func TestLoad_BadYAMLErrors(t *testing.T) {
 	vault := t.TempDir()
-	writeFile(t, filepath.Join(vault, ".pql.yaml"), "frontmatter: : :")
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), "frontmatter: : :")
 	_, err := Load(LoadOpts{
 		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
 	})
@@ -180,7 +180,7 @@ func TestLoad_BadYAMLErrors(t *testing.T) {
 
 func TestLoad_UnknownFieldRejected(t *testing.T) {
 	vault := t.TempDir()
-	writeFile(t, filepath.Join(vault, ".pql.yaml"), "fronmtater: yaml\n") // typo
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), "fronmtater: yaml\n") // typo
 	_, err := Load(LoadOpts{
 		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
 	})
@@ -194,7 +194,7 @@ func TestLoad_UnknownFieldRejected(t *testing.T) {
 
 func TestLoad_ValidationRejectsBadFrontmatter(t *testing.T) {
 	vault := t.TempDir()
-	writeFile(t, filepath.Join(vault, ".pql.yaml"), "frontmatter: org-mode\n")
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), "frontmatter: org-mode\n")
 	_, err := Load(LoadOpts{
 		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
 	})
@@ -264,7 +264,7 @@ func TestDBPath_EnvOverridesDefault(t *testing.T) {
 
 func TestDBPath_YAMLDBFieldOverridesDefault(t *testing.T) {
 	vault := t.TempDir()
-	writeFile(t, filepath.Join(vault, ".pql.yaml"), "db: custom/path.sqlite\n")
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), "db: custom/path.sqlite\n")
 	cfg, err := Load(LoadOpts{
 		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
 	})
@@ -381,7 +381,7 @@ func TestDBPath_HomeDirFallbackMatchesPlatform(t *testing.T) {
 
 func TestLoad_RespectGitignoreField(t *testing.T) {
 	vault := t.TempDir()
-	writeFile(t, filepath.Join(vault, ".pql.yaml"), "respect_gitignore: true\n")
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), "respect_gitignore: true\n")
 	cfg, err := Load(LoadOpts{
 		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
 	})
@@ -426,6 +426,9 @@ func mkdir(t *testing.T, path string) {
 
 func writeFile(t *testing.T, path, body string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %q: %v", filepath.Dir(path), err)
+	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write %q: %v", path, err)
 	}
