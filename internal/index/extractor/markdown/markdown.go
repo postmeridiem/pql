@@ -13,14 +13,27 @@ package markdown
 
 import "strings"
 
+// Value type tags. Stored verbatim in frontmatter.type. New tags require a
+// schema bump because the indexer's NOT NULL constraint accepts only these.
+const (
+	TypeString = "string"
+	TypeNumber = "number"
+	TypeBool   = "bool"
+	TypeList   = "list"
+	TypeObject = "object"
+)
+
 // Value is the typed view of a single frontmatter entry, ready to map onto
-// the frontmatter table's value_json / value_text / value_num columns.
+// the frontmatter table's type / value_json / value_text / value_num columns.
 //
+// Type is always set to one of the Type* constants — the explicit tag means
+// `pql schema` can report value kinds without scanning value_*.
 // JSON is always set (canonical JSON serialization).
 // HasText/Text and HasNum/Num are set only when the underlying value can be
 // represented as that scalar — strings get Text, numerics get Num, booleans
 // get both Num (0/1) and JSON (true/false), lists/objects get only JSON.
 type Value struct {
+	Type    string
 	JSON    string
 	Text    string
 	HasText bool

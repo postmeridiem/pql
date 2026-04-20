@@ -69,8 +69,8 @@ func readSchemaVersion(ctx context.Context, db *sql.DB) (int, error) {
 }
 
 func applyFreshSchema(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, schema.V1); err != nil {
-		return fmt.Errorf("store: apply v1 schema: %w", err)
+	if _, err := db.ExecContext(ctx, schema.Current); err != nil {
+		return fmt.Errorf("store: apply schema v%d: %w", schema.Version, err)
 	}
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO index_meta (key, value) VALUES ('schema_version', ?)

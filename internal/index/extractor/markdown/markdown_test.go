@@ -82,23 +82,27 @@ nullified: null
 
 	cases := []struct {
 		key                  string
+		wantType             string
 		wantText             string
 		wantHasText          bool
 		wantNum              float64
 		wantHasNum           bool
 		wantJSONHasSubstring string
 	}{
-		{"name", "Vaasa", true, 0, false, `"Vaasa"`},
-		{"voting", "", false, 1, true, `true`},
-		{"seat", "", false, 4, true, `4`},
-		{"score", "", false, 3.14, true, `3.14`},
-		{"prior_jobs", "", false, 0, false, `["analyst","lecturer"]`},
+		{"name", TypeString, "Vaasa", true, 0, false, `"Vaasa"`},
+		{"voting", TypeBool, "", false, 1, true, `true`},
+		{"seat", TypeNumber, "", false, 4, true, `4`},
+		{"score", TypeNumber, "", false, 3.14, true, `3.14`},
+		{"prior_jobs", TypeList, "", false, 0, false, `["analyst","lecturer"]`},
 	}
 	for _, c := range cases {
 		v, ok := fm[c.key]
 		if !ok {
 			t.Errorf("key %q missing from parsed fm", c.key)
 			continue
+		}
+		if v.Type != c.wantType {
+			t.Errorf("%s: type=%q, want %q", c.key, v.Type, c.wantType)
 		}
 		if v.HasText != c.wantHasText || v.Text != c.wantText {
 			t.Errorf("%s: text=(%q,%v), want=(%q,%v)", c.key, v.Text, v.HasText, c.wantText, c.wantHasText)

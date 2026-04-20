@@ -232,6 +232,7 @@ CREATE TABLE files (
 CREATE TABLE frontmatter (
     path        TEXT NOT NULL REFERENCES files(path) ON DELETE CASCADE,
     key         TEXT NOT NULL,
+    type        TEXT NOT NULL,       -- 'string'|'number'|'bool'|'list'|'object'
     value_json  TEXT NOT NULL,       -- canonical typed value
     value_text  TEXT,                -- for text ops / LIKE / REGEXP
     value_num   REAL,                -- for numeric comparisons
@@ -239,6 +240,7 @@ CREATE TABLE frontmatter (
 );
 CREATE INDEX idx_frontmatter_key_text ON frontmatter(key, value_text);
 CREATE INDEX idx_frontmatter_key_num  ON frontmatter(key, value_num);
+CREATE INDEX idx_frontmatter_key_type ON frontmatter(key, type);
 
 CREATE TABLE tags (
     path TEXT NOT NULL REFERENCES files(path) ON DELETE CASCADE,

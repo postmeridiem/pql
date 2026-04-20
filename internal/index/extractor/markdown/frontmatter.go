@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -70,6 +71,9 @@ func ParseFrontmatter(head []byte) (map[string]Value, error) {
 }
 
 // typeValue produces the typed Value for one decoded YAML scalar/list/map.
+// The returned Value.Type tag is one of the markdown.Type* constants and
+// always set; a value that doesn't match any known shape falls back to
+// TypeString with text-form preserved in JSON only.
 func typeValue(v any) (Value, error) {
 	jb, err := json.Marshal(v)
 	if err != nil {
@@ -78,31 +82,51 @@ func typeValue(v any) (Value, error) {
 	val := Value{JSON: string(jb)}
 	switch x := v.(type) {
 	case string:
+		val.Type = TypeString
 		val.Text = x
 		val.HasText = true
 	case bool:
-		val.Num = 0
+		val.Type = TypeBool
 		if x {
 			val.Num = 1
 		}
 		val.HasNum = true
 	case int:
+		val.Type = TypeNumber
 		val.Num = float64(x)
 		val.HasNum = true
 	case int64:
+		val.Type = TypeNumber
 		val.Num = float64(x)
 		val.HasNum = true
 	case uint64:
+		val.Type = TypeNumber
 		val.Num = float64(x)
 		val.HasNum = true
 	case float64:
+		val.Type = TypeNumber
 		val.Num = x
 		val.HasNum = true
 	case float32:
+		val.Type = TypeNumber
 		val.Num = float64(x)
 		val.HasNum = true
-		// lists, maps, time.Time, etc. → only JSON; querying them goes through
-		// json_extract(...) per docs/pql-grammar.md.
+	case time.Time:
+		// Dates / datetimes ride as strings in v1; the JSON form is the ISO
+		// representation, which sorts and compares correctly. A native date
+		// type can land later if querying ergonomics demand it.
+		val.Type = TypeString
+		val.Text = x.Format(time.RFC3339)
+		val.HasText = true
+	case []any:
+		val.Type = TypeList
+	case map[string]any, map[any]any:
+		val.Type = TypeObject
+	default:
+		// Unknown YAML decoder output — fall back to TypeString so the NOT
+		// NULL constraint on frontmatter.type is satisfied. JSON form is
+		// still preserved for the escape hatch.
+		val.Type = TypeString
 	}
 	return val, nil
 }
