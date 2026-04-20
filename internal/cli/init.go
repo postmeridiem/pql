@@ -5,27 +5,33 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/postmeridiem/pql/internal/cli/render"
 	"github.com/postmeridiem/pql/internal/diag"
+	"github.com/postmeridiem/pql/internal/skill"
 )
 
-// initResult is the JSON shape `pql init` emits on stdout.
+// initResult is the JSON shape `pql init` emits on stdout. Each sub-stat
+// describes one of the project-state fixers init runs through.
 type initResult struct {
 	Directory string         `json:"directory"`
 	Config    initConfigStat `json:"config"`
 	Gitignore initGitignore  `json:"gitignore"`
+	Skill     initSkillStat  `json:"skill"`
 }
 
 type initConfigStat struct {
 	Path        string `json:"path"`
 	Created     bool   `json:"created"`
 	Overwritten bool   `json:"overwritten"`
+	Skipped     bool   `json:"skipped,omitempty"` // true when file existed and --force not set
 }
 
 type initGitignore struct {
@@ -33,6 +39,14 @@ type initGitignore struct {
 	Exists   bool   `json:"exists"`
 	Appended bool   `json:"appended"`
 	Entry    string `json:"entry,omitempty"`
+}
+
+type initSkillStat struct {
+	Mode  string `json:"mode"`            // "yes" | "no" | "prompt-declined" | "prompt-accepted" | "prompt-skipped-no-tty" | "preserved"
+	State string `json:"state"`           // post-action state per internal/skill
+	Path  string `json:"path,omitempty"`  // SKILL.md path
+	Hash  string `json:"hash,omitempty"`  // SHA-256 of installed content (when present)
+	Note  string `json:"note,omitempty"`  // human-readable explanation
 }
 
 const defaultConfigBody = `# pql configuration. See docs/structure/initial-plan.md and
@@ -70,21 +84,31 @@ fts: false
 `
 
 func newInitCmd() *cobra.Command {
-	var force bool
+	var (
+		force     bool
+		withSkill string
+	)
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Seed .pql.yaml in the current directory (or --vault target)",
-		Long: `Write a default .pql.yaml in the current directory so pql can index this
-vault with sensible defaults. If a .gitignore exists in the same directory
-and doesn't already mention the .pql/ state directory, append it so the
-SQLite index doesn't land in version control.
+		Short: "Bring this directory to a known-good pql project state (idempotent)",
+		Long: `Idempotent project fixer. Each step is safe to re-run:
 
-  pql init                       # write .pql.yaml here; do nothing if it exists
-  pql init --force               # overwrite an existing .pql.yaml
-  pql init --vault path/to/vault # initialise a different directory
+  - .pql.yaml      → created with defaults if missing; left alone if it
+                     exists (use --force to overwrite).
+  - .gitignore     → if one exists and doesn't already mention .pql/,
+                     append it. Never created from scratch.
+  - SKILL.md       → see --with-skill below.
 
-Output is one JSON object describing what was created or modified. Exit 64
-if .pql.yaml already exists and --force wasn't passed.`,
+Skill install behaviour follows --with-skill:
+
+  --with-skill=yes      always install (or update a stale install)
+  --with-skill=no       never touch the skill install
+  --with-skill=prompt   (default) interactively ask if stdin is a TTY,
+                        otherwise behave as 'no'
+
+Output is one JSON object describing what changed. Idempotent re-runs
+report all sub-stats with their final state so scripting can detect
+drift.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dir, err := initTargetDir(cmd)
@@ -95,7 +119,7 @@ if .pql.yaml already exists and --force wasn't passed.`,
 			cfgPath := filepath.Join(dir, ".pql.yaml")
 			cfgStat, err := writeDefaultConfig(cfgPath, force)
 			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
+				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
 			giPath := filepath.Join(dir, ".gitignore")
@@ -104,11 +128,21 @@ if .pql.yaml already exists and --force wasn't passed.`,
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
+			skillStat, err := initSkillStep(dir, withSkill, cmd.InOrStdin(), cmd.OutOrStderr())
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
-			result := &initResult{Directory: dir, Config: cfgStat, Gitignore: giStat}
+			result := &initResult{
+				Directory: dir,
+				Config:    cfgStat,
+				Gitignore: giStat,
+				Skill:     skillStat,
+			}
 			if _, err := render.RenderOne(result, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
@@ -116,6 +150,7 @@ if .pql.yaml already exists and --force wasn't passed.`,
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing .pql.yaml")
+	cmd.Flags().StringVar(&withSkill, "with-skill", "prompt", "skill install: yes | no | prompt (TTY)")
 	return cmd
 }
 
@@ -146,12 +181,16 @@ func initTargetDir(cmd *cobra.Command) (string, error) {
 	return cwd, nil
 }
 
+// writeDefaultConfig is idempotent: if path exists and force is false,
+// nothing is written and Skipped=true. Hand-edited configs are
+// preserved by default; --force reseeds with the embedded defaults.
 func writeDefaultConfig(path string, force bool) (initConfigStat, error) {
 	stat := initConfigStat{Path: path}
 	_, err := os.Stat(path)
 	exists := err == nil
 	if exists && !force {
-		return stat, fmt.Errorf("%s exists; pass --force to overwrite", path)
+		stat.Skipped = true
+		return stat, nil
 	}
 	if err := os.WriteFile(path, []byte(defaultConfigBody), 0o644); err != nil {
 		return stat, fmt.Errorf("write %s: %w", path, err)
@@ -186,15 +225,13 @@ func ensureGitignoreEntry(path, entry string) (initGitignore, error) {
 		line := strings.TrimSpace(scanner.Text())
 		line = strings.TrimSuffix(strings.TrimPrefix(line, "/"), "/")
 		if line == wanted {
-			return stat, nil // already present, nothing to do
+			return stat, nil
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return stat, fmt.Errorf("scan %s: %w", path, err)
 	}
 
-	// Append. Preserve a trailing newline before our entry if the file
-	// doesn't end with one; emit one after.
 	var buf bytes.Buffer
 	buf.Write(body)
 	if len(body) > 0 && body[len(body)-1] != '\n' {
@@ -209,4 +246,129 @@ func ensureGitignoreEntry(path, entry string) (initGitignore, error) {
 	stat.Appended = true
 	stat.Entry = entry
 	return stat, nil
+}
+
+// initSkillStep handles the --with-skill flag. Returns a stat describing
+// what happened. mode==prompt is TTY-aware: prompt if stdin is a
+// terminal, otherwise behave as mode==no (silent skip).
+func initSkillStep(dir, withFlag string, in io.Reader, prompt io.Writer) (initSkillStat, error) {
+	skillDir := filepath.Join(dir, skillRelPath)
+	current, err := skill.Inspect(skillDir)
+	if err != nil {
+		return initSkillStat{}, err
+	}
+
+	stat := initSkillStat{
+		Mode:  withFlag,
+		State: string(current.State),
+		Path:  current.Path,
+	}
+	if current.OnDisk != nil {
+		stat.Hash = current.OnDisk.Hash
+	}
+
+	switch withFlag {
+	case "no":
+		stat.Note = "--with-skill=no; skill install untouched"
+		return stat, nil
+
+	case "yes":
+		// Force=true so stale + modified are both updated. The user said
+		// "yes" explicitly; respect that.
+		updated, err := skill.Install(skillDir, true)
+		if err != nil {
+			return stat, err
+		}
+		stat.State = string(updated.State)
+		stat.Hash = updated.OnDisk.Hash
+		stat.Note = "installed (--with-skill=yes)"
+		return stat, nil
+
+	case "prompt":
+		// Skip silently if not a TTY — a no-prompt environment shouldn't
+		// hang waiting for input.
+		if !isTerminal(in) {
+			stat.Mode = "prompt-skipped-no-tty"
+			stat.Note = "stdin is not a TTY; --with-skill=prompt deferred"
+			return stat, nil
+		}
+		// Decide what to ask based on current state.
+		var question string
+		var defaultYes bool
+		switch current.State {
+		case skill.StateMissing:
+			question = "Install the pql Claude Code skill at " + skillDir + "?"
+			defaultYes = true
+		case skill.StateStale:
+			question = "Skill on disk is older than the binary's. Update it at " + skillDir + "?"
+			defaultYes = true
+		case skill.StateCurrent:
+			stat.Mode = "preserved"
+			stat.Note = "skill is already current; no action needed"
+			return stat, nil
+		case skill.StateModified, skill.StateUnknown:
+			stat.Mode = "preserved"
+			stat.Note = "skill is " + string(current.State) + "; preserve user content. Use `pql skill install --force` to overwrite."
+			return stat, nil
+		}
+		yes, err := promptYesNo(in, prompt, question, defaultYes)
+		if err != nil {
+			return stat, err
+		}
+		if !yes {
+			stat.Mode = "prompt-declined"
+			stat.Note = "user declined skill install"
+			return stat, nil
+		}
+		updated, err := skill.Install(skillDir, current.State == skill.StateStale)
+		if err != nil {
+			return stat, err
+		}
+		stat.Mode = "prompt-accepted"
+		stat.State = string(updated.State)
+		stat.Hash = updated.OnDisk.Hash
+		return stat, nil
+
+	default:
+		return stat, fmt.Errorf("--with-skill: invalid value %q (want yes|no|prompt)", withFlag)
+	}
+}
+
+// isTerminal reports whether r is a *os.File that backs a terminal. Used
+// to gate interactive prompts so non-TTY invocations (CI, pipes) skip
+// silently rather than hanging on stdin.
+func isTerminal(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(f.Fd()))
+}
+
+// promptYesNo writes question to w, reads a y/n line from r, and returns
+// the parsed answer. Empty input returns defaultYes. Uses bufio so
+// multi-character input is consumed cleanly.
+func promptYesNo(r io.Reader, w io.Writer, question string, defaultYes bool) (bool, error) {
+	hint := "[Y/n]"
+	if !defaultYes {
+		hint = "[y/N]"
+	}
+	if _, err := fmt.Fprintf(w, "%s %s ", question, hint); err != nil {
+		return false, err
+	}
+	scanner := bufio.NewScanner(r)
+	if !scanner.Scan() {
+		// EOF on empty input; honour default.
+		return defaultYes, nil
+	}
+	answer := strings.ToLower(strings.TrimSpace(scanner.Text()))
+	switch answer {
+	case "":
+		return defaultYes, nil
+	case "y", "yes":
+		return true, nil
+	case "n", "no":
+		return false, nil
+	}
+	return false, fmt.Errorf("unrecognised answer %q (expected y or n)", answer)
 }

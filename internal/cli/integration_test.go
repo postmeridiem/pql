@@ -711,6 +711,49 @@ func TestIntegration_Doctor_PopulatedAfterIndex(t *testing.T) {
 	}
 }
 
+func TestIntegration_Doctor_SkillFieldReportsState(t *testing.T) {
+	vault := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	// Fresh vault: skill should be missing.
+	out, err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
+	if err != nil {
+		t.Fatalf("doctor: %v", err)
+	}
+	var rep struct {
+		Skill struct {
+			Project struct {
+				State string `json:"state"`
+			} `json:"project"`
+			EmbeddedHash    string `json:"embedded_hash"`
+			EmbeddedVersion string `json:"embedded_version"`
+		} `json:"skill"`
+	}
+	if err := json.Unmarshal(out, &rep); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if rep.Skill.Project.State != "missing" {
+		t.Errorf("project.state = %q, want missing", rep.Skill.Project.State)
+	}
+	if rep.Skill.EmbeddedHash == "" {
+		t.Errorf("embedded_hash should be set")
+	}
+
+	// After installing, doctor should report current.
+	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
+		t.Fatalf("skill install: %v", err)
+	}
+	out, err = exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
+	if err != nil {
+		t.Fatalf("doctor (post-install): %v", err)
+	}
+	if err := json.Unmarshal(out, &rep); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if rep.Skill.Project.State != "current" {
+		t.Errorf("project.state after install = %q, want current", rep.Skill.Project.State)
+	}
+}
+
 func TestIntegration_Doctor_VersionMatchesBinary(t *testing.T) {
 	vault := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
@@ -770,20 +813,108 @@ func TestIntegration_Init_FreshDirectory(t *testing.T) {
 	}
 }
 
-func TestIntegration_Init_ExistingConfigErrorsWithoutForce(t *testing.T) {
+func TestIntegration_Init_IsIdempotentOnExistingConfig(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".pql.yaml"), []byte("frontmatter: toml\n"), 0o644); err != nil {
+	original := []byte("frontmatter: toml\n")
+	if err := os.WriteFile(filepath.Join(dir, ".pql.yaml"), original, 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init")
-	err := cmd.Run()
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) {
-		t.Fatalf("expected exit error, got %v", err)
+	// Skip the skill prompt; we're testing config behaviour.
+	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init", "--with-skill=no")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("init: %v", err)
 	}
-	if ee.ExitCode() != 64 {
-		t.Errorf("exit = %d, want 64 (Usage)", ee.ExitCode())
+	var result struct {
+		Config struct {
+			Skipped     bool `json:"skipped"`
+			Created     bool `json:"created"`
+			Overwritten bool `json:"overwritten"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if !result.Config.Skipped || result.Config.Created || result.Config.Overwritten {
+		t.Errorf("config sub-stat = %#v, want Skipped=true (others false)", result.Config)
+	}
+	body, _ := os.ReadFile(filepath.Join(dir, ".pql.yaml"))
+	if !bytes.Equal(body, original) {
+		t.Errorf("existing config was modified: %q", body)
+	}
+}
+
+func TestIntegration_Init_WithSkillYesInstalls(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init", "--with-skill=yes")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	var result struct {
+		Skill struct {
+			Mode  string `json:"mode"`
+			State string `json:"state"`
+		} `json:"skill"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if result.Skill.State != "current" {
+		t.Errorf("skill.state = %q, want current", result.Skill.State)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "pql", "SKILL.md")); err != nil {
+		t.Errorf("SKILL.md not installed: %v", err)
+	}
+}
+
+func TestIntegration_Init_WithSkillNoSkips(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init", "--with-skill=no")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	var result struct {
+		Skill struct {
+			Mode  string `json:"mode"`
+			State string `json:"state"`
+		} `json:"skill"`
+	}
+	_ = json.Unmarshal(out, &result)
+	if result.Skill.Mode != "no" {
+		t.Errorf("skill.mode = %q, want no", result.Skill.Mode)
+	}
+	if result.Skill.State != "missing" {
+		t.Errorf("skill.state = %q, want missing", result.Skill.State)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "pql", "SKILL.md")); !os.IsNotExist(err) {
+		t.Errorf("SKILL.md should not exist after --with-skill=no: %v", err)
+	}
+}
+
+func TestIntegration_Init_WithSkillPromptSkipsWithoutTTY(t *testing.T) {
+	// In integration tests stdin is a pipe (not a TTY), so prompt mode
+	// should defer cleanly without hanging.
+	dir := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init", "--with-skill=prompt")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	var result struct {
+		Skill struct {
+			Mode string `json:"mode"`
+			Note string `json:"note"`
+		} `json:"skill"`
+	}
+	_ = json.Unmarshal(out, &result)
+	if result.Skill.Mode != "prompt-skipped-no-tty" {
+		t.Errorf("skill.mode = %q, want prompt-skipped-no-tty", result.Skill.Mode)
 	}
 }
 

@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/postmeridiem/pql/internal/cli/render"
 	"github.com/postmeridiem/pql/internal/config"
 	"github.com/postmeridiem/pql/internal/diag"
+	"github.com/postmeridiem/pql/internal/skill"
 	"github.com/postmeridiem/pql/internal/store"
 	"github.com/postmeridiem/pql/internal/store/schema"
 	"github.com/postmeridiem/pql/internal/version"
@@ -19,11 +21,12 @@ import (
 
 // doctorReport is the JSON shape `pql doctor` emits on stdout.
 type doctorReport struct {
-	Vault   doctorVault          `json:"vault"`
-	Config  doctorConfig         `json:"config"`
-	DB      doctorDB             `json:"db"`
-	Index   *doctorIndex         `json:"index"` // nil when DB doesn't exist
-	Version version.BuildInfo    `json:"version"`
+	Vault   doctorVault       `json:"vault"`
+	Config  doctorConfig      `json:"config"`
+	DB      doctorDB          `json:"db"`
+	Index   *doctorIndex      `json:"index"` // nil when DB doesn't exist
+	Skill   doctorSkill       `json:"skill"`
+	Version version.BuildInfo `json:"version"`
 }
 
 type doctorVault struct {
@@ -59,6 +62,19 @@ type doctorIndex struct {
 	TagsRows        int `json:"tags_rows"`
 	LinksRows       int `json:"links_rows"`
 	HeadingsRows    int `json:"headings_rows"`
+}
+
+// doctorSkill mirrors skill.Status but flattens it for the doctor
+// report. Project = the install at <vault>/.claude/skills/pql/.
+type doctorSkill struct {
+	Project struct {
+		Path             string `json:"path"`
+		State            string `json:"state"`
+		InstalledHash    string `json:"installed_hash,omitempty"`
+		InstalledVersion string `json:"installed_version,omitempty"`
+	} `json:"project"`
+	EmbeddedHash    string `json:"embedded_hash"`
+	EmbeddedVersion string `json:"embedded_version"`
 }
 
 func newDoctorCmd() *cobra.Command {
@@ -110,6 +126,10 @@ as a normal state to report rather than an error.`,
 
 			if err := populateDBState(ctx, cfg.DBPath, report); err != nil {
 				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+
+			if err := populateSkillState(cfg.Vault.Path, report); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -184,4 +204,23 @@ func readMeta(ctx context.Context, db *sql.DB, key string) string {
 	var v string
 	_ = db.QueryRowContext(ctx, `SELECT value FROM index_meta WHERE key = ?`, key).Scan(&v)
 	return v
+}
+
+// populateSkillState fills report.Skill by inspecting the project-level
+// install at <vault>/.claude/skills/pql/. Read-only — no install offer
+// here; that's `pql init`'s and `pql skill install`'s job.
+func populateSkillState(vaultPath string, report *doctorReport) error {
+	st, err := skill.Inspect(filepath.Join(vaultPath, skillRelPath))
+	if err != nil {
+		return err
+	}
+	report.Skill.Project.Path = st.Path
+	report.Skill.Project.State = string(st.State)
+	if st.Installed != nil {
+		report.Skill.Project.InstalledHash = st.Installed.Hash
+		report.Skill.Project.InstalledVersion = st.Installed.Version
+	}
+	report.Skill.EmbeddedHash = st.Embedded.Hash
+	report.Skill.EmbeddedVersion = st.Embedded.Version
+	return nil
 }

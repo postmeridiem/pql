@@ -26,15 +26,20 @@ func TestWriteDefaultConfig_CreatesNew(t *testing.T) {
 	}
 }
 
-func TestWriteDefaultConfig_ExistingErrorsWithoutForce(t *testing.T) {
+func TestWriteDefaultConfig_ExistingSkippedWithoutForce(t *testing.T) {
+	// Idempotent: existing .pql.yaml is preserved (Skipped=true), not
+	// overwritten and not errored.
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".pql.yaml")
 	if err := os.WriteFile(path, []byte("frontmatter: toml\n"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	_, err := writeDefaultConfig(path, false)
-	if err == nil {
-		t.Fatal("expected error when config exists and !force")
+	stat, err := writeDefaultConfig(path, false)
+	if err != nil {
+		t.Fatalf("expected no error (idempotent), got %v", err)
+	}
+	if !stat.Skipped || stat.Created || stat.Overwritten {
+		t.Errorf("stat = %#v, want Skipped=true (others false)", stat)
 	}
 	body, _ := os.ReadFile(path)
 	if !strings.Contains(string(body), "toml") {
