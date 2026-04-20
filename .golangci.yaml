@@ -1,17 +1,19 @@
 # Strict-but-pragmatic config. Tighten over time.
+# golangci-lint v2 schema. See https://golangci-lint.run/docs/product/migration-guide
+
+version: "2"
 
 run:
   timeout: 5m
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck         # unchecked errors
-    - gosimple         # simplifications
     - govet            # standard go vet
     - ineffassign      # unused assignments
-    - staticcheck      # bug catches + style
+    - staticcheck      # bug catches + style (absorbs the v1 gosimple linter)
     - unused           # unused identifiers
     - revive           # configurable replacement for golint
     - gocritic         # opinionated checks
@@ -21,51 +23,51 @@ linters:
     - prealloc         # preallocate slices when length is known
     - bodyclose        # http body close
     - goconst          # repeated string literals → consts
-
-linters-settings:
-  revive:
-    severity: warning
+  settings:
+    revive:
+      severity: warning
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam      # noisy on small structs
+        - rangeValCopy   # noisy on small structs
+    gosec:
+      excludes:
+        - G115           # int conversion overflow — too noisy for SQLite ints
+  exclusions:
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: increment-decrement
-      - name: var-naming
-      - name: var-declaration
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unreachable-code
-      - name: redefines-builtin-id
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - hugeParam      # noisy on small structs
-      - rangeValCopy   # noisy on small structs
-  gosec:
-    excludes:
-      - G115           # int conversion overflow — too noisy for SQLite ints
+      # Tests can do things production code can't.
+      - path: _test\.go
+        linters: [errcheck, gosec, goconst]
+      # cmd/ entrypoint is allowed to log and exit.
+      - path: cmd/
+        linters: [gocritic]
 
 issues:
-  exclude-rules:
-    # Tests can do things production code can't.
-    - path: _test\.go
-      linters: [errcheck, gosec, goconst]
-    # cmd/ entrypoint is allowed to log and exit.
-    - path: cmd/
-      linters: [gocritic]
   max-issues-per-linter: 0
   max-same-issues: 0
