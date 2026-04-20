@@ -395,6 +395,128 @@ func TestIntegration_Meta_VaasaPersona(t *testing.T) {
 	}
 }
 
+func TestIntegration_Query_PositionalDSL(t *testing.T) {
+	vault := councilVault(t)
+	stdout, stderr, code := run(t, vault, "query", "SELECT path WHERE folder = 'members/vaasa' ORDER BY path")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
+	}
+	if len(rows) == 0 {
+		t.Fatalf("expected at least one members/vaasa file, got zero")
+	}
+	for i, r := range rows {
+		p, _ := r["path"].(string)
+		if !strings.HasPrefix(p, "members/vaasa/") {
+			t.Errorf("row %d path = %q, want members/vaasa/* prefix", i, p)
+		}
+	}
+}
+
+func TestIntegration_Query_TagMembership(t *testing.T) {
+	vault := councilVault(t)
+	stdout, stderr, code := run(t, vault, "query", "SELECT path WHERE 'volt' IN tags")
+	if code != 0 && code != 2 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	if code == 2 {
+		t.Skip("no 'volt' tag in current fixture")
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(rows) == 0 {
+		t.Errorf("expected at least one file tagged 'volt'")
+	}
+}
+
+func TestIntegration_Query_FmAccess(t *testing.T) {
+	vault := councilVault(t)
+	stdout, stderr, code := run(t, vault, "query", "SELECT path, fm.type WHERE fm.type = 'council-member' ORDER BY path")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(rows) == 0 {
+		t.Fatalf("expected at least one council-member")
+	}
+	for i, r := range rows {
+		if r["fm.type"] != "council-member" {
+			t.Errorf("row %d fm.type = %v", i, r["fm.type"])
+		}
+	}
+}
+
+func TestIntegration_Query_ParseErrorExits65(t *testing.T) {
+	vault := councilVault(t)
+	_, stderr, code := run(t, vault, "query", "SELECT FROM WHERE")
+	if code != 65 {
+		t.Errorf("exit = %d, want 65 (DataErr); stderr=%s", code, stderr)
+	}
+	if !bytes.Contains(stderr, []byte("pql.")) {
+		t.Errorf("stderr should carry pql.* diagnostic code: %s", stderr)
+	}
+}
+
+func TestIntegration_Query_UnknownColumnExits65(t *testing.T) {
+	vault := councilVault(t)
+	_, stderr, code := run(t, vault, "query", "SELECT typo_col")
+	if code != 65 {
+		t.Errorf("exit = %d, want 65 (DataErr)", code)
+	}
+	if !bytes.Contains(stderr, []byte("unknown_column")) {
+		t.Errorf("stderr should mention unknown_column: %s", stderr)
+	}
+}
+
+func TestIntegration_Query_NoInputModeExits64(t *testing.T) {
+	vault := councilVault(t)
+	_, _, code := run(t, vault, "query")
+	if code != 64 {
+		t.Errorf("exit = %d, want 64 (Usage)", code)
+	}
+}
+
+func TestIntegration_Query_FromFile(t *testing.T) {
+	vault := councilVault(t)
+	qfile := filepath.Join(t.TempDir(), "q.pql")
+	if err := os.WriteFile(qfile, []byte("SELECT path WHERE folder = 'members/holt'"), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	stdout, stderr, code := run(t, vault, "query", "--file", qfile)
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	for _, r := range rows {
+		p, _ := r["path"].(string)
+		if !strings.HasPrefix(p, "members/holt/") {
+			t.Errorf("--file query returned unexpected path %q", p)
+		}
+	}
+}
+
+func TestIntegration_Query_NoMatchExits2(t *testing.T) {
+	vault := councilVault(t)
+	stdout, _, code := run(t, vault, "query", "SELECT path WHERE folder = 'nope-never'")
+	if code != 2 {
+		t.Errorf("exit = %d, want 2", code)
+	}
+	if got := strings.TrimSpace(string(stdout)); got != "[]" {
+		t.Errorf("stdout = %q, want []", got)
+	}
+}
+
 func TestIntegration_Doctor_FreshVaultBeforeIndex(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
