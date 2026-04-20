@@ -1,8 +1,9 @@
 // Package cli is the CLI front-end. cmd/pql/main.go calls Run with os.Args[1:].
 //
-// The root command is wired with cobra so subcommands can be added incrementally
-// as the v0.1 milestone ships query primitives (files, tags, meta, backlinks,
-// outlinks, schema, init, doctor) and v0.2 adds the SQL DSL.
+// Subcommand surface lives in this package as one file per command
+// (query_*.go for primitive queries, intent_*.go for intent commands once
+// they land). Cross-cutting concerns are in exit.go (exit-code mapping)
+// and options.go (flag → opts struct extraction).
 package cli
 
 import (
@@ -17,33 +18,65 @@ import (
 	"github.com/postmeridiem/pql/internal/version"
 )
 
-// Run dispatches CLI args. Returns the process exit code.
+// Run dispatches CLI args. Returns the process exit code per
+// docs/output-contract.md.
 func Run(args []string) int {
 	cmd := newRootCmd()
 	cmd.SetArgs(args)
-	if err := cmd.Execute(); err != nil {
-		// cobra prints the usage error to stderr already; we just translate
-		// to the exit-code contract documented in docs/output-contract.md.
-		return diag.Usage
+	cmd.SilenceErrors = true // we emit diagnostics via internal/diag ourselves
+	cmd.SilenceUsage = true  // RunE errors don't dump usage; flag-parse errors still do
+
+	err := cmd.Execute()
+	if err == nil {
+		return diag.OK
 	}
-	return diag.OK
+
+	// Controlled exit via exitError carries its own code (and an optional
+	// diagnostic message we surface to stderr).
+	var ee *exitError
+	if errors.As(err, &ee) {
+		if ee.msg != "" {
+			diag.Error("cli.exit", ee.msg, ee.hint)
+		}
+		return ee.code
+	}
+
+	// Anything else is a cobra-layer error (unknown subcommand, unknown
+	// flag, missing required arg). Subcommand RunE always wraps its own
+	// failures in exitError, so a non-exitError reaching here is by
+	// elimination a usage problem. Emit and return Usage (64).
+	diag.Error("cli.error", err.Error(), "")
+	return diag.Usage
 }
 
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:           "pql",
-		Short:         "Project Query Language — SQL-derived CLI for markdown vaults",
-		Long:          longDescription,
-		Version:       version.Version,
-		SilenceErrors: false,
-		SilenceUsage:  false,
-		Args:          cobra.MinimumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return fmt.Errorf("unknown command: %q", args[0])
+		Use:     "pql",
+		Short:   "Project Query Language — SQL-derived CLI for markdown vaults",
+		Long:    longDescription,
+		Version: version.Version,
+		// No subcommand given. Cobra's default would print help and exit 0;
+		// we want exit 64 (Usage) so callers can distinguish "user invoked
+		// pql with no instructions" from "pql ran something successfully".
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_ = cmd.Help()
+			return &exitError{code: diag.Usage}
 		},
 	}
 	cmd.SetVersionTemplate("{{.Version}}\n")
+
+	pf := cmd.PersistentFlags()
+	pf.String("vault", "", "vault root override (env: PQL_VAULT)")
+	pf.String("db", "", "DB path override (env: PQL_DB)")
+	pf.String("config", "", "config file override (env: PQL_CONFIG)")
+	pf.Bool("pretty", false, "pretty-print JSON output")
+	pf.Bool("jsonl", false, "emit JSON-per-line instead of an array")
+	pf.IntP("limit", "n", 0, "cap result count (0 = no limit)")
+	pf.Bool("quiet", false, "suppress stderr warnings")
+	pf.Bool("verbose", false, "emit per-phase timing diagnostics on stderr")
+
 	cmd.AddCommand(newVersionCmd())
+	cmd.AddCommand(newFilesCmd())
 	return cmd
 }
 
