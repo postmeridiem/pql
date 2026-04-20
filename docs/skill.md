@@ -1,6 +1,6 @@
 # Skill: install + usage
 
-The `pql` Claude Code skill lives at `skill/SKILL.md` in this repo. This document covers installation, the schema-version handshake, and what callers can expect.
+The `pql` Claude Code skill lives at `internal/skill/SKILL.md` and is embedded into the binary at build time via `go:embed`. `pql skill install` writes it to the consuming project's `.claude/skills/pql/` directory (or `~/.claude/skills/pql/` with `--user`). This document covers installation, the schema-version handshake, and what callers can expect.
 
 This catalog is filled in alongside the skill. For now it's a stub.
 

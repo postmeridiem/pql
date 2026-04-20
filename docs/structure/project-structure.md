@@ -70,10 +70,8 @@ pql/
 │   ├── diag/                         # stderr JSON diagnostics + exit-code constants
 │   ├── telemetry/                    # per-phase timings (generate_ms, rank_ms, per-signal ms) on --verbose
 │   ├── fixture/                      # synthetic vault generators for eval
+│   ├── skill/                        # Claude Code skill (SKILL.md + go:embed wrapper); `pql skill install` writes it to .claude/skills/pql/
 │   └── version/                      # ldflags-stamped build info; exposes schema_version for skill negotiation
-├── skill/                            # Claude Code skill package shipped with releases
-│   ├── SKILL.md
-│   └── references/
 ├── testdata/                         # fixture vaults (Go toolchain ignores this dir specially)
 │   ├── council-snapshot/             # frozen snapshot of /var/mnt/data/projects/council/
 │   ├── minimal/

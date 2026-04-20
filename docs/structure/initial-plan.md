@@ -30,7 +30,7 @@ Three artefacts, one repo:
 
 1. **`pql` binary** — single static Go executable, cross-compiled to `linux/{amd64,arm64}`, `darwin/{amd64,arm64}`, `windows/amd64`. Distributed via GitHub Releases at https://github.com/postmeridiem/pql with SHA256 sums and cosign signatures.
 2. **SQLite index** at `<vault>/.pql/index.sqlite` by default (analogous to `.git/`); falls back to a per-user cache dir when the vault is read-only. Either way, regenerable from the vault. Full convention in [`vault-layout.md`](../vault-layout.md).
-3. **Claude Code skill** at `skill/SKILL.md` inside this repo, with install instructions. Dropped into any project's `.claude/skills/pql/` or the user's `~/.claude/skills/pql/`. Documents trigger phrases, common query recipes, anti-patterns, and the install check.
+3. **Claude Code skill** at `internal/skill/SKILL.md` inside this repo (embedded into the binary via `go:embed`), with install instructions. `pql skill install` drops it into the consuming project's `.claude/skills/pql/` (or `~/.claude/skills/pql/` with `--user`). Documents trigger phrases, common query recipes, anti-patterns, and the install check.
 
 ## Architecture
 
@@ -50,7 +50,7 @@ pql/
 │   ├── eval/                    # AST evaluator against the store
 │   ├── base/                    # Obsidian .base YAML → PQL AST
 │   └── render/                  # JSON / JSONL / table / CSV output
-├── skill/SKILL.md               # Claude Code skill package
+├── internal/skill/SKILL.md      # Claude Code skill, embedded via go:embed
 ├── docs/
 │   ├── structure/initial-plan.md    # this file
 │   ├── pql-grammar.md               # language spec (written alongside the parser)
@@ -313,7 +313,7 @@ This means any Base you maintain in Obsidian becomes a callable, scriptable quer
 
 ### The skill
 
-`skill/SKILL.md` (distributed with releases) contains:
+`internal/skill/SKILL.md` (embedded into every release's binary) contains:
 
 - **Trigger phrases:** "query the vault", "find notes where…", "which sessions/members…", "run a Base", "inspect frontmatter"
 - **Precondition check:** confirm `pql` is on `$PATH` via `command -v pql`. If absent, the skill aborts and tells the user how to install.
@@ -427,7 +427,7 @@ The GitHub Actions workflow is a thin wrapper around `ci/release.sh`. Switching 
 
 1. **Repository ownership / canonical Git host.** Decided: GitHub at https://github.com/postmeridiem/pql. Module path: `github.com/postmeridiem/pql`.
 2. **License.** Decided: MIT. See `LICENSE`.
-3. **Skill-package distribution channel.** Inside the `pql` repo at `skill/` is decided. Question remaining: ship it as an asset on each release alongside the binaries, or only as a path to copy from? Start with "just copy the directory"; revisit once there's a convention for Claude Code skill marketplaces.
+3. **Skill-package distribution channel.** Decided: embedded into the binary via `go:embed` and installed by `pql skill install` (to `<vault>/.claude/skills/pql/` by default, `--user` for `~/.claude/skills/pql/`). Source of truth lives at `internal/skill/SKILL.md`. Every release ships the skill with the binary — no separate asset to download or version to mismatch.
 4. **Tag syntax ambiguity.** Obsidian allows `#tag` inside code fences and inline code. Dataview excludes those from tag indexing. Decide: match Dataview's rule (probably yes).
 5. **Link target resolution.** Obsidian resolves `[[Note]]` using "shortest path that unambiguously identifies" — i.e., basename match, falling back to path disambiguation. Implement that exact algorithm (important for Base compatibility) — but needs a small dedicated tie-breaker module.
 6. **`inlinks` / `outlinks` — alias-aware?** If a note is linked with `[[Note|alias]]`, is "alias" recorded? Probably yes; accessible via a function (`alias(link)`) rather than polluting the default array. Not critical to decide on day 1.

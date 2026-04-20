@@ -8,7 +8,7 @@ How the `pql` binary, the SQLite index, and the Claude Code skill negotiate comp
 |---|---|---|
 | Binary | `pql --version` / `pql version --build-info` | semver tag (`v0.X.Y`) |
 | Index schema | `index_meta.schema_version` row in SQLite | monotonic integer (`internal/version.SchemaVersion`) |
-| Skill | `skill/SKILL.md` frontmatter | semver tag, declares **min binary schema_version** |
+| Skill | `internal/skill/SKILL.md` frontmatter (embedded in binary) | semver tag, declares **min binary schema_version** |
 | Output contract | `docs/output-contract.md` | tied to `schema_version` — bump implies contract change |
 
 ## Binary ↔ index
