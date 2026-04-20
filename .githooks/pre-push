@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# pql pre-push hook. Opt in with:
+#
+#   git config core.hooksPath .githooks
+#
+# Runs the same checks ci/lint.sh + ci/test.sh would in CI, minus
+# integration tests (those depend on building the binary and shelling
+# out to it; cheap today but they grow, and a push gate should stay
+# under a few seconds). If a check fails, the push is aborted and
+# nothing reaches the remote — fix it locally and try again.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+exec make pre-push

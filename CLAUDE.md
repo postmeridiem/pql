@@ -45,12 +45,15 @@ Go is currently **not installed** on the dev machine. `make build` will fail unt
 | `make test-integration` | `go test -tags=integration ./internal/cli/...` (planned; integration suite not yet written) |
 | `make eval` | ranking-quality eval (planned; harness lands with first signals) |
 | `make lint` | `golangci-lint run` |
-| `make vuln` | `govulncheck ./...` |
+| `make vuln` | `govulncheck ./...` (pinned to v1.2.0 via `go run`, no local install) |
+| `make pre-push` | lint + vuln + test + test-race. Wired by `.githooks/pre-push`; integration suite is deliberately excluded to keep the push gate fast |
 | `make snapshot` | `goreleaser release --snapshot --clean` (builds 5 platforms, no publish) |
 
 `make help` lists everything.
 
 CI substance lives in `ci/{lint,test,release,eval}.sh`. GitHub Actions workflows in `.github/workflows/` (added with first run) are thin wrappers around these — keeps local and CI behaviour identical and lets the provider be swapped without rewriting the scripts.
+
+**Pre-push hook.** Opt in once per clone with `git config core.hooksPath .githooks`. The hook runs `make pre-push`; a failing check aborts the push locally so nothing reaches the remote.
 
 ## Test infrastructure
 

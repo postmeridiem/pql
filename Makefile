@@ -62,8 +62,8 @@ lint: ## golangci-lint run.
 	golangci-lint run
 
 .PHONY: vuln
-vuln: ## govulncheck on all packages.
-	govulncheck ./...
+vuln: ## govulncheck on all packages. Uses `go run` with a pinned version so devs don't need a local install.
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@v1.2.0 ./...
 
 .PHONY: fmt
 fmt: ## gofmt + goimports.
@@ -73,6 +73,14 @@ fmt: ## gofmt + goimports.
 .PHONY: tidy
 tidy: ## go mod tidy.
 	$(GO) mod tidy
+
+.PHONY: pre-push
+pre-push: ## Local pre-push gate: lint + vuln + test + test-race. Wired by .githooks/pre-push.
+	@command -v golangci-lint >/dev/null || { echo "pre-push: golangci-lint not on PATH (brew install golangci-lint)"; exit 1; }
+	$(MAKE) lint
+	$(MAKE) vuln
+	$(MAKE) test
+	$(MAKE) test-race
 
 .PHONY: snapshot
 snapshot: ## GoReleaser snapshot build (dry-run, no publish).

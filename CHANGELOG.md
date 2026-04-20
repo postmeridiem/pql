@@ -13,6 +13,25 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ## [0.1.1-dev]
 
+### Added
+
+- `make pre-push` target and `.githooks/pre-push` wrapper running
+  lint + vuln + test + test-race. Opt in per clone with
+  `git config core.hooksPath .githooks`. Integration tests are
+  deliberately excluded to keep the gate fast; they belong in CI.
+
+### Changed
+
+- `make vuln` now runs `go run golang.org/x/vuln/cmd/govulncheck@v1.2.0`
+  instead of requiring a local `govulncheck` install. Version is
+  pinned in the Makefile so every dev (and the pre-push hook) runs
+  the same checker.
+- `.golangci.yaml` migrated to v2 schema (the locally-installed
+  linter is v2.11.4 and v2 dropped v1-config support). Renamed
+  `render.RenderOne` → `render.One` per the `stutters` rule; 70
+  pre-existing findings cleared in one pass so `make lint` now
+  exits 0.
+
 ## [0.1.0] - 2026-04-20
 
 First milestone release. Read-only CLI + PQL DSL + Claude Code skill
