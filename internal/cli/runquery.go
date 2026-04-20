@@ -12,6 +12,51 @@ import (
 	"github.com/postmeridiem/pql/internal/store"
 )
 
+// runQueryOne is the single-record analogue of runQuery, for subcommands
+// that return one structured object (e.g. `pql meta`, `pql doctor`)
+// rather than a slice. Same load → open → index → render plumbing; the
+// query closure returns *T where a nil pointer with no error means
+// "not found" and surfaces as exit 66 (NoInput).
+func runQueryOne[T any](
+	cmd *cobra.Command,
+	q func(ctx context.Context, st *store.Store, cfg *config.Config) (*T, error),
+	notFoundHint string,
+) error {
+	ctx := cmd.Context()
+
+	cfg, err := config.Load(loadOptsFromFlags(cmd))
+	if err != nil {
+		return &exitError{code: diag.NoInput, msg: err.Error()}
+	}
+
+	st, err := store.Open(ctx, cfg.DBPath)
+	if err != nil {
+		return &exitError{code: diag.Unavail, msg: err.Error()}
+	}
+	defer st.Close()
+
+	if _, err := index.New(st, cfg).Run(ctx); err != nil {
+		return &exitError{code: diag.Software, msg: err.Error()}
+	}
+
+	obj, err := q(ctx, st, cfg)
+	if err != nil {
+		return &exitError{code: diag.Software, msg: err.Error()}
+	}
+	if obj == nil {
+		return &exitError{code: diag.NoInput, msg: notFoundHint}
+	}
+
+	rOpts, err := renderOptsFromFlags(cmd)
+	if err != nil {
+		return &exitError{code: diag.Usage, msg: err.Error()}
+	}
+	if _, err := render.RenderOne(obj, rOpts); err != nil {
+		return &exitError{code: diag.Software, msg: err.Error()}
+	}
+	return nil
+}
+
 // runQuery encapsulates the boilerplate every read-only primitive
 // subcommand shares: load config, open the store, refresh the index, run
 // the query, render, map the result count to an exit code.

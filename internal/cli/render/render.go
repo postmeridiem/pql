@@ -29,6 +29,36 @@ type Opts struct {
 	Out    io.Writer // defaults to os.Stdout
 }
 
+// RenderOne writes a single value to opts.Out and returns true when a
+// non-nil value was written. Used by single-record subcommands like
+// `pql meta` and `pql doctor` where a list shape would be misleading.
+//
+// JSONL is treated as JSON for this path — the streaming-line shape
+// doesn't add value for one object. Pretty/JSON behave as expected.
+// A nil pointer renders as JSON null and returns false; callers map
+// that to the appropriate exit code (typically NoInput).
+func RenderOne[T any](v *T, opts Opts) (bool, error) {
+	out := opts.Out
+	if out == nil {
+		out = os.Stdout
+	}
+	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
+	if opts.Format == FormatPretty {
+		enc.SetIndent("", "  ")
+	}
+	if v == nil {
+		if err := enc.Encode(nil); err != nil {
+			return false, fmt.Errorf("render: encode null: %w", err)
+		}
+		return false, nil
+	}
+	if err := enc.Encode(v); err != nil {
+		return false, fmt.Errorf("render: encode object: %w", err)
+	}
+	return true, nil
+}
+
 // Render writes rows to opts.Out in the requested format and returns the
 // number of rows actually written. Callers map that count to the
 // 0-vs-2 exit-code distinction in docs/output-contract.md.

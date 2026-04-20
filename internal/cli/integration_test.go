@@ -336,6 +336,65 @@ func TestIntegration_Outlinks_UnknownFileExits2(t *testing.T) {
 	}
 }
 
+func TestIntegration_Meta_RequiresPathArg(t *testing.T) {
+	vault := councilVault(t)
+	_, _, code := run(t, vault, "meta")
+	if code != 64 {
+		t.Errorf("exit = %d, want 64 (Usage)", code)
+	}
+}
+
+func TestIntegration_Meta_UnknownFileExits66(t *testing.T) {
+	vault := councilVault(t)
+	_, _, code := run(t, vault, "meta", "ghost/never/seen.md")
+	if code != 66 {
+		t.Errorf("exit = %d, want 66 (NoInput)", code)
+	}
+}
+
+func TestIntegration_Meta_VaasaPersona(t *testing.T) {
+	vault := councilVault(t)
+	stdout, stderr, code := run(t, vault, "meta", "members/vaasa/persona.md")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var m struct {
+		Path        string                     `json:"path"`
+		Name        string                     `json:"name"`
+		Size        int64                      `json:"size"`
+		Mtime       int64                      `json:"mtime"`
+		Frontmatter map[string]json.RawMessage `json:"frontmatter"`
+		Tags        []string                   `json:"tags"`
+		Outlinks    []map[string]any           `json:"outlinks"`
+		Headings    []map[string]any           `json:"headings"`
+	}
+	if err := json.Unmarshal(stdout, &m); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if m.Path != "members/vaasa/persona.md" {
+		t.Errorf("path = %q", m.Path)
+	}
+	if m.Name != "persona" {
+		t.Errorf("name = %q, want persona", m.Name)
+	}
+	if m.Size == 0 {
+		t.Errorf("size should be set")
+	}
+	if len(m.Frontmatter) == 0 {
+		t.Errorf("frontmatter should be non-empty")
+	}
+	// Verify raw JSON pass-through: the type field should decode as the
+	// string "council-member", not as a wrapper object.
+	if raw, ok := m.Frontmatter["type"]; ok {
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil || s != "council-member" {
+			t.Errorf("frontmatter[type] = %s (err=%v), want \"council-member\"", raw, err)
+		}
+	} else {
+		t.Errorf("frontmatter[type] missing")
+	}
+}
+
 func TestIntegration_Outlinks_OnSessionOutcome(t *testing.T) {
 	// The Council session outcome.md is a known-link-rich file.
 	vault := councilVault(t)

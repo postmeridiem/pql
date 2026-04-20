@@ -80,6 +80,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newTagsCmd())
 	cmd.AddCommand(newBacklinksCmd())
 	cmd.AddCommand(newOutlinksCmd())
+	cmd.AddCommand(newMetaCmd())
 	return cmd
 }
 

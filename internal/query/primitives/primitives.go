@@ -11,6 +11,8 @@
 // …) that the v0.1 milestone ships.
 package primitives
 
+import "encoding/json"
+
 // File is one row's worth of file metadata. Name is derived from path
 // (basename without .md extension) and is provided so renderers don't
 // have to reconstruct it.
@@ -48,4 +50,29 @@ type Outlink struct {
 	Alias  string `json:"alias,omitempty"`
 	Line   int    `json:"line"`
 	Via    string `json:"via"`
+}
+
+// Heading is one ATX heading from a file. LineOffset is the 0-based byte
+// offset from the file start (handy for "jump to heading" without
+// re-scanning).
+type Heading struct {
+	Depth      int    `json:"depth"`
+	Text       string `json:"text"`
+	LineOffset int    `json:"line_offset"`
+}
+
+// Meta is the per-file aggregate returned by `pql meta`. Frontmatter values
+// are kept as raw JSON (the value_json column straight through) so the
+// output reflects the YAML the user wrote — readers don't have to unwrap
+// {"type":"string","value":"..."} envelopes. Type-aware introspection
+// belongs to `pql schema`, not `pql meta`.
+type Meta struct {
+	Path        string                     `json:"path"`
+	Name        string                     `json:"name"`
+	Size        int64                      `json:"size"`
+	Mtime       int64                      `json:"mtime"`
+	Frontmatter map[string]json.RawMessage `json:"frontmatter"`
+	Tags        []string                   `json:"tags"`
+	Outlinks    []Outlink                  `json:"outlinks"`
+	Headings    []Heading                  `json:"headings"`
 }

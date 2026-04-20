@@ -143,3 +143,43 @@ func TestRender_EscapeHTMLOff(t *testing.T) {
 		t.Errorf("html escaped unexpectedly: %q", buf.String())
 	}
 }
+
+func TestRenderOne_Object(t *testing.T) {
+	var buf bytes.Buffer
+	v := &sample{Name: "a", Age: 1}
+	wrote, err := RenderOne(v, Opts{Out: &buf})
+	if err != nil {
+		t.Fatalf("RenderOne: %v", err)
+	}
+	if !wrote {
+		t.Error("expected wrote=true for non-nil value")
+	}
+	if buf.String() != `{"name":"a","age":1}`+"\n" {
+		t.Errorf("got %q", buf.String())
+	}
+}
+
+func TestRenderOne_NilEmitsNull(t *testing.T) {
+	var buf bytes.Buffer
+	wrote, err := RenderOne[sample](nil, Opts{Out: &buf})
+	if err != nil {
+		t.Fatalf("RenderOne: %v", err)
+	}
+	if wrote {
+		t.Error("expected wrote=false for nil value")
+	}
+	if buf.String() != "null\n" {
+		t.Errorf("got %q, want null\\n", buf.String())
+	}
+}
+
+func TestRenderOne_PrettyIndents(t *testing.T) {
+	var buf bytes.Buffer
+	_, err := RenderOne(&sample{Name: "a", Age: 1}, Opts{Format: FormatPretty, Out: &buf})
+	if err != nil {
+		t.Fatalf("RenderOne: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"name": "a"`) {
+		t.Errorf("pretty output missing indent: %q", buf.String())
+	}
+}
