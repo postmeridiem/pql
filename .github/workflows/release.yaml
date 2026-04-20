@@ -1,8 +1,14 @@
 name: release
 
+# Disabled: triggers reduced to workflow_dispatch (manual run only) while
+# we iterate locally. Re-enable for tag-driven releases by restoring the
+# push: tags: ['v*'] block below.
+#
+# on:
+#   push:
+#     tags: ['v*']
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write   # required to publish GitHub Releases
