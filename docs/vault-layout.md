@@ -22,6 +22,7 @@ Files that may join later (additive, no schema break):
 - `bases/<name>.ast.json` — compiled `.base` ASTs (cache for `pql base <name>`)
 - `ranking/weights.json` — exportable weight profile if a user wants to version-control it alongside the vault
 - `skill/version.json` — last successful skill compatibility handshake
+- `watch.pid` — set by `pql watch` while a foreground watcher is running for this vault; removed on graceful shutdown. See [`watching.md`](watching.md).
 
 ### Why in-vault instead of a user cache directory
 
