@@ -15,6 +15,10 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ### Added
 
+- `TODO.md` at the repo root: forward-looking work queue. Companion
+  to this file — the changelog records what shipped under each
+  version header, `TODO.md` records what's next, so a fresh session
+  has a clean starting point without grepping commit history.
 - `make pre-push` target and `.githooks/pre-push` wrapper running
   lint + vuln + test + test-race. Opt in per clone with
   `git config core.hooksPath .githooks`. Integration tests are
@@ -212,7 +216,5 @@ of the same user-visible story.
 
 ### Pending design (not yet implemented)
 
-- `pql watch` (designed in `docs/watching.md`).
-- `.base` file compiler + `pql base <name>` (v0.3 milestone).
-- `pql shell` REPL (v0.3 milestone).
-- Outlinks/inlinks/headings/body access in the DSL (v1.x grammar work).
+Moved to `TODO.md` — the changelog records what shipped under each
+version header; forward-looking work lives there from now on.
