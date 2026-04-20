@@ -40,15 +40,17 @@ func TestWalk_OnlyMarkdownFiles(t *testing.T) {
 	}
 }
 
-func TestWalk_BuiltinExcludesSkipped(t *testing.T) {
+func TestWalk_BuiltinExcludeIsOnlyGit(t *testing.T) {
+	// Built-ins match git's own: only .git/ is unconditionally excluded.
+	// Everything else (sqlite files, .pql/, etc.) is the user-config
+	// layer's responsibility — typically caught by .gitignore via the
+	// default ignore_files: [.gitignore] setting.
 	vault := t.TempDir()
 	mkfile(t, vault, "keep.md", "# keep")
 	mkfile(t, vault, ".git/HEAD", "ref: refs/heads/main")
-	mkfile(t, vault, ".git/notes.md", "should not be indexed")
-	mkfile(t, vault, ".pql/index.sqlite", "binary")
-	mkfile(t, vault, ".pql/notes.md", "should not be indexed")
-	mkfile(t, vault, "data.sqlite", "binary")
-	mkfile(t, vault, "data.sqlite-wal", "binary")
+	mkfile(t, vault, ".git/notes.md", "should be skipped: inside .git/")
+	mkfile(t, vault, "data.sqlite", "binary")    // not .md → skipped by extension filter
+	mkfile(t, vault, "data.sqlite-wal", "binary") // ditto
 
 	got, err := Walk(WalkOpts{VaultPath: vault})
 	if err != nil {

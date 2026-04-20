@@ -24,18 +24,24 @@ import (
 // support is a candidate for a later config flag if anyone asks.
 const markdownExt = ".md"
 
-// builtinExcludes are non-overridable. Indexing them is either useless or
-// recursive (.pql/ holds our own SQLite index). See docs/pqlignore.md
-// § "Built-in non-overridable defaults".
+// builtinExcludes are non-overridable. We deliberately match git's own
+// built-in exactly: just `.git/` and nothing else. Git knows about its
+// state dir without anyone listing it in `.gitignore`; pql does the
+// same so the starting point is identical and the user's level of
+// control matches what they already expect from git.
+//
+// Everything else — pql's own `.pql/`, sqlite sidecars, node_modules/,
+// build outputs — is the user-config layer's responsibility via
+// `ignore_files` (defaults to .gitignore, which `pql init` appends
+// `.pql/` to) and `exclude:`. If a user wants to index node_modules
+// for searchability, that's their call to make.
+//
+// The walker only enumerates; per-extractor filters (markdown today,
+// tree-sitter later) decide what each file actually means, so we don't
+// need to defensively block file types here.
 var builtinExcludes = []string{
 	"**/.git",
 	"**/.git/**",
-	"**/.pql",
-	"**/.pql/**",
-	"**/*.sqlite",
-	"**/*.sqlite-wal",
-	"**/*.sqlite-shm",
-	"**/*.sqlite-journal",
 }
 
 // WalkOpts configures a single Walk invocation.

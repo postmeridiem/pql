@@ -65,7 +65,7 @@ Three layers, fully documented in [`pqlignore.md`](pqlignore.md). Quick summary:
 
 - **`ignore_files` in `.pql/config.yaml`** — defaults to `[.gitignore]`. Walker reads each named file with gitignore syntax. Add `.pqlignore` (or anything else) for pql-specific deviations; order matters.
 - **`exclude:` in `.pql/config.yaml`** — flat list of doublestar patterns for one-off in-config rules.
-- **Built-in non-overridable defaults** (`.git/`, `.pql/`, sqlite sidecars) — always excluded regardless of user config. Same idea as `.gitignore` not needing to list `.git/`: the tool knows what it owns.
+- **Built-in non-overridable default** — only `.git/`, matching git's exact behaviour. Pql's own `.pql/` is excluded via the `ignore_files` → `.gitignore` layer (`pql init` appends `.pql/` to the project's gitignore as a one-time setup), keeping the user in control of every other "what to skip" decision.
 
 ## `.pql/config.yaml` — per-vault configuration
 

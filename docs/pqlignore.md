@@ -2,11 +2,8 @@
 
 Three layers, in increasing scope of "user can override":
 
-1. **Built-in non-overridable defaults.** Hardcoded in the walker (`internal/index/walker.go`). Always excluded — `.gitignore` doesn't list `.git/` either, and this is the same idea: the tool knows what it owns:
-   - `.git/`
-   - `.pql/` — pql's own per-vault state directory
-   - `*.sqlite`, `*.sqlite-wal`, `*.sqlite-shm`, `*.sqlite-journal` — in case a `--db` ever lands in-vault outside `.pql/`
-2. **`ignore_files` from `.pql/config.yaml`.** A list of file names (gitignore syntax) the walker reads at the vault root. Default `[".gitignore"]` — most projects already have one and most of its rules apply identically to indexing (build outputs, vendored deps, scratch dirs).
+1. **Built-in non-overridable defaults.** Hardcoded in the walker (`internal/index/walker.go`). The list is intentionally narrow — only `.git/`, matching git's own behaviour: git auto-excludes its state dir without anyone listing it, and `.git/objects/*` packs hold what amount to multiple snapshots of the entire repo, so descending into it would re-index every file many times over. Everything else, including pql's own `.pql/`, is the user's call to make via the layers below.
+2. **`ignore_files` from `.pql/config.yaml`.** A list of file names (gitignore syntax) the walker reads at the vault root. Default `[".gitignore"]` — most projects already have one and most of its rules apply identically to indexing (build outputs, vendored deps, scratch dirs). `pql init` auto-appends `.pql/` to the project's `.gitignore`, so pql's own state stays out of the index without any extra config.
 3. **`exclude:` patterns in `.pql/config.yaml`.** A flat list of doublestar patterns for one-off in-config rules. Applied on top of the file-based exclusions.
 
 ## Defaults
