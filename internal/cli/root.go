@@ -77,6 +77,7 @@ func newRootCmd() *cobra.Command {
 
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newFilesCmd())
+	cmd.AddCommand(newTagsCmd())
 	return cmd
 }
 

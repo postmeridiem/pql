@@ -20,3 +20,9 @@ type File struct {
 	Size  int64  `json:"size"`
 	Mtime int64  `json:"mtime"` // unix seconds
 }
+
+// TagCount is one tag and the number of files it appears on.
+type TagCount struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}

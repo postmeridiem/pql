@@ -205,3 +205,64 @@ func TestIntegration_VaultNotFoundExits66(t *testing.T) {
 		t.Errorf("exit = %d, want 66 (NoInput); stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
+
+func TestIntegration_Tags_CouncilSnapshot(t *testing.T) {
+	vault := councilVault(t)
+	stdout, stderr, code := run(t, vault, "tags")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if len(rows) == 0 {
+		t.Fatalf("expected non-empty tag list from Council snapshot")
+	}
+	// Verify shape on every row: tag is a non-empty string, count is a
+	// positive integer. Avoids hardcoding which specific tags happen to be
+	// in the fixture (the snapshot can be refreshed).
+	for i, r := range rows {
+		tag, _ := r["tag"].(string)
+		if tag == "" {
+			t.Errorf("row %d: tag is empty (%#v)", i, r)
+		}
+		count, _ := r["count"].(float64)
+		if count < 1 {
+			t.Errorf("row %d (tag=%q): count = %v, expected ≥1", i, tag, count)
+		}
+	}
+}
+
+func TestIntegration_Tags_SortByCount(t *testing.T) {
+	vault := councilVault(t)
+	stdout, stderr, code := run(t, vault, "tags", "--sort", "count")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(rows) < 2 {
+		t.Skipf("need ≥2 tags to verify sort order; got %d", len(rows))
+	}
+	for i := 1; i < len(rows); i++ {
+		prev, _ := rows[i-1]["count"].(float64)
+		cur, _ := rows[i]["count"].(float64)
+		if cur > prev {
+			t.Errorf("counts not descending at index %d: %v then %v", i, prev, cur)
+			break
+		}
+	}
+}
+
+func TestIntegration_Tags_InvalidSortRejected(t *testing.T) {
+	vault := councilVault(t)
+	_, stderr, code := run(t, vault, "tags", "--sort", "garbage")
+	// runQuery wraps the primitive error into Software (70) since the
+	// primitive itself returns the validation error.
+	if code != 70 {
+		t.Errorf("exit = %d, want 70; stderr=%s", code, stderr)
+	}
+}
