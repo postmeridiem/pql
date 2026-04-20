@@ -126,6 +126,112 @@ func TestWalk_ForwardSlashesOnAllPlatforms(t *testing.T) {
 	}
 }
 
+func TestWalk_IgnoreFileExcludesPaths(t *testing.T) {
+	vault := t.TempDir()
+	mkfile(t, vault, "keep.md", "")
+	mkfile(t, vault, "node_modules/foo.md", "")
+	mkfile(t, vault, "members/x.md", "")
+	mkfile(t, vault, ".gitignore", "node_modules/\n")
+
+	got, err := Walk(WalkOpts{
+		VaultPath:   vault,
+		IgnoreFiles: []string{".gitignore"},
+	})
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	want := []string{"keep.md", "members/x.md"}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestWalk_IgnoreFileNegationReIncludes(t *testing.T) {
+	// Demonstrates the standard gitignore workaround for the directory
+	// short-circuit (documented in docs/pqlignore.md): use `drafts/*`
+	// (single-star) so the parent directory is still walkable, then
+	// `!drafts/published` to re-include it. The naive form `drafts/**`
+	// + `!drafts/published/**` doesn't work because the parent dir gets
+	// pruned before the file-level negation can fire — same gotcha git
+	// itself has.
+	vault := t.TempDir()
+	mkfile(t, vault, "drafts/wip.md", "")
+	mkfile(t, vault, "drafts/published/release.md", "")
+	mkfile(t, vault, ".gitignore", "drafts/*\n!drafts/published\n")
+
+	got, err := Walk(WalkOpts{
+		VaultPath:   vault,
+		IgnoreFiles: []string{".gitignore"},
+	})
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	want := []string{"drafts/published/release.md"}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestWalk_MultipleIgnoreFiles(t *testing.T) {
+	vault := t.TempDir()
+	mkfile(t, vault, "keep.md", "")
+	mkfile(t, vault, "node_modules/foo.md", "")
+	mkfile(t, vault, "drafts/wip.md", "")
+	mkfile(t, vault, ".gitignore", "node_modules/\n")
+	mkfile(t, vault, ".pqlignore", "drafts/\n")
+
+	got, err := Walk(WalkOpts{
+		VaultPath:   vault,
+		IgnoreFiles: []string{".gitignore", ".pqlignore"},
+	})
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	want := []string{"keep.md"}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestWalk_MissingIgnoreFileSilentlySkipped(t *testing.T) {
+	vault := t.TempDir()
+	mkfile(t, vault, "keep.md", "")
+	// .gitignore intentionally missing.
+	got, err := Walk(WalkOpts{
+		VaultPath:   vault,
+		IgnoreFiles: []string{".gitignore"},
+	})
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	if !slices.Equal(got, []string{"keep.md"}) {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestWalk_IgnoreDirIsPruned(t *testing.T) {
+	// Pruning vs filtering matters for perf — verify excluded dirs aren't
+	// descended into by stuffing many files inside one and asserting they
+	// don't slow us down via failure.
+	vault := t.TempDir()
+	mkfile(t, vault, "keep.md", "")
+	for i := range 25 {
+		mkfile(t, vault, filepath.Join("noisy", "deep", "nested", itoa(i)+".md"), "")
+	}
+	mkfile(t, vault, ".gitignore", "noisy/\n")
+
+	got, err := Walk(WalkOpts{
+		VaultPath:   vault,
+		IgnoreFiles: []string{".gitignore"},
+	})
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	if !slices.Equal(got, []string{"keep.md"}) {
+		t.Errorf("got %v, want only keep.md", got)
+	}
+}
+
 func TestWalk_CouncilSnapshot(t *testing.T) {
 	// End-to-end against the real fixture vault. This is the "would v0.1's
 	// `pql files` find every Council member's persona?" smoke test.

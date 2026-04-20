@@ -215,6 +215,24 @@ func TestIndexer_Run_PrunesDeletedFiles(t *testing.T) {
 	}
 }
 
+func TestIndexer_Run_IgnoreFilesHonoured(t *testing.T) {
+	vault, st, cfg := newTestEnv(t)
+	cfg.IgnoreFiles = []string{".gitignore", ".pqlignore"}
+	writeNote(t, vault, "keep.md", "")
+	writeNote(t, vault, "node_modules/foo.md", "")
+	writeNote(t, vault, "drafts/wip.md", "")
+	writeNote(t, vault, ".gitignore", "node_modules/\n")
+	writeNote(t, vault, ".pqlignore", "drafts/\n")
+
+	idx := New(st, cfg)
+	if _, err := idx.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if n := countRows(t, st.DB(), `SELECT count(*) FROM files`); n != 1 {
+		t.Errorf("expected only keep.md indexed, got %d files", n)
+	}
+}
+
 func TestIndexer_Run_ExcludesHonoured(t *testing.T) {
 	vault, st, cfg := newTestEnv(t)
 	cfg.Exclude = append(cfg.Exclude, "drafts/**")

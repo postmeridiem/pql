@@ -130,6 +130,13 @@ of the same user-visible story.
   stale → update, current → no-op, modified → preserve).
 - `pql doctor` skill report: project-level skill state + embedded
   hash + version, surfacing drift without writing.
+- Walker now consults `ignore_files` (default `[.gitignore]`).
+  New `internal/index/ignore` package concatenates the named files
+  in order then compiles via `github.com/sabhiram/go-gitignore`, so
+  `!`-rules in a later file can re-include paths an earlier file
+  excluded. Missing files are silently skipped. Excluded directories
+  are pruned (not just filtered), matching the existing built-in
+  exclude perf characteristics.
 
 ### Changed
 
@@ -179,8 +186,6 @@ of the same user-visible story.
 
 ### Pending design (not yet implemented)
 
-- `ignore_files` walker integration. The field is read by config but
-  the walker doesn't yet consult the named files.
 - `pql watch` (designed in `docs/watching.md`).
 - `.base` file compiler + `pql base <name>` (v0.3 milestone).
 - `pql shell` REPL (v0.3 milestone).

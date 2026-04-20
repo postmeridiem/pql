@@ -18,6 +18,8 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+
+	"github.com/postmeridiem/pql/internal/index/ignore"
 )
 
 // markdownExt is the only file extension the v1 walker considers. .markdown
@@ -52,6 +54,11 @@ type WalkOpts struct {
 	// .pql/config.yaml). Doublestar patterns matched against vault-relative paths
 	// using forward slashes. Built-in excludes are always applied on top.
 	Exclude []string
+	// IgnoreFiles names per-vault gitignore-syntax files at the vault
+	// root the walker should consult (typically Config.IgnoreFiles).
+	// Files are read in order; later files win on per-pattern conflicts
+	// via standard `!` re-inclusion. Missing files are silently skipped.
+	IgnoreFiles []string
 }
 
 // Walk enumerates indexable .md files under opts.VaultPath. Returns paths
@@ -73,6 +80,11 @@ func Walk(opts WalkOpts) ([]string, error) {
 
 	patterns := append(append([]string(nil), builtinExcludes...), opts.Exclude...)
 
+	ignoreMatcher, err := ignore.Load(root, opts.IgnoreFiles)
+	if err != nil {
+		return nil, fmt.Errorf("index: load ignore files: %w", err)
+	}
+
 	var files []string
 	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -89,7 +101,7 @@ func Walk(opts WalkOpts) ([]string, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if matchesAny(patterns, rel) {
+			if matchesAny(patterns, rel) || ignoreMatcher.Matches(rel) {
 				return fs.SkipDir
 			}
 			return nil
@@ -97,7 +109,7 @@ func Walk(opts WalkOpts) ([]string, error) {
 		if !strings.EqualFold(filepath.Ext(d.Name()), markdownExt) {
 			return nil
 		}
-		if matchesAny(patterns, rel) {
+		if matchesAny(patterns, rel) || ignoreMatcher.Matches(rel) {
 			return nil
 		}
 		files = append(files, rel)

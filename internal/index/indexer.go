@@ -59,8 +59,9 @@ func (idx *Indexer) Run(ctx context.Context) (Stats, error) {
 	stats := Stats{}
 
 	files, err := Walk(WalkOpts{
-		VaultPath: idx.cfg.Vault.Path,
-		Exclude:   idx.cfg.Exclude,
+		VaultPath:   idx.cfg.Vault.Path,
+		Exclude:     idx.cfg.Exclude,
+		IgnoreFiles: idx.cfg.IgnoreFiles,
 	})
 	if err != nil {
 		return stats, fmt.Errorf("indexer: walk: %w", err)
