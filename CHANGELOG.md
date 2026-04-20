@@ -11,7 +11,14 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
-## [0.1.0-dev]
+## [0.1.1-dev]
+
+## [0.1.0] - 2026-04-20
+
+First milestone release. Read-only CLI + PQL DSL + Claude Code skill
+scaffolding. Not yet distributed — `goreleaser` is wired but unrun;
+no archives, no GitHub Release. Bumped purely to mark the line in the
+sand: everything below this header is "what shipped in v0.1".
 
 Backfilled from git history. Each bullet maps to one commit (or a tightly
 related cluster). Not every refactor or doc-only change made the cut —
