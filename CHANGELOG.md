@@ -1,0 +1,187 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+The current section header tracks `project.yaml`'s `version:` field — both
+move together. On release, the post-release commit bumps `project.yaml`'s
+version and renames the matching section here to the released version with
+a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
+matching the bumped version (e.g. `## [0.1.1-dev]`).
+
+## [0.1.0-dev]
+
+Backfilled from git history. Each bullet maps to one commit (or a tightly
+related cluster). Not every refactor or doc-only change made the cut —
+internal-only work is folded into adjacent feature lines where it's part
+of the same user-visible story.
+
+### Added
+
+- `CHANGELOG.md` itself, in [Keep a Changelog](https://keepachangelog.com/)
+  format. The git-commit skill now requires a CHANGELOG entry on every
+  commit with user-visible impact; the working section header tracks
+  `project.yaml`'s `version:` field exactly.
+- Initial design plan, README, .gitignore, and Claude scaffolding (the
+  `bootstrap` commit).
+- MIT LICENSE.
+- Foundational docs: `design-philosophy.md`, `project-structure.md`,
+  CLAUDE.md.
+- Documentation catalog stubs: `intents.md`, `signals.md`,
+  `output-contract.md`, `compatibility.md`, `pql-grammar.md`,
+  `skill.md`, plus ADRs `0001-no-vectors.md` and
+  `0002-intents-not-primitives.md`.
+- Build pipeline scaffolding: `Makefile`, `.editorconfig`,
+  `.golangci.yaml`, `.goreleaser.yaml`, `ci/{lint,test,release,eval}.sh`.
+- Initial Go module + minimal `pql` binary: `cmd/pql/main.go`,
+  `internal/{cli,version,diag}` with `pql version` / `pql --version`.
+- Claude Code project conventions: `.claude/settings.json`,
+  `.claude/skills/{git-commit,skill-create}/`.
+- GitHub Actions workflows for `ci` (lint + test + snapshot) and
+  `release` (tag push → GoReleaser → GitHub Releases). Later disabled
+  via `workflow_dispatch`-only triggers while iterating locally.
+- Council vault snapshot as integration-test fixture under
+  `testdata/council-snapshot/`, plus `make refresh-fixtures`.
+- `project.yaml` — single source of truth for project metadata; the
+  Makefile sources `VERSION` from it and stamps via ldflags.
+- `internal/store` — pure-Go SQLite via `modernc.org/sqlite`, v1
+  schema, WAL + foreign keys, drop-and-rebuild migration policy.
+- `internal/config` — vault discovery (`--vault` → `PQL_VAULT` →
+  `.obsidian/` ancestor → `.git/` ancestor → cwd-with-warning),
+  `.pql.yaml` load with strict YAML decoding, fingerprinted DB path.
+- Design docs: `docs/pqlignore.md` (gitignore-compatible exclusions),
+  `docs/vault-layout.md` (`.pql.yaml` + `.pqlignore` + `.pql/`).
+- `internal/index` walker with doublestar pruning of excluded
+  directories. Forward-slash paths regardless of host OS.
+- Markdown extractor (`internal/index/extractor/markdown`):
+  frontmatter splitter + parser, `[[wikilinks]]` + embeds + standard
+  `[md](links)`, `#tags` (inline + frontmatter), ATX headings.
+  Code-fence-aware so links/tags inside fences don't get extracted.
+- Schema v2 with explicit `type` column on the `frontmatter` table
+  for type-aware introspection by `pql schema`.
+- Indexer orchestrator (`internal/index/indexer.go`): walk → extract
+  → upsert in a single `BEGIN IMMEDIATE` transaction. Mtime +
+  content-hash incremental short-circuit; stale-row pruning;
+  `index_meta.{config_hash,last_full_scan}` tracking.
+- Design doc: `docs/watching.md` for `pql watch`. Later refined to
+  explicit `start`/`stop`/`status` semantics with TTY-gated
+  interactivity and the "not a daemon, not always-on, not a
+  scheduler" stance triple-anchored.
+- `internal/cli/render` — JSON, pretty JSON, and JSONL output
+  formatters; generic over row type; honours `--limit`.
+- `internal/query/primitives` package with `Files()`. (Tags,
+  Backlinks, Outlinks, Meta, Schema, TagCount types follow with
+  the matching subcommands below.)
+- `pql files [glob]` subcommand. Persistent flags on the root for
+  `--vault`, `--db`, `--config`, `--pretty`, `--jsonl`, `--limit`,
+  `--quiet`, `--verbose`. Sentinel `exitError` type carries process
+  exit codes through cobra's error path; mapping is 0 / 2 / 64 / 65 /
+  66 / 69 / 70 per `docs/output-contract.md`.
+- Shared `runQuery[T any]` helper for read-only subcommands —
+  load config → open store → refresh index → render → exit-code
+  mapping in one place.
+- `pql tags` subcommand with `--sort tag|count` and `--min-count`.
+- `pql backlinks <path>` subcommand. Resolution is pragmatic v1:
+  matches full path, basename, or basename#anchor; self-references
+  excluded.
+- `pql outlinks <path>` subcommand. Document-order links from one file.
+- `pql meta <path>` subcommand: per-file aggregate (frontmatter as raw
+  JSON pass-through, tags, outlinks, headings). Adds `runQueryOne[T]`
+  + `render.RenderOne[T]` helpers for single-record subcommands.
+- `pql schema` subcommand: type-aware introspection across the vault
+  (the original motivation for the explicit `type` column).
+- `pql init` subcommand: seeds `.pql.yaml`, appends `.pql/` to an
+  existing `.gitignore`. Later reshaped to be idempotent (see
+  Changed).
+- `pql doctor` subcommand: read-only diagnostic JSON of vault /
+  config / DB / index / version state.
+- PQL DSL lexer (`internal/query/dsl/lex`): tokenises source into
+  typed tokens with line/col positions. Keywords, identifiers
+  (quoted + unquoted), strings (with `''` escape), numbers,
+  operators, comments. `pql.lex.<kind>` errors with positions.
+- PQL DSL parser + AST (`internal/query/dsl/parse`): recursive-descent
+  with standard precedence cascade. `IN <ref>` vs `IN <tuple>`,
+  `BETWEEN`, `IS [NOT] NULL`, function calls, dotted/bracketed refs.
+  `pql.parse.<kind>` errors with positions.
+- PQL DSL → SQLite SQL compiler (`internal/query/dsl/eval/compile.go`):
+  file columns (path/mtime/ctime/size), `name`/`folder` via SUBSTR,
+  `fm.<key>` via type-dispatching subquery against the v2 schema,
+  `'x' IN tags` via `EXISTS` subquery, full operator support.
+  `pql.eval.<kind>` errors for unsupported references.
+- DSL executor (`internal/query/dsl/eval/exec.go`) with `Row`
+  shape, JSON-aware `normalise()` for value_json round-tripping.
+  `reverse(text)` UDF registered on the store for the compiler's
+  basename/dirname derivations.
+- `pql query <DSL>` subcommand with `--file` / `--stdin` input modes.
+- Claude Code skill: `internal/skill/SKILL.md` (frontmatter triggers,
+  precondition check, schema-discovery preamble, ten-recipe cookbook,
+  output-contract notes, anti-patterns, when-NOT-to-use). Embedded
+  into the binary via `go:embed`. `internal/skill` package with
+  `Inspect`/`Install`/`Uninstall` and four-state drift detection
+  (`missing`/`current`/`stale`/`modified`/`unknown`) backed by a
+  `.pql-install.json` lock file with SHA-256 hash.
+- `pql skill {status,install,uninstall}` subcommands. `--user` flag
+  targets `~/.claude/skills/pql/` instead of the project. `--force`
+  on install overrides modified/unknown.
+- `pql init` skill prompt: TTY-gated `--with-skill=yes|no|prompt`
+  (default `prompt`); state-aware question (missing → install,
+  stale → update, current → no-op, modified → preserve).
+- `pql doctor` skill report: project-level skill state + embedded
+  hash + version, surfacing drift without writing.
+
+### Changed
+
+- Project renamed `mql` → `pql` across docs and tracked artefacts.
+  All `mql.yaml`, env vars, package paths, and Markdown→Project
+  Query Language wording followed.
+- README reframed twice: first as "the agent half of an Obsidian
+  markdown-first workflow", then as "Claude-Code-skill-first" with
+  Obsidian as the kept-because-we-use-it surface and a Dataview
+  inspiration credit.
+- PQL redesigned as a SQL-derived language. Earlier sketches were
+  Dataview-compatible; the new grammar is `SELECT … FROM … WHERE …
+  ORDER BY … LIMIT …` with a single canonical table (`files`),
+  `fm.<key>` access, `IN tags` membership.
+- `internal/cli` rebuilt around cobra; existing `version` subcommand
+  preserved. Subcommand-per-file shape adopted.
+- DB defaults moved to `<vault>/.pql/index.sqlite` (analogous to
+  `.git/`); read-only vaults fall back to `<cache>/pql/<fingerprint>/`.
+- `.gitignore` broadened after the first real `make snapshot`:
+  added `.pql/`, `*.prof`/`*.pprof`, `go.work`/`go.work.sum`,
+  `._*` (macOS resource forks).
+- GitHub Actions auto-runs disabled — both workflows reduced to
+  `workflow_dispatch` only while CI prerequisites stabilise.
+- `pql init` is idempotent. Existing `.pql/config.yaml` is preserved
+  (Skipped=true), not errored. `--force` opts into reseeding.
+- Per-vault config moved from `<vault>/.pql.yaml` to
+  `<vault>/.pql/config.yaml`. Anything pql lives under one dir,
+  same way `.git/config` lives inside `.git/`.
+- Replaced `respect_gitignore: bool` with `ignore_files: []string`
+  (default `[.gitignore]`). Plural so users can deviate without
+  re-copying their entire `.gitignore` — typical pattern is
+  `[.gitignore, .pqlignore]` with a tiny pql-only file carrying just
+  the deviations.
+- Walker `builtinExcludes` trimmed to just `.git/` (matches git's
+  own built-in exactly). Pql's `.pql/` is excluded via the
+  user-config layer (`pql init` appends `.pql/` to project
+  `.gitignore`); the user owns every other "what to skip" decision.
+
+### Fixed
+
+- Goreleaser `archives.format_overrides.format` → `formats: [zip]`
+  per the v2 deprecation, unblocking `make snapshot`.
+- Folder-derivation SQL was off-by-one
+  (`members/vaasa/persona.md` → `members/vaas` instead of
+  `members/vaasa`). Surfaced once the executor ran the compiled SQL
+  end-to-end against the Council snapshot.
+
+### Pending design (not yet implemented)
+
+- `ignore_files` walker integration. The field is read by config but
+  the walker doesn't yet consult the named files.
+- `pql watch` (designed in `docs/watching.md`).
+- `.base` file compiler + `pql base <name>` (v0.3 milestone).
+- `pql shell` REPL (v0.3 milestone).
+- Outlinks/inlinks/headings/body access in the DSL (v1.x grammar work).

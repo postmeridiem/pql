@@ -67,6 +67,41 @@ EOF
 
 Never pass multi-line messages via `-m "line1\nline2"` or multiple `-m` flags — Git's behavior differs between shells and quoting regimes and the trailer can end up in the wrong place.
 
+## CHANGELOG.md (Keep a Changelog)
+
+Every commit with **user-visible impact** also updates `CHANGELOG.md` per
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Stage the
+changelog edit with the same `git add` as the rest of the change so the
+two land in one commit, not two.
+
+Section convention:
+- The current working section header tracks `project.yaml`'s `version:`
+  field exactly (currently `## [0.1.0-dev]`). Both move together —
+  bumping the project version means renaming the matching section here
+  to the released version + date and opening a new working section.
+- Add the entry under one of the standard subsections: **Added**,
+  **Changed**, **Deprecated**, **Removed**, **Fixed**, **Security**.
+- One-liner summarising the *user-visible impact*, not the
+  implementation detail. The diff already shows the *what*; the
+  CHANGELOG line is "what would I tell a user that just upgraded."
+- No commit hash needed — git history carries that.
+
+When to skip the CHANGELOG update:
+- Pure internal refactors with no user-visible behaviour change.
+- Test-only changes.
+- Doc-only changes that don't affect the user-facing surface (typo
+  fixes, internal-doc reorganisation).
+- Tooling tweaks invisible to consumers.
+
+When in doubt, add a Changed line — terse is fine. Drift between the
+log and the actual behaviour is worse than the occasional too-trivial
+entry.
+
+When releasing a tagged version (post-release commit):
+1. Bump `project.yaml`'s `version:` (e.g. `0.1.0-dev` → `0.1.1-dev`).
+2. Rename the matching CHANGELOG section to `## [0.1.0] - YYYY-MM-DD`.
+3. Open a new `## [0.1.1-dev]` section above it with empty subsections.
+
 ## What not to commit
 
 - `.env` and any `*.env.local` — see `.gitignore`.
