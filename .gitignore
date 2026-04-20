@@ -4,14 +4,23 @@
 /pql
 /pql.exe
 
-# Test + coverage output
+# Test, coverage, profile output
 *.test
 *.out
+*.prof
+*.pprof
 coverage.*
 /tmp/
 
-# Go module cache fragments (usually outside repo, defensive)
+# Go module + workspace artefacts (we don't vendor; we don't use workspaces)
 /vendor/
+/go.work
+/go.work.sum
+
+# pql's own per-vault state. The project itself isn't a vault, but if
+# anyone runs pql against the repo root (testing, dogfooding), .pql/
+# lands here. Mirror what `pql init` writes to consumers' .gitignore.
+/.pql/
 
 # SQLite index files should never land here, but defensive
 *.sqlite
@@ -28,6 +37,7 @@ coverage.*
 
 # OS cruft
 .DS_Store
+._*
 Thumbs.db
 
 # Secrets
