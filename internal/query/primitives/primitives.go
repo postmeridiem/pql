@@ -26,3 +26,14 @@ type TagCount struct {
 	Tag   string `json:"tag"`
 	Count int    `json:"count"`
 }
+
+// Backlink is one incoming reference: a file that links to the queried
+// target. Path is the source file (the one doing the linking), Name is
+// derived from path. Line is the 1-based line number of the link in the
+// source. Via is the link kind: "wiki", "embed", or "md".
+type Backlink struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+	Line int    `json:"line"`
+	Via  string `json:"via"`
+}

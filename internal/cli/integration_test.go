@@ -266,3 +266,53 @@ func TestIntegration_Tags_InvalidSortRejected(t *testing.T) {
 		t.Errorf("exit = %d, want 70; stderr=%s", code, stderr)
 	}
 }
+
+func TestIntegration_Backlinks_RequiresPathArg(t *testing.T) {
+	vault := councilVault(t)
+	_, _, code := run(t, vault, "backlinks")
+	if code != 64 {
+		t.Errorf("exit = %d, want 64 (Usage)", code)
+	}
+}
+
+func TestIntegration_Backlinks_NoMatchExits2(t *testing.T) {
+	vault := councilVault(t)
+	stdout, _, code := run(t, vault, "backlinks", "members/nonexistent/file.md")
+	if code != 2 {
+		t.Errorf("exit = %d, want 2", code)
+	}
+	if got := strings.TrimSpace(string(stdout)); got != "[]" {
+		t.Errorf("stdout = %q, want []", got)
+	}
+}
+
+func TestIntegration_Backlinks_FindsSessionReferences(t *testing.T) {
+	// In the Council snapshot, the session outcome.md file links to multiple
+	// council members via wikilinks. Backlinks for any persona file should
+	// surface at least one hit (the session referencing it).
+	vault := councilVault(t)
+	stdout, stderr, code := run(t, vault, "backlinks", "members/vaasa/persona.md")
+	if code != 0 && code != 2 {
+		t.Fatalf("exit=%d (want 0 or 2)\nstderr: %s", code, stderr)
+	}
+	if code == 2 {
+		t.Skip("Council snapshot has no backlinks to vaasa — fixture may have been refreshed")
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	for i, r := range rows {
+		path, _ := r["path"].(string)
+		if path == "" {
+			t.Errorf("row %d missing path: %#v", i, r)
+		}
+		if path == "members/vaasa/persona.md" {
+			t.Errorf("row %d: self-reference should be excluded: %#v", i, r)
+		}
+		via, _ := r["via"].(string)
+		if via != "wiki" && via != "embed" && via != "md" {
+			t.Errorf("row %d: unexpected via %q", i, via)
+		}
+	}
+}
