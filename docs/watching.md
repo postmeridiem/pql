@@ -1,6 +1,6 @@
 # `pql watch`
 
-A toggleable filesystem watcher. Keeps a single vault's index hot by reacting to file changes in real time, instead of having every CLI invocation re-walk the tree.
+A filesystem watcher with explicit start / stop control. Keeps a single vault's index hot by reacting to file changes in real time, instead of having every CLI invocation re-walk the tree.
 
 This document is the spec; implementation lands under `internal/watch/` and `internal/cli/watch.go` once the design is approved.
 
@@ -12,33 +12,42 @@ A watcher fixes that for the cases where it matters. When `pql watch` is running
 
 ## What it deliberately is not
 
-- **Not a daemon.** `pql watch` is a foreground process the user starts. No systemd unit, no launchctl plist, no Windows service. If the user wants it backgrounded, they shell-background it themselves (`pql watch &` on Unix, `start /B pql watch` on Windows).
-- **Not always-on.** There is no "pql is watching all your vaults in the background" mode. Keeping a watcher per vault you've ever opened is expensive (file descriptors, inotify watches, RSS, battery) and nobody asked for it. **The watcher only runs when the user explicitly types `pql watch`, and only for the vault they're in.**
+- **Not a daemon.** `pql watch start` is a foreground process the user starts. No systemd unit, no launchctl plist, no Windows service. If the user wants it backgrounded, they shell-background it themselves (`pql watch start &` on Unix, `start /B pql watch start` on Windows).
+- **Not always-on.** There is no "pql is watching all your vaults in the background" mode. Keeping a watcher per vault you've ever opened is expensive (file descriptors, inotify watches, RSS, battery) and nobody asked for it. **The watcher only runs when the user explicitly types `pql watch start`, and only for the vault they're in.**
+- **Not a scheduler.** pql doesn't install systemd units, launchctl plists, cron entries, or Windows scheduled tasks. Users who want a watcher to come back on login or to be guarded by a supervisor are free to wire `pql watch start` into whichever scheduler they already use — that's a user-owned configuration concern, not a pql concern.
 - **Not a notification tool.** It silently keeps the index current. It does not pop alerts, send Slack messages, or print anything except diagnostics on stderr.
 - **Not cross-vault.** No central registry of "all running watchers." Each vault tracks its own (single) watcher in its own `.pql/watch.pid`.
 
 ## CLI surface
 
 ```
-pql watch                    # toggle: start a watcher for the cwd subtree, or stop the existing one
-pql watch start [path]       # explicit start; errors if a watcher is already active in this vault
-pql watch stop               # explicit stop; works from anywhere inside the vault
+pql watch                    # prints help (cobra default with subcommands)
+pql watch start [path]       # start a watcher for the given path (default: cwd subtree)
+pql watch stop               # stop the active watcher; works from anywhere inside the vault
 pql watch status             # report on the current vault's watcher (running / not running, scope, pid, started_at)
 ```
 
-The bare `pql watch` is the ergonomic default — same command toggles state. `start` / `stop` / `status` are the explicit forms for scripting and for the case where the user wants to act on a watcher from a directory that isn't the watched scope.
+Three explicit verbs. No magic: running the same command twice doesn't do different things depending on hidden state. Matches the mental model people already have from `systemctl start/stop` and `brew services start/stop`.
 
-## Toggle semantics
+## Start / stop semantics
 
-`pql watch` (no args) inspects `<vault>/.pql/watch.pid`:
+`pql watch start` consults `<vault>/.pql/watch.pid`:
 
-| State of pid file | scope == cwd subtree? | Action |
-|---|---|---|
-| absent (or pid dead) | n/a | start a new watcher in the foreground for the cwd subtree |
-| present, pid alive | yes | SIGTERM the running process; print "stopped"; exit |
-| present, pid alive | no | error: "another watcher is running on `<scope>`. Run `pql watch stop` first, or `cd` into `<scope>` to toggle it." |
+| State of pid file | Action |
+|---|---|
+| absent (or recorded pid is dead) | start a new watcher in the foreground for the requested scope; write watch.pid |
+| present, pid alive | error: `"a watcher is already running on <scope> (pid <N>). Run \`pql watch stop\` first."` Exit 64. |
 
-The "scope mismatch" rule is what keeps the toggle meaningful — running `pql watch` in a different subtree shouldn't silently kill the one that's already active.
+`pql watch stop`:
+
+| State of pid file | Action |
+|---|---|
+| absent (or recorded pid is dead) | error: `"no watcher running for this vault."` Exit 64. |
+| present, pid alive | SIGTERM the recorded pid; wait briefly for graceful shutdown; print `"stopped (was watching <scope>)"`; exit 0 |
+
+`pql watch stop` reads the pid file from `<vault>/.pql/watch.pid` directly, so it works from any cwd inside the vault — no need to be in the scoped subtree.
+
+`pql watch status` always succeeds; output is JSON describing the running watcher (or `{"running": false}`).
 
 ## Scope
 
@@ -96,7 +105,7 @@ This staging means the v1 watcher works correctly from day one and gets faster a
 Foreground process. Runs until:
 
 - SIGINT (Ctrl-C from the controlling terminal)
-- SIGTERM (sent by `pql watch` when toggling off, or by the user)
+- SIGTERM (sent by `pql watch stop`, or by the user)
 - Context cancellation from a fatal error (fsnotify died, store became unwritable)
 
 On any of those: stop fsnotify, drain the debounce queue (one final reindex if there are pending events), remove `.pql/watch.pid`, exit 0.
@@ -124,7 +133,7 @@ For the eventual `internal/watch/` package:
 ## v1 scope
 
 In:
-- `pql watch` (toggle), `pql watch start|stop|status`
+- `pql watch start | stop | status`
 - One watcher per vault, foreground only
 - 250 ms debounce, full `indexer.Run()` per debounced batch
 - `<vault>/.pql/watch.pid` for state
