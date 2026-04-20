@@ -395,6 +395,92 @@ func TestIntegration_Meta_VaasaPersona(t *testing.T) {
 	}
 }
 
+func TestIntegration_Doctor_FreshVaultBeforeIndex(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "doctor")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("pql doctor: %v", err)
+	}
+	var rep map[string]any
+	if err := json.Unmarshal(out, &rep); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	// DB shouldn't exist yet — index field should be nil/absent.
+	db, _ := rep["db"].(map[string]any)
+	if exists, _ := db["exists"].(bool); exists {
+		t.Errorf("db.exists = true on fresh dir, want false")
+	}
+	if rep["index"] != nil {
+		t.Errorf("index should be null when DB doesn't exist, got %v", rep["index"])
+	}
+	// Vault should still be reported.
+	v, _ := rep["vault"].(map[string]any)
+	if path, _ := v["path"].(string); path == "" {
+		t.Errorf("vault.path should be set, got %#v", v)
+	}
+}
+
+func TestIntegration_Doctor_PopulatedAfterIndex(t *testing.T) {
+	vault := councilVault(t)
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	// First, run a query to materialise the index.
+	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "files", "--limit", "1").Run(); err != nil {
+		t.Fatalf("warm up index: %v", err)
+	}
+	// Now doctor should report a populated DB.
+	out, err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
+	if err != nil {
+		t.Fatalf("pql doctor: %v", err)
+	}
+	var rep map[string]any
+	if err := json.Unmarshal(out, &rep); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	db, _ := rep["db"].(map[string]any)
+	if exists, _ := db["exists"].(bool); !exists {
+		t.Errorf("db.exists should be true after index run")
+	}
+	if size, _ := db["size_bytes"].(float64); size <= 0 {
+		t.Errorf("db.size_bytes should be > 0, got %v", size)
+	}
+	if v, _ := db["schema_version"].(float64); v < 1 {
+		t.Errorf("db.schema_version should be ≥1, got %v", v)
+	}
+	idx, _ := rep["index"].(map[string]any)
+	if idx == nil {
+		t.Fatalf("index should be populated, got nil")
+	}
+	if files, _ := idx["files"].(float64); files < 30 {
+		t.Errorf("index.files = %v, want ≥30 (Council snapshot)", files)
+	}
+}
+
+func TestIntegration_Doctor_VersionMatchesBinary(t *testing.T) {
+	vault := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	out, err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
+	if err != nil {
+		t.Fatalf("pql doctor: %v", err)
+	}
+	var rep struct {
+		Version struct {
+			SchemaVersion int    `json:"schema_version"`
+			GoVersion     string `json:"go_version"`
+		} `json:"version"`
+	}
+	if err := json.Unmarshal(out, &rep); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if rep.Version.SchemaVersion < 1 {
+		t.Errorf("version.schema_version = %d, want ≥1", rep.Version.SchemaVersion)
+	}
+	if rep.Version.GoVersion == "" {
+		t.Errorf("version.go_version should be set")
+	}
+}
+
 func TestIntegration_Init_FreshDirectory(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
