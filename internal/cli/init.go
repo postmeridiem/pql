@@ -69,8 +69,16 @@ exclude:
   - "**/.obsidian/**"
   - "**/node_modules/**"
 
-# Honor .gitignore files in addition to .pqlignore.
-respect_gitignore: false
+# Per-vault ignore files the indexer consults when walking. Each name is a
+# file at the vault root with gitignore-syntax rules. Default follows
+# .gitignore so pql piggy-backs on what most projects already exclude
+# (build outputs, vendored deps). To carry pql-specific deviations
+# without polluting .gitignore, add a tiny .pqlignore alongside:
+#   ignore_files: [.gitignore, .pqlignore]
+# Order matters — later files win on per-pattern conflicts. Set to [] to
+# disable file-based exclusions entirely (.git/ and .pql/ are still
+# excluded; that's a non-overridable built-in).
+ignore_files: [.gitignore]
 
 # Populate file.gitmtime / file.gitauthor from git log.
 git_metadata: false

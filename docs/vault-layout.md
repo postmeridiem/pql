@@ -6,9 +6,9 @@ When `pql` operates on a vault it looks for a small set of conventional files an
 |---|---|---|
 | `.pql/` | pql | Per-vault state directory (SQLite index + future caches + the user-edited config.yaml). Analogous to `.git/`. |
 | `.pql/config.yaml` | User | Per-vault settings — overrides binary defaults. Optional. |
-| `.pqlignore` | User | Gitignore-syntax exclusions, at vault root. Optional. Spec: [`pqlignore.md`](pqlignore.md). |
+| `.gitignore` | User | Default exclusion source. Honored by pql out of the box; users can swap or extend via `ignore_files` in config (see [`pqlignore.md`](pqlignore.md)). |
 
-The convention follows the same shape developers already know from git: a single tool-managed state dir at the vault root that also hosts the user-edited config (just like `.git/` hosts `.git/config`), plus a `.gitignore`-shaped exclusions file at the root. Users who recognise `.gitignore` + `.git/config` + `.git/` will recognise `.pqlignore` + `.pql/config.yaml` + `.pql/` immediately.
+The convention is the same shape developers already know from git: a tool-managed state dir at the vault root that also hosts the user-edited config (just like `.git/` hosts `.git/config`). Exclusions piggy-back on the project's existing `.gitignore` by default — most projects already keep their "what to skip" list there and the rules apply identically to indexing. Users who want pql-specific deviations add a small `.pqlignore` and update `ignore_files: [.gitignore, .pqlignore]`.
 
 ## `.pql/` — per-vault state
 
@@ -59,14 +59,13 @@ In every case `<path>` is the DB **file** itself, not a directory; sidecar WAL/s
 
 No. Add `.pql/` to your repo's `.gitignore`. The index is regenerable from the vault contents and caching it in git would bloat the repo with binary data that changes on every invocation. `pql init` (v0.1) appends `.pql/` to `.gitignore` automatically when one exists and the entry isn't already there.
 
-## `.pqlignore` — excluding paths from indexing
+## Excluding paths from indexing
 
-Gitignore-compatible file. Full spec: [`pqlignore.md`](pqlignore.md). Quick summary:
+Three layers, fully documented in [`pqlignore.md`](pqlignore.md). Quick summary:
 
-- Vault-root `.pqlignore` is the primary file; nested `.pqlignore` files cascade like `.gitignore`.
-- Set `respect_gitignore: true` in `.pql/config.yaml` to honor `.gitignore` rules as well.
-- The `exclude:` list in `.pql/config.yaml` remains supported (additive, translated to gitignore-style patterns internally).
-- A small set of paths (`.git/`, `.pql/`, sqlite sidecar files) is always excluded regardless of user config.
+- **`ignore_files` in `.pql/config.yaml`** — defaults to `[.gitignore]`. Walker reads each named file with gitignore syntax. Add `.pqlignore` (or anything else) for pql-specific deviations; order matters.
+- **`exclude:` in `.pql/config.yaml`** — flat list of doublestar patterns for one-off in-config rules.
+- **Built-in non-overridable defaults** (`.git/`, `.pql/`, sqlite sidecars) — always excluded regardless of user config. Same idea as `.gitignore` not needing to list `.git/`: the tool knows what it owns.
 
 ## `.pql/config.yaml` — per-vault configuration
 
@@ -81,9 +80,9 @@ frontmatter: yaml
 wikilinks: obsidian
 tags:
   sources: [inline, frontmatter]
+ignore_files: [.gitignore]
 exclude:
   - "**/draft/**"
-respect_gitignore: false
 git_metadata: false
 fts: false
 aliases:
@@ -98,7 +97,7 @@ A single `pql` invocation, in order:
 2. Load `.pql/config.yaml` if present (vault-local, then `~/.config/pql/config.yaml` global).
 3. Resolve the index location: `--db` / `PQL_DB` / `db:` override → otherwise `<vault>/.pql/index.sqlite` → fall back to user cache if the vault is read-only.
 4. Open or create the index, applying or verifying the v1 schema.
-5. Compose the active `.pqlignore` matcher stack: built-in defaults + `~/.config/pql/ignore` (planned) + nested `.pqlignore` files + `.gitignore` files (if `respect_gitignore: true`) + `exclude:` from YAML.
+5. Compose the active ignore matcher stack: built-in non-overridable defaults + each file in `ignore_files` (in order, later wins) + `exclude:` patterns from YAML (highest priority).
 6. Hand control to the requested subcommand.
 
 `pql doctor` prints exactly what each step resolved and why, so users never have to guess.

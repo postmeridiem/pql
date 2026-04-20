@@ -35,16 +35,16 @@ type doctorVault struct {
 }
 
 type doctorConfig struct {
-	Path             string   `json:"path,omitempty"` // empty if no file loaded
-	Loaded           bool     `json:"loaded"`
-	Frontmatter      string   `json:"frontmatter"`
-	Wikilinks        string   `json:"wikilinks"`
-	TagSources       []string `json:"tag_sources"`
-	Exclude          []string `json:"exclude"`
-	RespectGitignore bool     `json:"respect_gitignore"`
-	GitMetadata      bool     `json:"git_metadata"`
-	FTS              bool     `json:"fts"`
-	Hash             string   `json:"hash"`
+	Path        string   `json:"path,omitempty"` // empty if no file loaded
+	Loaded      bool     `json:"loaded"`
+	Frontmatter string   `json:"frontmatter"`
+	Wikilinks   string   `json:"wikilinks"`
+	TagSources  []string `json:"tag_sources"`
+	Exclude     []string `json:"exclude"`
+	IgnoreFiles []string `json:"ignore_files"`
+	GitMetadata bool     `json:"git_metadata"`
+	FTS         bool     `json:"fts"`
+	Hash        string   `json:"hash"`
 }
 
 type doctorDB struct {
@@ -109,16 +109,16 @@ as a normal state to report rather than an error.`,
 					DiscoveredVia: cfg.Vault.Reason,
 				},
 				Config: doctorConfig{
-					Path:             cfg.ConfigPath,
-					Loaded:           cfg.ConfigPath != "",
-					Frontmatter:      cfg.Frontmatter,
-					Wikilinks:        cfg.Wikilinks,
-					TagSources:       cfg.Tags.Sources,
-					Exclude:          cfg.Exclude,
-					RespectGitignore: cfg.RespectGitignore,
-					GitMetadata:      cfg.GitMetadata,
-					FTS:              cfg.FTS,
-					Hash:             cfgHash,
+					Path:        cfg.ConfigPath,
+					Loaded:      cfg.ConfigPath != "",
+					Frontmatter: cfg.Frontmatter,
+					Wikilinks:   cfg.Wikilinks,
+					TagSources:  cfg.Tags.Sources,
+					Exclude:     cfg.Exclude,
+					IgnoreFiles: cfg.IgnoreFiles,
+					GitMetadata: cfg.GitMetadata,
+					FTS:         cfg.FTS,
+					Hash:        cfgHash,
 				},
 				DB:      doctorDB{Path: cfg.DBPath},
 				Version: version.Info(),

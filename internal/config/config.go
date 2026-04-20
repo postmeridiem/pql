@@ -53,15 +53,26 @@ type Config struct {
 	ConfigPath string         `yaml:"-"` // empty if no file was loaded
 
 	// User-tunable.
-	DB               string            `yaml:"db"` // optional override of the default index path; vault-relative if not absolute
-	Frontmatter      string            `yaml:"frontmatter"`
-	Wikilinks        string            `yaml:"wikilinks"`
-	Tags             TagsConfig        `yaml:"tags"`
-	Exclude          []string          `yaml:"exclude"`
-	Aliases          map[string]string `yaml:"aliases"`
-	RespectGitignore bool              `yaml:"respect_gitignore"` // honor .gitignore files in addition to .pqlignore
-	GitMetadata      bool              `yaml:"git_metadata"`
-	FTS              bool              `yaml:"fts"`
+	DB          string            `yaml:"db"` // optional override of the default index path; vault-relative if not absolute
+	Frontmatter string            `yaml:"frontmatter"`
+	Wikilinks   string            `yaml:"wikilinks"`
+	Tags        TagsConfig        `yaml:"tags"`
+	Exclude     []string          `yaml:"exclude"`
+	Aliases     map[string]string `yaml:"aliases"`
+	// IgnoreFiles names the per-vault ignore files the indexer consults
+	// when walking. Each entry is a filename (gitignore syntax) the walker
+	// looks for at the vault root.
+	//
+	// Default is [".gitignore"] because most projects already keep their
+	// exclusions there. Users add more files when they want pql-specific
+	// rules without polluting .gitignore — typically [.gitignore,
+	// .pqlignore] so a tiny .pqlignore can carry only the pql-only
+	// deviations (e.g. drafts/) instead of duplicating .gitignore's
+	// contents. Order matters: later files win on per-pattern conflicts.
+	// Set to [] to disable file-based exclusions entirely.
+	IgnoreFiles []string `yaml:"ignore_files"`
+	GitMetadata bool     `yaml:"git_metadata"`
+	FTS         bool     `yaml:"fts"`
 }
 
 // LoadOpts feeds Load. All Flag/Env fields can be empty; Load applies the
@@ -127,23 +138,23 @@ func (c *Config) Hash() (string, error) {
 	// DB is intentionally excluded — it determines WHERE the index lives,
 	// not WHAT gets indexed, so changing it shouldn't trigger a reindex.
 	view := struct {
-		Frontmatter      string            `json:"frontmatter"`
-		Wikilinks        string            `json:"wikilinks"`
-		Tags             TagsConfig        `json:"tags"`
-		Exclude          []string          `json:"exclude"`
-		Aliases          map[string]string `json:"aliases"`
-		RespectGitignore bool              `json:"respect_gitignore"`
-		GitMetadata      bool              `json:"git_metadata"`
-		FTS              bool              `json:"fts"`
+		Frontmatter string            `json:"frontmatter"`
+		Wikilinks   string            `json:"wikilinks"`
+		Tags        TagsConfig        `json:"tags"`
+		Exclude     []string          `json:"exclude"`
+		Aliases     map[string]string `json:"aliases"`
+		IgnoreFiles []string          `json:"ignore_files"`
+		GitMetadata bool              `json:"git_metadata"`
+		FTS         bool              `json:"fts"`
 	}{
-		Frontmatter:      c.Frontmatter,
-		Wikilinks:        c.Wikilinks,
-		Tags:             c.Tags,
-		Exclude:          c.Exclude,
-		Aliases:          c.Aliases,
-		RespectGitignore: c.RespectGitignore,
-		GitMetadata:      c.GitMetadata,
-		FTS:              c.FTS,
+		Frontmatter: c.Frontmatter,
+		Wikilinks:   c.Wikilinks,
+		Tags:        c.Tags,
+		Exclude:     c.Exclude,
+		Aliases:     c.Aliases,
+		IgnoreFiles: c.IgnoreFiles,
+		GitMetadata: c.GitMetadata,
+		FTS:         c.FTS,
 	}
 	b, err := json.Marshal(view)
 	if err != nil {
@@ -164,6 +175,7 @@ func defaults() *Config {
 			"**/node_modules/**",
 		},
 		Aliases:     map[string]string{},
+		IgnoreFiles: []string{".gitignore"},
 		GitMetadata: false,
 		FTS:         false,
 	}

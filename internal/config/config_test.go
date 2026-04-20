@@ -379,28 +379,59 @@ func TestDBPath_HomeDirFallbackMatchesPlatform(t *testing.T) {
 	}
 }
 
-func TestLoad_RespectGitignoreField(t *testing.T) {
+func TestLoad_IgnoreFilesDefault(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := Load(LoadOpts{
+		VaultFlag: dir, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.IgnoreFiles) != 1 || cfg.IgnoreFiles[0] != ".gitignore" {
+		t.Errorf("default IgnoreFiles = %v, want [.gitignore]", cfg.IgnoreFiles)
+	}
+}
+
+func TestLoad_IgnoreFilesOverride(t *testing.T) {
 	vault := t.TempDir()
-	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), "respect_gitignore: true\n")
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"),
+		"ignore_files: [.gitignore, .pqlignore]\n")
 	cfg, err := Load(LoadOpts{
 		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !cfg.RespectGitignore {
-		t.Error("RespectGitignore not loaded from YAML")
+	if len(cfg.IgnoreFiles) != 2 ||
+		cfg.IgnoreFiles[0] != ".gitignore" ||
+		cfg.IgnoreFiles[1] != ".pqlignore" {
+		t.Errorf("IgnoreFiles = %v, want [.gitignore .pqlignore]", cfg.IgnoreFiles)
 	}
 }
 
-func TestHash_RespectGitignoreAffectsHash(t *testing.T) {
+func TestLoad_IgnoreFilesEmpty(t *testing.T) {
+	vault := t.TempDir()
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), "ignore_files: []\n")
+	cfg, err := Load(LoadOpts{
+		VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.IgnoreFiles) != 0 {
+		t.Errorf("explicit empty list should disable file-based ignores; got %v", cfg.IgnoreFiles)
+	}
+}
+
+func TestHash_IgnoreFilesAffectsHash(t *testing.T) {
 	a := defaults()
 	b := defaults()
-	b.RespectGitignore = true
+	b.IgnoreFiles = append([]string(nil), b.IgnoreFiles...)
+	b.IgnoreFiles = append(b.IgnoreFiles, ".pqlignore")
 	ah, _ := a.Hash()
 	bh, _ := b.Hash()
 	if ah == bh {
-		t.Errorf("RespectGitignore toggle did not change hash (%s)", ah)
+		t.Errorf("IgnoreFiles change did not affect hash (%s)", ah)
 	}
 }
 
