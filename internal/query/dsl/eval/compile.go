@@ -15,6 +15,12 @@ import (
 	"github.com/postmeridiem/pql/internal/query/dsl/parse"
 )
 
+// colTags is the canonical name of the array-shaped tags column, used in
+// both the bare-array-ref guard (compileRef) and the IN-membership
+// rewrite (arrayColumnExistsSQL/arrayMatchColumn). Constant so adding
+// inlinks/outlinks/etc. follows the same pattern.
+const colTags = "tags"
+
 // Compiled is the SQL + parameter list produced from an AST. Pass to a
 // store DB.QueryContext call directly.
 type Compiled struct {
@@ -64,17 +70,6 @@ func (c *compiler) emit(s string, args ...any) {
 func (c *compiler) param(v any) {
 	c.params = append(c.params, v)
 	c.buf.WriteString("?")
-}
-
-// errAt is a small helper to attach a node's position to an Error.
-func errAt(e parse.Expr, code, format string, args ...any) *Error {
-	pos := e.Position()
-	return &Error{
-		Code: "pql.eval." + code,
-		Msg:  fmt.Sprintf(format, args...),
-		Line: pos.Line,
-		Col:  pos.Col,
-	}
 }
 
 // --- top-level query -----------------------------------------------------
@@ -273,7 +268,7 @@ func (c *compiler) ref(r *parse.Ref) error {
 			return nil
 		}
 		switch name {
-		case "tags", "inlinks", "outlinks", "headings", "body":
+		case colTags, "inlinks", "outlinks", "headings", "body":
 			return &Error{
 				Code: "pql.eval.bare_array_ref",
 				Msg: fmt.Sprintf(
@@ -513,16 +508,14 @@ func (c *compiler) tuple(t *parse.Tuple) error {
 // v1: tags only. outlinks/inlinks/headings membership lands in v1.x with
 // the resolution rules from initial-plan.md open question #6.
 func arrayColumnExistsSQL(name string) (string, bool) {
-	switch name {
-	case "tags":
+	if name == colTags {
 		return "SELECT 1 FROM tags WHERE tags.path = files.path", true
 	}
 	return "", false
 }
 
 func arrayMatchColumn(name string) string {
-	switch name {
-	case "tags":
+	if name == colTags {
 		return "tags.tag"
 	}
 	return ""

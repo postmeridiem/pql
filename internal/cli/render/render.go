@@ -16,6 +16,8 @@ import (
 // Format selects the output encoding. Empty / FormatJSON is the default.
 type Format string
 
+// The supported Format values. Selection happens via the global --format
+// flag; see docs/output-contract.md for shape guarantees.
 const (
 	FormatJSON   Format = "json"   // canonical: single JSON array on stdout
 	FormatPretty Format = "pretty" // same as JSON but indented
@@ -29,7 +31,7 @@ type Opts struct {
 	Out    io.Writer // defaults to os.Stdout
 }
 
-// RenderOne writes a single value to opts.Out and returns true when a
+// One writes a single value to opts.Out and returns true when a
 // non-nil value was written. Used by single-record subcommands like
 // `pql meta` and `pql doctor` where a list shape would be misleading.
 //
@@ -37,7 +39,7 @@ type Opts struct {
 // doesn't add value for one object. Pretty/JSON behave as expected.
 // A nil pointer renders as JSON null and returns false; callers map
 // that to the appropriate exit code (typically NoInput).
-func RenderOne[T any](v *T, opts Opts) (bool, error) {
+func One[T any](v *T, opts Opts) (bool, error) {
 	out := opts.Out
 	if out == nil {
 		out = os.Stdout

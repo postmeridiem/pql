@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"slices"
@@ -33,7 +34,7 @@ func TestSplitFrontmatter_NoFrontmatter(t *testing.T) {
 	if head != nil {
 		t.Errorf("expected nil head, got %q", head)
 	}
-	if string(body) != string(in) {
+	if !bytes.Equal(body, in) {
 		t.Errorf("body should equal input")
 	}
 }
@@ -61,7 +62,7 @@ func TestSplitFrontmatter_UnclosedTreatedAsBody(t *testing.T) {
 	if head != nil {
 		t.Errorf("expected nil head when delimiter unclosed, got %q", head)
 	}
-	if string(body) != string(in) {
+	if !bytes.Equal(body, in) {
 		t.Errorf("body should equal input when fm unclosed")
 	}
 }

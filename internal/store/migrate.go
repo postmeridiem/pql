@@ -112,7 +112,7 @@ func listUserTables(ctx context.Context, db *sql.DB) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("store: list tables: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var names []string
 	for rows.Next() {

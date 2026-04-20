@@ -14,7 +14,7 @@ type MetaOpts struct {
 	Path string
 }
 
-// Meta returns the per-file aggregate for opts.Path: filesystem metadata,
+// MetaOne returns the per-file aggregate for opts.Path: filesystem metadata,
 // frontmatter (raw JSON values keyed by frontmatter key), tags, outlinks,
 // and headings. Returns (nil, nil) when the file isn't indexed — the CLI
 // surface (runQueryOne) maps that to exit code 66 (NoInput).

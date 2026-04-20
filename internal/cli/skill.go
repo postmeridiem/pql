@@ -167,7 +167,7 @@ func renderSkillStatus(cmd *cobra.Command, st *skill.Status) error {
 	if err != nil {
 		return &exitError{code: diag.Usage, msg: err.Error()}
 	}
-	if _, err := render.RenderOne(st, rOpts); err != nil {
+	if _, err := render.One(st, rOpts); err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}
 	}
 	if st.State == skill.StateMissing {

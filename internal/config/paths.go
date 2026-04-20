@@ -49,7 +49,7 @@ func resolveDBPath(opts LoadOpts, vaultPath, cfgDB string) (string, error) {
 	}
 
 	inVault := filepath.Join(vaultPath, VaultStateDir)
-	if err := os.MkdirAll(inVault, 0o755); err == nil {
+	if err := os.MkdirAll(inVault, 0o750); err == nil {
 		return filepath.Join(inVault, IndexFileName), nil
 	} else if !isReadOnlyError(err) {
 		return "", fmt.Errorf("config: create %q: %w", inVault, err)
@@ -60,7 +60,7 @@ func resolveDBPath(opts LoadOpts, vaultPath, cfgDB string) (string, error) {
 		return "", fmt.Errorf("config: locate cache dir: %w", err)
 	}
 	dir := filepath.Join(cacheDir, "pql", vaultFingerprint(vaultPath))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", fmt.Errorf("config: create cache dir %q: %w", dir, err)
 	}
 	return filepath.Join(dir, IndexFileName), nil

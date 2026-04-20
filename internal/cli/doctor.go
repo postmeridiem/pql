@@ -136,7 +136,7 @@ as a normal state to report rather than an error.`,
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
-			if _, err := render.RenderOne(report, rOpts); err != nil {
+			if _, err := render.One(report, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			return nil
@@ -163,7 +163,7 @@ func populateDBState(ctx context.Context, dbPath string, report *doctorReport) e
 	if err != nil {
 		return fmt.Errorf("open %s: %w", dbPath, err)
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 
 	v, err := st.SchemaVersion(ctx)
 	if err != nil {

@@ -41,6 +41,9 @@ var embedded string
 // we're running. Always one of the constants below.
 type State string
 
+// Drift states. The five-way split lets the CLI tell the user exactly
+// what's wrong (missing/stale/modified/unknown) instead of a binary
+// installed/not-installed flag. See docs/skill.md for the state machine.
 const (
 	StateMissing  State = "missing"  // no SKILL.md at the target
 	StateCurrent  State = "current"  // matches the binary's embedded skill
@@ -93,7 +96,7 @@ func Inspect(dir string) (*Status, error) {
 		Embedded: Embedded(),
 	}
 
-	contents, err := os.ReadFile(skillPath)
+	contents, err := os.ReadFile(skillPath) //nolint:gosec // G304: skillPath is derived from caller-controlled dir; reading the on-disk skill is the function's purpose
 	if errors.Is(err, os.ErrNotExist) {
 		st.State = StateMissing
 		return st, nil
@@ -103,7 +106,7 @@ func Inspect(dir string) (*Status, error) {
 	}
 	st.OnDisk = &Snapshot{Hash: hashBytes(contents)}
 
-	lockData, err := os.ReadFile(lockPath)
+	lockData, err := os.ReadFile(lockPath) //nolint:gosec // G304: lockPath is derived from caller-controlled dir; reading the lock file is the function's purpose
 	if err == nil {
 		var lock Snapshot
 		if err := json.Unmarshal(lockData, &lock); err != nil {
@@ -151,11 +154,11 @@ func Install(dir string, force bool) (*Status, error) {
 		}
 	}
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("skill: mkdir %s: %w", dir, err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, SkillFile), []byte(embedded), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, SkillFile), []byte(embedded), 0o600); err != nil {
 		return nil, fmt.Errorf("skill: write SKILL.md: %w", err)
 	}
 
@@ -165,7 +168,7 @@ func Install(dir string, force bool) (*Status, error) {
 		InstalledAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	lockData, _ := json.MarshalIndent(lock, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, LockFile), append(lockData, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, LockFile), append(lockData, '\n'), 0o600); err != nil {
 		return nil, fmt.Errorf("skill: write lock: %w", err)
 	}
 

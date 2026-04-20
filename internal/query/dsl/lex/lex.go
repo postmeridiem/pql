@@ -20,16 +20,19 @@ import (
 // Kind identifies a token's syntactic category.
 type Kind int
 
+// The Kind enumeration is grouped into four logical sections — sentinel +
+// identifiers/literals, keywords, operators, punctuation. Names are chosen
+// to read well in error messages (the Kind.String method below maps each
+// to the form users see in their source).
 const (
 	EOF Kind = iota
 
-	// Identifiers and literals
 	IDENT
 	INT
 	FLOAT
 	STRING
 
-	// Keywords (case-insensitive in source; canonical uppercase)
+	// Keywords are case-insensitive in source; canonical uppercase here.
 	SELECT
 	DISTINCT
 	FROM
@@ -47,7 +50,7 @@ const (
 	OR
 	NOT
 	IS
-	NULLKW // the literal NULL keyword (Kind name avoids the Go nil pun)
+	NULLKW // NULLKW is the literal NULL keyword (avoids the Go nil pun in references)
 	IN
 	BETWEEN
 	LIKE
@@ -59,27 +62,25 @@ const (
 	TRUE
 	FALSE
 
-	// Operators
-	EQ      // =
-	NEQ     // != or <>
-	LT      // <
-	LTE     // <=
-	GT      // >
-	GTE     // >=
-	PLUS    // +
-	MINUS   // -
-	STAR    // *  (also doubles as the SELECT * wildcard)
-	SLASH   // /
-	PERCENT // %
-	CONCAT  // ||
+	EQ      // EQ is `=`
+	NEQ     // NEQ is `!=` or `<>`
+	LT      // LT is `<`
+	LTE     // LTE is `<=`
+	GT      // GT is `>`
+	GTE     // GTE is `>=`
+	PLUS    // PLUS is `+`
+	MINUS   // MINUS is `-`
+	STAR    // STAR is `*` (also doubles as the SELECT * wildcard)
+	SLASH   // SLASH is `/`
+	PERCENT // PERCENT is `%`
+	CONCAT  // CONCAT is `||`
 
-	// Punctuation
-	LPAREN   // (
-	RPAREN   // )
-	LBRACKET // [
-	RBRACKET // ]
-	COMMA    // ,
-	DOT      // .
+	LPAREN   // LPAREN is `(`
+	RPAREN   // RPAREN is `)`
+	LBRACKET // LBRACKET is `[`
+	RBRACKET // RBRACKET is `]`
+	COMMA    // COMMA is `,`
+	DOT      // DOT is `.`
 )
 
 // String returns a human-readable form for diagnostics.
@@ -314,13 +315,6 @@ func (s *Scanner) advance() {
 		s.col++
 	}
 	s.pos++
-}
-
-func (s *Scanner) peek() (rune, bool) {
-	if s.pos >= len(s.src) {
-		return 0, false
-	}
-	return s.src[s.pos], true
 }
 
 func (s *Scanner) peekAt(offset int) (rune, bool) {

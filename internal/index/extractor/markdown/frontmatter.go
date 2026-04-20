@@ -152,10 +152,7 @@ func startsWithFenceLine(raw []byte) bool {
 // isFenceLine reports whether a single (newline-stripped) line is the
 // frontmatter terminator `---` (with optional trailing whitespace).
 func isFenceLine(line []byte) bool {
-	if !bytes.Equal(bytes.TrimRight(line, " \t\r"), frontmatterDelim) {
-		return false
-	}
-	return true
+	return bytes.Equal(bytes.TrimRight(line, " \t\r"), frontmatterDelim)
 }
 
 // nextLine returns one line (without the trailing newline) and the

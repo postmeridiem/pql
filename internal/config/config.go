@@ -182,11 +182,11 @@ func defaults() *Config {
 }
 
 func loadFile(path string, into *Config) error {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // G304: caller-supplied path; pql config is by design read from a path the user picks
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	dec := yaml.NewDecoder(f)
 	dec.KnownFields(true) // strict — unknown fields are typos worth catching
 	if err := dec.Decode(into); err != nil {

@@ -33,7 +33,7 @@ func runQueryOne[T any](
 	if err != nil {
 		return &exitError{code: diag.Unavail, msg: err.Error()}
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 
 	if _, err := index.New(st, cfg).Run(ctx); err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}
@@ -51,7 +51,7 @@ func runQueryOne[T any](
 	if err != nil {
 		return &exitError{code: diag.Usage, msg: err.Error()}
 	}
-	if _, err := render.RenderOne(obj, rOpts); err != nil {
+	if _, err := render.One(obj, rOpts); err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}
 	}
 	return nil
@@ -84,7 +84,7 @@ func runQuery[T any](
 	if err != nil {
 		return &exitError{code: diag.Unavail, msg: err.Error()}
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 
 	if _, err := index.New(st, cfg).Run(ctx); err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}

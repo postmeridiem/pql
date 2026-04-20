@@ -57,36 +57,55 @@ type Expr interface {
 }
 
 // --- literals ------------------------------------------------------------
+//
+// One Lit type per scalar shape. The compiler dispatches on the concrete
+// type; keeping them as separate types (rather than a tagged union) means
+// the type system enforces "string literals can't go where ints are
+// expected" at compile time.
 
+// StringLit is a quoted string literal.
 type StringLit struct {
 	P     Pos
 	Value string
 }
 
+// IntLit is an integer literal.
 type IntLit struct {
 	P     Pos
 	Value int64
 }
 
+// FloatLit is a floating-point literal.
 type FloatLit struct {
 	P     Pos
 	Value float64
 }
 
+// BoolLit is TRUE or FALSE.
 type BoolLit struct {
 	P     Pos
 	Value bool
 }
 
+// NullLit is the NULL keyword.
 type NullLit struct {
 	P Pos
 }
 
+// Position returns the source location of the literal's first token.
 func (n *StringLit) Position() Pos { return n.P }
-func (n *IntLit) Position() Pos    { return n.P }
-func (n *FloatLit) Position() Pos  { return n.P }
-func (n *BoolLit) Position() Pos   { return n.P }
-func (n *NullLit) Position() Pos   { return n.P }
+
+// Position returns the source location of the literal's first token.
+func (n *IntLit) Position() Pos { return n.P }
+
+// Position returns the source location of the literal's first token.
+func (n *FloatLit) Position() Pos { return n.P }
+
+// Position returns the source location of the literal's first token.
+func (n *BoolLit) Position() Pos { return n.P }
+
+// Position returns the source location of the literal's first token.
+func (n *NullLit) Position() Pos { return n.P }
 
 func (*StringLit) expr() {}
 func (*IntLit) expr()    {}
@@ -105,11 +124,13 @@ type Ref struct {
 	Parts []RefPart
 }
 
+// RefPart is one segment of a Ref. Exactly one of Name / Bracket is set.
 type RefPart struct {
 	Name    string
 	Bracket string // mutually exclusive with Name; non-empty means bracket form
 }
 
+// Position returns the source location of the ref's first identifier.
 func (n *Ref) Position() Pos { return n.P }
 func (*Ref) expr()           {}
 
@@ -120,6 +141,7 @@ type Call struct {
 	Args []Expr
 }
 
+// Position returns the source location of the call's name token.
 func (n *Call) Position() Pos { return n.P }
 func (*Call) expr()           {}
 
@@ -132,6 +154,7 @@ type Unary struct {
 	X  Expr
 }
 
+// Position returns the source location of the unary operator token.
 func (n *Unary) Position() Pos { return n.P }
 func (*Unary) expr()           {}
 
@@ -144,6 +167,7 @@ type Binary struct {
 	R  Expr
 }
 
+// Position returns the source location of the binary expression's left operand.
 func (n *Binary) Position() Pos { return n.P }
 func (*Binary) expr()           {}
 
@@ -157,6 +181,7 @@ type Between struct {
 	Not  bool
 }
 
+// Position returns the source location of the BETWEEN expression's value operand.
 func (n *Between) Position() Pos { return n.P }
 func (*Between) expr()           {}
 
@@ -167,6 +192,7 @@ type IsNull struct {
 	Not bool
 }
 
+// Position returns the source location of the IS NULL expression's value operand.
 func (n *IsNull) Position() Pos { return n.P }
 func (*IsNull) expr()           {}
 
@@ -178,5 +204,6 @@ type Tuple struct {
 	Items []Expr
 }
 
+// Position returns the source location of the tuple's opening parenthesis.
 func (n *Tuple) Position() Pos { return n.P }
 func (*Tuple) expr()           {}

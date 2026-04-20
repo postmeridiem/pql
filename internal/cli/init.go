@@ -152,7 +152,7 @@ drift.`,
 				Gitignore: giStat,
 				Skill:     skillStat,
 			}
-			if _, err := render.RenderOne(result, rOpts); err != nil {
+			if _, err := render.One(result, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			return nil
@@ -203,10 +203,10 @@ func writeDefaultConfig(path string, force bool) (initConfigStat, error) {
 		stat.Skipped = true
 		return stat, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return stat, fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 	}
-	if err := os.WriteFile(path, []byte(defaultConfigBody), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(defaultConfigBody), 0o600); err != nil {
 		return stat, fmt.Errorf("write %s: %w", path, err)
 	}
 	if exists {
@@ -223,7 +223,7 @@ func writeDefaultConfig(path string, force bool) (initConfigStat, error) {
 // create a gitignore if one isn't already there.
 func ensureGitignoreEntry(path, entry string) (initGitignore, error) {
 	stat := initGitignore{}
-	body, err := os.ReadFile(path)
+	body, err := os.ReadFile(path) //nolint:gosec // G304: path is the project's own .gitignore, resolved by the caller
 	if errors.Is(err, os.ErrNotExist) {
 		return stat, nil
 	}
@@ -254,7 +254,7 @@ func ensureGitignoreEntry(path, entry string) (initGitignore, error) {
 	buf.WriteString(entry)
 	buf.WriteByte('\n')
 
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
 		return stat, fmt.Errorf("write %s: %w", path, err)
 	}
 	stat.Appended = true

@@ -146,7 +146,7 @@ func (idx *Indexer) indexOne(ctx context.Context, tx *sql.Tx, rel string, opts m
 		return actionUnchanged, nil
 	}
 
-	body, err := os.ReadFile(full)
+	body, err := os.ReadFile(full) //nolint:gosec // G304: full is vaultPath joined with a walker-enumerated rel path; reading vault files is the indexer's whole job
 	if err != nil {
 		return actionUnchanged, fmt.Errorf("indexer: read %q: %w", rel, err)
 	}

@@ -19,8 +19,12 @@ const (
 	Software   = 70 // EX_SOFTWARE — internal error
 )
 
+// Level is the severity tag on a stderr Diagnostic. "warn" is informational,
+// "error" precedes a non-zero exit code.
 type Level string
 
+// The level set is intentionally tiny — this isn't syslog. See
+// docs/output-contract.md.
 const (
 	LevelWarn  Level = "warn"
 	LevelError Level = "error"

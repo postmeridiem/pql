@@ -44,7 +44,7 @@ func Load(vaultPath string, files []string) (Matcher, error) {
 	var lines []string
 	for _, name := range files {
 		path := filepath.Join(vaultPath, name)
-		body, err := os.ReadFile(path)
+		body, err := os.ReadFile(path) //nolint:gosec // G304: path is vaultPath/<configured ignore filename>; reading user-named ignore files is the feature
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}

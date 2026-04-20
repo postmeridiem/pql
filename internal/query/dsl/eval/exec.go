@@ -25,7 +25,7 @@ func Exec(ctx context.Context, db *sql.DB, c *Compiled) ([]Row, error) {
 	if err != nil {
 		return nil, fmt.Errorf("eval.Exec: query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	cols, err := rows.Columns()
 	if err != nil {
@@ -76,7 +76,7 @@ func normalise(v any) any {
 		}
 		return string(x)
 	case string:
-		if len(x) > 0 && (x[0] == '[' || x[0] == '{') && json.Valid([]byte(x)) {
+		if x != "" && (x[0] == '[' || x[0] == '{') && json.Valid([]byte(x)) {
 			return json.RawMessage(x)
 		}
 		return x

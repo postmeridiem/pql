@@ -52,7 +52,7 @@ func Tags(ctx context.Context, db *sql.DB, opts TagsOpts) ([]TagCount, error) {
 	if err != nil {
 		return nil, fmt.Errorf("primitives.Tags: query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := []TagCount{}
 	for rows.Next() {

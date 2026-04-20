@@ -5,14 +5,6 @@ import (
 	"testing"
 )
 
-// seedTags inserts (path, tag) rows; expects matching files rows to exist
-// already so the FK passes. Used by Tags tests.
-func seedTags(t *testing.T, paths [][2]string) {
-	t.Helper()
-	// Defensive: tests using this also call seedTestStore which already
-	// creates the files rows; pass paths whose first element matches.
-}
-
 func TestTags_GroupedByTag(t *testing.T) {
 	st := seedTestStore(t, "a.md", "b.md", "c.md")
 	exec := st.DB().Exec

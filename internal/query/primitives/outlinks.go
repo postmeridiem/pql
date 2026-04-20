@@ -49,7 +49,7 @@ func Outlinks(ctx context.Context, db *sql.DB, opts OutlinksOpts) ([]Outlink, er
 	if err != nil {
 		return nil, fmt.Errorf("primitives.Outlinks: query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := []Outlink{}
 	for rows.Next() {

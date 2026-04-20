@@ -34,7 +34,7 @@ func Schema(ctx context.Context, db *sql.DB, opts SchemaOpts) ([]SchemaEntry, er
 	if err != nil {
 		return nil, fmt.Errorf("primitives.Schema: query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	byKey := map[string]*SchemaEntry{}
 	for rows.Next() {

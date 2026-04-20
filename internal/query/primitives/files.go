@@ -44,7 +44,7 @@ func Files(ctx context.Context, db *sql.DB, opts FilesOpts) ([]File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("primitives.Files: query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := []File{}
 	for rows.Next() {

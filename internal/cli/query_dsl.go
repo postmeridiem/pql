@@ -92,7 +92,7 @@ func readDSLSource(args []string, fromFile string, fromStdin bool, stdin io.Read
 	case len(args) > 0:
 		return args[0], nil
 	case fromFile != "":
-		b, err := os.ReadFile(fromFile)
+		b, err := os.ReadFile(fromFile) //nolint:gosec // G304: --file path is supplied by the user invoking the CLI; reading from a user-named path is the feature
 		if err != nil {
 			return "", fmt.Errorf("read --file %q: %w", fromFile, err)
 		}

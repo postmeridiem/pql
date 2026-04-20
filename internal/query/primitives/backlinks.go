@@ -63,7 +63,7 @@ func Backlinks(ctx context.Context, db *sql.DB, opts BacklinksOpts) ([]Backlink,
 	if err != nil {
 		return nil, fmt.Errorf("primitives.Backlinks: query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := []Backlink{}
 	for rows.Next() {

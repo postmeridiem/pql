@@ -144,12 +144,12 @@ func TestRender_EscapeHTMLOff(t *testing.T) {
 	}
 }
 
-func TestRenderOne_Object(t *testing.T) {
+func TestOne_Object(t *testing.T) {
 	var buf bytes.Buffer
 	v := &sample{Name: "a", Age: 1}
-	wrote, err := RenderOne(v, Opts{Out: &buf})
+	wrote, err := One(v, Opts{Out: &buf})
 	if err != nil {
-		t.Fatalf("RenderOne: %v", err)
+		t.Fatalf("One: %v", err)
 	}
 	if !wrote {
 		t.Error("expected wrote=true for non-nil value")
@@ -159,11 +159,11 @@ func TestRenderOne_Object(t *testing.T) {
 	}
 }
 
-func TestRenderOne_NilEmitsNull(t *testing.T) {
+func TestOne_NilEmitsNull(t *testing.T) {
 	var buf bytes.Buffer
-	wrote, err := RenderOne[sample](nil, Opts{Out: &buf})
+	wrote, err := One[sample](nil, Opts{Out: &buf})
 	if err != nil {
-		t.Fatalf("RenderOne: %v", err)
+		t.Fatalf("One: %v", err)
 	}
 	if wrote {
 		t.Error("expected wrote=false for nil value")
@@ -173,11 +173,11 @@ func TestRenderOne_NilEmitsNull(t *testing.T) {
 	}
 }
 
-func TestRenderOne_PrettyIndents(t *testing.T) {
+func TestOne_PrettyIndents(t *testing.T) {
 	var buf bytes.Buffer
-	_, err := RenderOne(&sample{Name: "a", Age: 1}, Opts{Format: FormatPretty, Out: &buf})
+	_, err := One(&sample{Name: "a", Age: 1}, Opts{Format: FormatPretty, Out: &buf})
 	if err != nil {
-		t.Fatalf("RenderOne: %v", err)
+		t.Fatalf("One: %v", err)
 	}
 	if !strings.Contains(buf.String(), `"name": "a"`) {
 		t.Errorf("pretty output missing indent: %q", buf.String())
