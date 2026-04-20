@@ -76,3 +76,13 @@ type Meta struct {
 	Outlinks    []Outlink                  `json:"outlinks"`
 	Headings    []Heading                  `json:"headings"`
 }
+
+// SchemaEntry describes one distinct frontmatter key across the vault:
+// the set of types observed (sorted, usually one element — multiple
+// elements signal a typing inconsistency worth investigating) and the
+// number of files where the key appears.
+type SchemaEntry struct {
+	Key   string   `json:"key"`
+	Types []string `json:"types"`
+	Count int      `json:"count"`
+}

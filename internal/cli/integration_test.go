@@ -395,6 +395,66 @@ func TestIntegration_Meta_VaasaPersona(t *testing.T) {
 	}
 }
 
+func TestIntegration_Schema_CouncilSnapshot(t *testing.T) {
+	vault := councilVault(t)
+	stdout, stderr, code := run(t, vault, "schema")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if len(rows) == 0 {
+		t.Fatal("expected non-empty schema from Council snapshot")
+	}
+	// Spot-check shape on each row.
+	for i, r := range rows {
+		key, _ := r["key"].(string)
+		if key == "" {
+			t.Errorf("row %d missing key: %#v", i, r)
+		}
+		types, _ := r["types"].([]any)
+		if len(types) == 0 {
+			t.Errorf("row %d (key=%q): types empty", i, key)
+		}
+		count, _ := r["count"].(float64)
+		if count < 1 {
+			t.Errorf("row %d (key=%q): count = %v", i, key, count)
+		}
+	}
+	// Spot-check known key: type appears on every council-member persona,
+	// always as a string.
+	for _, r := range rows {
+		if r["key"] == "type" {
+			types, _ := r["types"].([]any)
+			if len(types) != 1 || types[0] != "string" {
+				t.Errorf("schema for 'type' = %v, want [\"string\"]", types)
+			}
+		}
+	}
+}
+
+func TestIntegration_Schema_SortByCount(t *testing.T) {
+	vault := councilVault(t)
+	stdout, stderr, code := run(t, vault, "schema", "--sort", "count")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	for i := 1; i < len(rows); i++ {
+		prev, _ := rows[i-1]["count"].(float64)
+		cur, _ := rows[i]["count"].(float64)
+		if cur > prev {
+			t.Errorf("counts not descending at index %d: %v then %v", i, prev, cur)
+			break
+		}
+	}
+}
+
 func TestIntegration_Outlinks_OnSessionOutcome(t *testing.T) {
 	// The Council session outcome.md is a known-link-rich file.
 	vault := councilVault(t)
