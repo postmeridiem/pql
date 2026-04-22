@@ -96,6 +96,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newPlanCmd())
 	cmd.AddCommand(newWatchCmd())
 	cmd.AddCommand(newCompletionCmd())
+	cmd.AddCommand(newSelfUpdateCmd())
 	cmd.AddCommand(newSkillCmd())
 	return cmd
 }
