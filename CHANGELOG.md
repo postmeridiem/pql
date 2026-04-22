@@ -11,6 +11,16 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.2.0] - 2026-04-22
+
+### Added
+
+- `pql plan export` and `pql plan import` — snapshot planning state
+  to a committed JSON file (`pql-plan.json` by default) for version
+  control. pql.db stays gitignored; the export is the portable,
+  diffable artifact. Wire the trigger to your workflow: pre-push hook,
+  sprint skill, or manual.
+
 ## [1.1.0] - 2026-04-22
 
 ### Changed

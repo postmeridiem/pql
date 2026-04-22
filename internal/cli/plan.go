@@ -3,6 +3,9 @@ package cli
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -10,6 +13,8 @@ import (
 	"github.com/postmeridiem/pql/internal/diag"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
+
+const defaultSnapshotFile = "pql-plan.json"
 
 func newPlanCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -21,6 +26,8 @@ func newPlanCmd() *cobra.Command {
 		},
 	}
 	cmd.AddCommand(newPlanStatusCmd())
+	cmd.AddCommand(newPlanExportCmd())
+	cmd.AddCommand(newPlanImportCmd())
 	return cmd
 }
 
@@ -139,4 +146,106 @@ func buildDashboard(ctx context.Context, db *sql.DB) (*dashboard, error) {
 	d.CoverageGaps = len(gaps)
 
 	return &d, nil
+}
+
+// --- export ---
+
+func newPlanExportCmd() *cobra.Command {
+	var outFile string
+	cmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export planning state to a JSON file for version control",
+		Long: `Dump all planning state (decisions, tickets, refs, deps, labels,
+history) to a single JSON file. The file is meant to be committed
+to git — pql.db itself stays gitignored.
+
+  pql plan export                         # writes pql-plan.json
+  pql plan export --to planning.json      # custom filename
+
+Wire this into your workflow however you like:
+  - pre-push hook: .githooks/pre-push calls pql plan export && git add pql-plan.json
+  - sprint skill: a Claude Code skill that exports + commits on sprint close
+  - manual: run it before committing when planning state changed`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			snap, err := repo.Export(ctx, pdb.SQL())
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
+			data, err := json.MarshalIndent(snap, "", "  ")
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
+			if err := os.WriteFile(outFile, append(data, '\n'), 0o644); err != nil { //nolint:gosec // G306: export file is meant to be committed
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "exported to %s\n", outFile)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&outFile, "to", defaultSnapshotFile, "output file path")
+	return cmd
+}
+
+// --- import ---
+
+func newPlanImportCmd() *cobra.Command {
+	var inFile string
+	cmd := &cobra.Command{
+		Use:   "import",
+		Short: "Restore planning state from a JSON export",
+		Long: `Import planning state from a pql plan export file. Existing data
+is upserted (decisions, tickets) or replaced (refs, deps, labels,
+history).
+
+  pql plan import                         # reads pql-plan.json
+  pql plan import --from planning.json    # custom filename`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			data, err := os.ReadFile(inFile) //nolint:gosec // G304: user-specified import file
+			if err != nil {
+				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("read %s: %v", inFile, err)}
+			}
+
+			var snap repo.Snapshot
+			if err := json.Unmarshal(data, &snap); err != nil {
+				return &exitError{code: diag.DataErr, msg: fmt.Sprintf("parse %s: %v", inFile, err)}
+			}
+
+			if err := repo.Import(ctx, pdb.SQL(), &snap); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "imported from %s (%d decisions, %d tickets)\n",
+				inFile, len(snap.Decisions), len(snap.Tickets))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&inFile, "from", defaultSnapshotFile, "input file path")
+	return cmd
 }

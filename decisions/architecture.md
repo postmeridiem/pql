@@ -88,3 +88,10 @@ Core design constraints for pql.
 - **Rationale:** Build metadata in the version string is confusing to users and creates mismatches between the installed binary and the project manifest.
 - **Cost:** No way to tell which exact commit a binary was built from via `pql version` alone. `pql version --build-info` still includes the commit hash for debugging.
 - **Raised by:** User feedback after clide integration.
+
+### D-013: plan export and plan import for versioned planning snapshots
+- **Date:** 2026-04-22
+- **Decision:** `pql plan export` writes all planning state (decisions + tickets + refs + deps + labels + history) to a single JSON file at the vault root (default `pql-plan.json`). `pql plan import` restores from that file into pql.db. The artifact is committed to git; pql.db stays gitignored.
+- **Rationale:** Planning state is valuable enough to version but SQLite files don't belong in git. A JSON export is diffable, portable, and merge-friendly. The trigger is the user's choice — pre-push hook, sprint skill, manual — pql provides the verbs, not the policy.
+- **Cost:** Two representations of the same data (pql.db + export file) can drift. The export is a snapshot, not a live mirror. Users who want the export current must run `pql plan export` before committing.
+- **Raised by:** Resolved [Q-008](questions.md#q-008-occasional-pqldb-backups-into-git).
