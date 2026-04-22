@@ -124,7 +124,12 @@ func newVersionCmd() *cobra.Command {
 	return cmd
 }
 
-const longDescription = `pql indexes a markdown vault into SQLite and exposes intent-level tools so
-agents (Claude Code, primarily) can ask structural questions instead of falling
-back to grep+read. See docs/structure/{design-philosophy,project-structure}.md
-for the architecture and docs/pql-grammar.md for the query language.`
+var longDescription = fmt.Sprintf(`pql %s — Project Query Language
+
+Indexes a markdown vault into SQLite and exposes structural queries,
+ranked search, and project planning from the command line.
+
+  pql query "SELECT name WHERE fm.type = 'meeting'"
+  pql related notes/design.md
+  pql decisions list --type confirmed
+  pql plan status`, version.Version)
