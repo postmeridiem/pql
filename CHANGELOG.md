@@ -32,6 +32,11 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   only on TTY; piped input works silently. Blank lines, `--` comments,
   `exit`/`quit`, and Ctrl-D all behave as expected. Respects
   `--pretty`/`--jsonl`/`--limit`.
+- `pql base <name>` — compile and run an Obsidian `.base` YAML file
+  as a PQL query. Discovers `.base` files at the vault root; `--view`
+  selects a named view (default: first). `pql base` with no arguments
+  lists available bases. Filters, properties, and sort compile to the
+  same AST the DSL uses, so all output and exit-code contracts apply.
 
 ### Changed
 

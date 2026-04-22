@@ -15,7 +15,7 @@ what a fresh session should pick up; "Soon" and "Later" are runway.
   compiler/executor, print rows in the current `--format`. Needs: readline
   or equivalent (prefer stdlib `bufio` + terminal detection, not a new dep).
   Lands in `internal/cli/shell.go` + one integration test.
-- [ ] **`.base` compiler + `pql base <name>`** — translate Obsidian `.base`
+- [x] **`.base` compiler + `pql base <name>`** — translate Obsidian `.base`
   files into the PQL DSL AST, then run via the existing executor. Spec lives
   in `docs/pql-grammar.md`. Council vault has `testdata/council-snapshot/
   council-members.base` and `council-sessions.base` as ready-made fixtures.
