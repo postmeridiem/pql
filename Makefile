@@ -4,13 +4,10 @@ GO       ?= go
 BIN_DIR  ?= bin
 INSTALL_DIR ?= $(HOME)/.local/bin
 
-# Version stamping. Source of truth: project.yaml `version:` field. Local
-# builds augment with git short SHA + dirty marker (semver build metadata).
-# Tagged releases are handled by goreleaser, which uses the git tag instead.
-VERSION_BASE ?= $(shell awk -F': *' '/^version:/ {gsub(/[" ]/,"",$$2); print $$2; exit}' project.yaml)
+# Version stamping. Source of truth: project.yaml `version:` field.
+# Tagged releases are handled by goreleaser, which uses the git tag.
+VERSION      ?= $(shell awk -F': *' '/^version:/ {gsub(/[" ]/,"",$$2); print $$2; exit}' project.yaml)
 COMMIT       ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
-DIRTY        := $(shell git diff --quiet HEAD 2>/dev/null || echo .dirty)
-VERSION      ?= $(VERSION_BASE)+$(COMMIT)$(DIRTY)
 DATE         ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 LDFLAGS := -s -w \
