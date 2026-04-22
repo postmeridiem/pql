@@ -19,7 +19,12 @@ import (
 // both the bare-array-ref guard (compileRef) and the IN-membership
 // rewrite (arrayColumnExistsSQL/arrayMatchColumn). Constant so adding
 // inlinks/outlinks/etc. follows the same pattern.
-const colTags = "tags"
+const (
+	colTags     = "tags"
+	colOutlinks = "outlinks"
+	colInlinks  = "inlinks"
+	colHeadings = "headings"
+)
 
 // Compiled is the SQL + parameter list produced from an AST. Pass to a
 // store DB.QueryContext call directly.
@@ -268,12 +273,11 @@ func (c *compiler) ref(r *parse.Ref) error {
 			return nil
 		}
 		switch name {
-		case colTags, "inlinks", "outlinks", "headings", "body":
+		case colTags, colInlinks, colOutlinks, colHeadings, "body":
 			return &Error{
 				Code: "pql.eval.bare_array_ref",
 				Msg: fmt.Sprintf(
-					"%q is an array column and only meaningful as the right side of IN (e.g. 'foo' IN %s); "+
-						"projecting it as a scalar isn't supported in v1",
+					"%q is an array column — use it on the right side of IN (e.g. 'foo' IN %s)",
 					name, name),
 				Line: r.P.Line, Col: r.P.Col,
 			}
@@ -501,22 +505,39 @@ func (c *compiler) tuple(t *parse.Tuple) error {
 }
 
 // arrayColumnExistsSQL returns the inner SELECT of an EXISTS subquery
-// against a child table that holds opts.array semantics for files.
-// Returns the SQL prefix (without the trailing AND <col>=...) so the
-// caller can append the membership predicate.
-//
-// v1: tags only. outlinks/inlinks/headings membership lands in v1.x with
-// the resolution rules from initial-plan.md open question #6.
+// against a child table that holds array semantics for files. Returns the
+// SQL prefix (without the trailing AND <col>=...) so the caller can
+// append the membership predicate.
 func arrayColumnExistsSQL(name string) (string, bool) {
-	if name == colTags {
+	switch name {
+	case colTags:
 		return "SELECT 1 FROM tags WHERE tags.path = files.path", true
+	case colOutlinks:
+		return "SELECT 1 FROM links WHERE links.source_path = files.path", true
+	case colInlinks:
+		// Pragmatic resolution: target_path may be a full path, a basename
+		// (wikilinks), or basename without .md. Match any of those forms.
+		return `SELECT 1 FROM links WHERE (
+			links.target_path = files.path
+			OR links.target_path || '.md' = files.path
+			OR files.path LIKE '%/' || links.target_path || '.md'
+		)`, true
+	case colHeadings:
+		return "SELECT 1 FROM headings WHERE headings.path = files.path", true
 	}
 	return "", false
 }
 
 func arrayMatchColumn(name string) string {
-	if name == colTags {
+	switch name {
+	case colTags:
 		return "tags.tag"
+	case colOutlinks:
+		return "links.target_path"
+	case colInlinks:
+		return "links.source_path"
+	case colHeadings:
+		return "headings.text"
 	}
 	return ""
 }

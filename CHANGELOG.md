@@ -56,6 +56,11 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 - `pql plan status` — planning dashboard showing decision counts,
   open questions, ticket summary by status, and coverage gaps.
 
+- `outlinks`, `inlinks`, and `headings` are now usable in the PQL DSL
+  as array columns: `'brief' IN outlinks`, `'file.md' IN inlinks`,
+  `'Title' IN headings`. Supports `NOT IN` as well. Inlinks use
+  pragmatic resolution (full path, basename, basename without .md).
+
 ### Changed
 
 - Embedded Claude Code skill (`internal/skill/SKILL.md`) updated to
