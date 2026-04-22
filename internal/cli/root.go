@@ -124,7 +124,7 @@ func newVersionCmd() *cobra.Command {
 	return cmd
 }
 
-var longDescription = fmt.Sprintf(`pql %s — Project Query Language
+var longDescription = fmt.Sprintf(`Project Query Language %s
 
 Indexes a markdown vault into SQLite and exposes structural queries,
 ranked search, and project planning from the command line.
