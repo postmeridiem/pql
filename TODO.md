@@ -27,23 +27,14 @@ what a fresh session should pick up; "Soon" and "Later" are runway.
 
 ## Soon (v0.1.1 → v0.2)
 
-- [ ] **Planning subcommands (`decisions` + `ticket` + `plan`)** — full
+- [x] **Planning subcommands (`decisions` + `ticket` + `plan`)** — full
   spec in `docs/structure/planning.md`; architectural rationale in
   `docs/adr/0003-pql-db-for-user-state.md`. Replaces clide's Python
   stopgap at `/var/mnt/data/projects/clide/tools/scripts/plan` (the
   stopgap's sunset gate is feature parity against the same
-  `<vault>/.pql/pql.db` file). Seven-commit landing sequence:
-    1. `add internal/planning/ package skeleton + pql.db schema + migration runner`
-    2. `implement markdown parser for decisions/`
-    3. `implement decisions subcommands — sync, validate, claim, list, show`
-    4. `implement ticket subcommands — new, list, show, status, assign`
-    5. `implement ticket subcommands — block, unblock, team, label, board, search`
-    6. `implement cross-cutting pql plan — status, search, export`
-    7. `document new subcommands in pql README + skill cookbook`
-  Open questions tracked in `planning.md` (P-Q-002 mirror strategy,
-  P-Q-003 migration runner choice, P-Q-004 FTS, P-Q-005 multi-user,
-  P-Q-006 validator strictness). Resolve P-Q-003 before commit 1;
-  the rest can ride along with the verbs they touch.
+  `<vault>/.pql/pql.db` file). P-Q-003 resolved: in-house migration
+  runner (~50 lines). FTS search and ticket export deferred — see
+  open questions in `planning.md`.
 - [ ] **First distributed release** — tag `v0.1.0` on commit `0c4aa6a`,
   run `goreleaser release --clean --skip=publish` locally to verify the
   5-platform archive build works end-to-end against the current toolchain,
