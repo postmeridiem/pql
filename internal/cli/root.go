@@ -74,6 +74,7 @@ func newRootCmd() *cobra.Command {
 	pf.IntP("limit", "n", 0, "cap result count (0 = no limit)")
 	pf.Bool("quiet", false, "suppress stderr warnings")
 	pf.Bool("verbose", false, "emit per-phase timing diagnostics on stderr")
+	pf.Bool("flat-search", false, "force primitive path — no enrichment, no connections")
 
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newFilesCmd())
@@ -87,6 +88,9 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newQueryCmd())
 	cmd.AddCommand(newBaseCmd())
 	cmd.AddCommand(newShellCmd())
+	cmd.AddCommand(newRelatedCmd())
+	cmd.AddCommand(newSearchCmd())
+	cmd.AddCommand(newContextCmd())
 	cmd.AddCommand(newDecisionsCmd())
 	cmd.AddCommand(newTicketCmd())
 	cmd.AddCommand(newPlanCmd())
