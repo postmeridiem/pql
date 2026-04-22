@@ -36,3 +36,8 @@
 - **Status:** Open
 - **Question:** When does tree-sitter land? What languages first?
 - **Context:** The extractor registry is designed for it — register by file pattern, produce structured output. No changes to store, connect, or query. The open question is priority and whether the tree-sitter cgo dependency is acceptable.
+
+### Q-008: Occasional pql.db backups into git
+- **Status:** Open
+- **Question:** How should users snapshot planning state (pql.db) into version control? What events trigger it, and what's the artifact shape?
+- **Context:** pql.db is gitignored (lives under `.pql/`), but planning state — decisions synced, tickets created, status transitions — is valuable enough to version. Options: (1) `pql plan export --to pql-snapshot.json` writes a portable dump that *is* committed; (2) `pql ticket export --to tickets/` writes markdown mirrors per [Q-001](#q-001-markdown-mirror-for-tickets); (3) a hook on `pql decisions sync` or `pql ticket status` auto-exports. The gitignore pattern should stay as-is (`.pql/` ignored, caches never committed); the backup is a separate committed artifact, not the DB file itself. The trigger question is whether this is manual (`pql plan export`), semi-automatic (pre-commit hook), or event-driven (on every write).
