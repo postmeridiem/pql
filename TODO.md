@@ -60,24 +60,14 @@ what a fresh session should pick up; "Soon" and "Later" are runway.
 - [ ] **Further users of `pql.db`** — skill install lock migration,
   ranking-weight overrides.
 
-## Documentation debt
+## Documentation (shipped)
 
-- [ ] **Backfill two ADRs**: `docs/adr/0001-no-vectors.md` and
-  `0002-intents-not-primitives.md`. The slots exist in the plan, the
-  records don't.
-- [ ] **`docs/signals.md`** — signal catalog: what each measures, where
-  it shines, where it fails. Lands alongside the first `connect/signal/`
-  implementation, not before.
-- [ ] **`docs/compatibility.md`** — binary↔skill `schema_version`
-  negotiation. Stub exists; fill in when the skill actually reads
-  `pql version --build-info` output to gate itself.
+- [x] **ADRs → decisions/** — D-001 through D-005 + Q-001 through Q-004.
+- [x] **`docs/signals.md`** — signal catalog with all five shipped signals.
+- [x] **`docs/compatibility.md`** — version negotiation for binary/index/skill.
+- [x] **README.md** — rewritten for users finding the repo.
 
-## Housekeeping (ambient)
+## Housekeeping (shipped)
 
-- [ ] Turn the `ci/*.sh` scripts into the actual CI substance — today the
-  GitHub Actions workflows call `golangci-lint-action` / `goreleaser-action`
-  directly instead of `ci/lint.sh` and `ci/release.sh`. The indirection was
-  the design intent; the workflows drifted.
-- [ ] Add a tool directive (Go 1.24+) to `go.mod` pinning `golangci-lint`
-  alongside the `govulncheck@v1.2.0` pin in the Makefile, so contributors
-  don't need a separate brew install.
+- [x] CI workflows shell out to `ci/*.sh`.
+- [x] golangci-lint pinned via Go tool directive in `go.mod`.
