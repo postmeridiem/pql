@@ -2,7 +2,7 @@
 
 A Go CLI that indexes and queries any repo containing Markdown files with YAML frontmatter, wikilinks, tags, and Obsidian Bases. Ships as a single static binary, maintains a SQLite index in `<vault>/.pql/` (with a user-cache fallback for read-only vaults — see [`vault-layout.md`](../vault-layout.md)), exposes a SQL-derived query dialect (PQL — see [`pql-grammar.md`](../pql-grammar.md)), and is designed to be drop-in for AI agents (Claude Code, primarily) that need structural introspection without brute-force grep+read.
 
-> **Status note (2026-04):** this document is the original v1 design. Some of its framing has been superseded by `design-philosophy.md` (the binary as a *ranker* with intent-level surfaces) and the project structure approved in `project-structure.md`. The PQL DSL described below remains valid as the "flat" / escape-hatch surface; intent-level commands sit *above* it. Read all three documents together.
+> **Status note (2026-04):** this document is the original v1 design. Some of its framing has been superseded by `design-philosophy.md` (the binary as a *ranker* with intent-level surfaces), the project structure approved in `project-structure.md`, and the planning extension in `planning.md` (decisions + tickets backed by a second SQLite file). The PQL DSL described below remains valid as the "flat" / escape-hatch surface; intent-level commands sit *above* it; planning commands sit *beside* it against `pql.db`. Read these four documents together.
 
 ## Context and problem
 
@@ -19,7 +19,7 @@ There's a gap: **structural, cross-file querying of a prose-structured repositor
 
 - Not a Dataview replacement. PQL is its own SQL-derived language and runs outside Obsidian; Dataview lives inside the app and stays there. Inspiration credit in the README.
 - Not a generic "query anything" tool. Code → use tree-sitter/LSP. Configs → use jq/yq. Raw text → use ripgrep. `pql` is for Markdown + frontmatter + wikilinks + tags + Bases.
-- Not a write tool. Queries and introspection only. Edits go through the filesystem directly (which Obsidian's watcher picks up).
+- Does not write to **vault content files.** Markdown is authored by the user (or their editor, which Obsidian's watcher picks up). Pql never mutates vault notes — no "edit this frontmatter field" CLI. Pql *does* own state under `<vault>/.pql/` (the regenerable `index.db`, the skill install lock, and from the planning feature onward a user-authored `pql.db` per `docs/adr/0003-pql-db-for-user-state.md` and `docs/structure/planning.md`). The "read-only against the vault" line was sharper than intended in the original draft; the load-bearing rule is **read-only against vault content, full ownership of `.pql/`.**
 - No `dataviewjs` or JavaScript evaluation.
 - No inline-field parsing (`Rating:: 5` mid-paragraph) in v1. Revisit if users demand it.
 - No GUI, no web UI, no network daemon. CLI in, JSON out.
@@ -29,7 +29,7 @@ There's a gap: **structural, cross-file querying of a prose-structured repositor
 Three artefacts, one repo:
 
 1. **`pql` binary** — single static Go executable, cross-compiled to `linux/{amd64,arm64}`, `darwin/{amd64,arm64}`, `windows/amd64`. Distributed via GitHub Releases at https://github.com/postmeridiem/pql with SHA256 sums and cosign signatures.
-2. **SQLite index** at `<vault>/.pql/index.sqlite` by default (analogous to `.git/`); falls back to a per-user cache dir when the vault is read-only. Either way, regenerable from the vault. Full convention in [`vault-layout.md`](../vault-layout.md).
+2. **SQLite index** at `<vault>/.pql/index.db` by default (analogous to `.git/`); falls back to a per-user cache dir when the vault is read-only. Either way, regenerable from the vault. Full convention in [`vault-layout.md`](../vault-layout.md).
 3. **Claude Code skill** at `internal/skill/SKILL.md` inside this repo (embedded into the binary via `go:embed`), with install instructions. `pql skill install` drops it into the consuming project's `.claude/skills/pql/` (or `~/.claude/skills/pql/` with `--user`). Documents trigger phrases, common query recipes, anti-patterns, and the install check.
 
 ## Architecture
@@ -295,7 +295,9 @@ All writes in a single `BEGIN IMMEDIATE` transaction per invocation. Readers are
 
 ### Migrations
 
-`schema_version` in `index_meta`. On mismatch, drop the DB file and rebuild — the index is a cache; never store anything that isn't regenerable from the vault. This keeps migration code at zero. If/when we ever store user-authored state in the DB, we add migrations then and not before.
+`schema_version` in `index_meta`. On mismatch, drop `index.db` and rebuild — the index is a cache; never store anything in it that isn't regenerable from the vault. This keeps migration code at zero *for the index*.
+
+User-authored state lives in a separate file (`<vault>/.pql/pql.db` — first real user is the planning feature; see `docs/adr/0003-pql-db-for-user-state.md` and `docs/structure/planning.md`). That store *does* use forward-only migrations, because losing the data is a bug rather than a cache refresh. The two regimes coexist: drop-and-rebuild for `index.db`, real migrations for `pql.db`.
 
 ## Obsidian Bases as first-class queries
 

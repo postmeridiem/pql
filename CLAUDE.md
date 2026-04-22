@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Early scaffolding.** The repo has the build skeleton (`Makefile`, `.goreleaser.yaml`, `.golangci.yaml`, `ci/*.sh`, `go.mod`, `cmd/pql/main.go`, `internal/{cli,version,diag}`), the docs structure, and the Claude scaffolding. The Tier-2 packages described in `docs/structure/project-structure.md` (`internal/store/`, `internal/index/`, `internal/query/…`, `internal/connect/…`, `internal/intent/…`) are **not yet scaffolded** — they land alongside their first feature so empty package directories don't sit in the tree.
+**Early scaffolding.** Build skeleton, docs structure, and Claude scaffolding are in place. `internal/store/` and `internal/index/` shipped in 0.1.0 along with the primitive query surface (`pql files|tags|backlinks|outlinks|meta|schema|query`). The Tier-2 packages described in `docs/structure/project-structure.md` (`internal/query/…` deeper layers, `internal/connect/…`, `internal/intent/…`, `internal/planning/…`) are **not yet scaffolded** — they land alongside their first feature so empty package directories don't sit in the tree.
 
 **Read these before designing or writing code:**
 - `project.yaml` — single source of truth for project metadata: name, description, current declared version, license, repo, module path, schema_version, maintainers. The Makefile sources `VERSION` from here; the skill checks `schema_version` against this. Bump fields here rather than scattering them.
 - `docs/structure/design-philosophy.md` — binding "why" doc. The binary is a *ranker* with intent-level surfaces. Generate vs rank as separate phases. Provenance is data. One SQLite store. No vectors. Narrow scope.
 - `docs/structure/project-structure.md` — canonical layout, build pipeline, test infrastructure, growth model.
 - `docs/structure/initial-plan.md` — original v1 plan (PQL grammar, SQLite schema, CLI specifics). Some framing superseded by the philosophy + structure docs; grammar/schema/exit-codes still authoritative.
-- `docs/vault-layout.md` — the three vault-level conventions (`.pql/config.yaml`, `.pqlignore`, `.pql/`). The index defaults to `<vault>/.pql/index.sqlite` (in-vault, like `.git/`); falls back to user cache on read-only vaults.
+- `docs/structure/planning.md` — spec for `pql decisions` / `pql ticket` / `pql plan`. First real writer to the user-state DB (`pql.db`), distinct from the cache (`index.db`).
+- `docs/adr/0003-pql-db-for-user-state.md` — the cache (`index.db`) vs user-authored state (`pql.db`) split. Read before touching anything that persists under `.pql/`.
+- `docs/vault-layout.md` — the three vault-level conventions (`.pql/config.yaml`, `.pqlignore`, `.pql/`). The index defaults to `<vault>/.pql/index.db` (in-vault, like `.git/`); falls back to user cache on read-only vaults. Planning state lives beside it at `<vault>/.pql/pql.db` — no cache fallback, writes to a read-only vault fail cleanly.
 - `docs/pqlignore.md` — gitignore-compatible exclusion file spec.
 - `docs/watching.md` — `pql watch` toggle command spec. Explicit user invocation only; one watcher per vault; no daemon, no cross-vault registry.
 
@@ -29,13 +31,13 @@ These are load-bearing — preserve them when implementing. Full rationale in th
 - **`--flat-search` global flag** forces the primitive path on any subcommand, including intents that default to enriched. Single short-circuit in `cli/` — no per-subcommand wiring.
 - **Generate vs rank as separate packages.** Neither imports the other. Generation is wide and cheap; ranking is bounded and careful.
 - **Provenance is data, not a cross-cutting concern.** Each signal returns `Contribution{Name, Raw, Normalized, Weight}`; the combiner aggregates. Don't centralize into an `explain.go`.
-- **Consumer-agnostic core.** `internal/intent/` and below must not import `internal/cli/`. CLI today, possibly MCP server later — both adapters.
-- **Index is a pure cache.** Anything in SQLite must be regenerable. Schema versioned via `internal/version.SchemaVersion`; on mismatch, drop the DB and rebuild — no migration code.
+- **Consumer-agnostic core.** `internal/intent/`, `internal/query/`, and `internal/planning/` must not import `internal/cli/`. CLI today, MCPs (plural) tomorrow — a query-surface MCP and a planning-surface MCP are different scopes, different permissions, different audiences. Every consumer is an adapter.
+- **Two stores, two regimes.** `<vault>/.pql/index.db` is a pure cache — anything in it must be regenerable from the vault; on `schema_version` mismatch, drop and rebuild (no migration code). `<vault>/.pql/pql.db` is user-authored state (planning, skill state later) — forward-only migrations in `internal/planning/schema.go`, because losing this data is a bug, not a cache refresh. See `docs/adr/0003-pql-db-for-user-state.md`.
 - **Output contract is load-bearing for agents.** stdout JSON, stderr JSON-per-line diagnostics, exit codes 0/2/64/65/66/69/70 — distinguished. `2` (zero matches) is success, not an error. See `internal/diag/diag.go` and `docs/output-contract.md`.
 
 ## Build & test
 
-Go is currently **not installed** on the dev machine. `make build` will fail until `brew install go` (or equivalent). The skeleton is hand-written and syntactically intended to compile once Go is present.
+Go 1.26+ is installed on the dev machine; `make build`, `make test`, and the rest of the targets below run locally.
 
 | Command | Does |
 |---|---|
@@ -72,4 +74,6 @@ The Council vault at `/var/mnt/data/projects/council/` is the motivating fixture
 | New intent | `internal/intent/<name>/` + `internal/cli/intent_<name>.go` | 2 new |
 | New signal | `internal/connect/signal/<name>.go` + weight entries per intent | 1 new + N edits |
 | New extractor (Logseq, code) | `internal/index/extractor/<name>/` + registry registration | 1 new subpackage |
-| New consumer (e.g. MCP server) | `cmd/pql-mcp/` reusing `internal/intent/`, `internal/query/` | enabled by consumer-agnostic core discipline |
+| New planning verb | `internal/planning/repo/` method + `internal/cli/{decisions,ticket,plan}_<verb>.go` | 1 new CLI file + method on repo |
+| New pql.db table | `internal/planning/schema.go` forward migration + repo helpers | 1 migration step + repo additions |
+| New consumer (MCPs) | `cmd/pql-mcp-query/` reusing `internal/intent/`+`internal/query/`; `cmd/pql-mcp-plan/` reusing `internal/planning/` | enabled by consumer-agnostic core discipline; query and planning ship as separate binaries |

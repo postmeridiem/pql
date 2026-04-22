@@ -14,15 +14,17 @@ The convention is the same shape developers already know from git: a tool-manage
 
 `pql` stores its index and any derived per-vault data inside the vault at `<vault>/.pql/`. Contents in v1:
 
-- `index.sqlite` — the SQLite index described in `structure/initial-plan.md` § "The SQLite index".
-- `index.sqlite-wal`, `index.sqlite-shm` — SQLite WAL sidecar files.
+- `index.db` — the SQLite index described in `structure/initial-plan.md` § "The SQLite index". Pure cache; regenerable from the vault; drop-and-rebuild on schema-version mismatch.
+- `index.db-wal`, `index.db-shm` — SQLite WAL sidecar files.
+- `pql.db` — user-authored state (planning decisions and tickets). Lands with the `pql decisions` / `pql ticket` / `pql plan` commands per `structure/planning.md`. Forward-only migrations; losing this file loses user data (unlike `index.db`). Rationale in `adr/0003-pql-db-for-user-state.md`.
+- `pql.db-wal`, `pql.db-shm` — SQLite WAL sidecars for the state store.
 
 Files that may join later (additive, no schema break):
 
 - `bases/<name>.ast.json` — compiled `.base` ASTs (cache for `pql base <name>`)
 - `ranking/weights.json` — exportable weight profile if a user wants to version-control it alongside the vault
-- `skill/version.json` — last successful skill compatibility handshake
 - `watch.pid` — set by `pql watch` while a foreground watcher is running for this vault; removed on graceful shutdown. See [`watching.md`](watching.md).
+- (The skill install lock currently lives at `.pql-install.json`; it may migrate into a `skill_state` table in `pql.db` once that store exists.)
 
 ### Why in-vault instead of a user cache directory
 
@@ -39,9 +41,9 @@ The trade-off is that pql writes inside the vault directory. This does not viola
 
 For vaults where pql can't write — read-only mounts, ephemeral CI checkouts, shared network filesystems — pql falls back to a per-user cache at `<user-cache>/pql/<vault-fingerprint>/`:
 
-- Linux: `${XDG_CACHE_HOME:-~/.cache}/pql/<fingerprint>/index.sqlite`
-- macOS: `~/Library/Caches/pql/<fingerprint>/index.sqlite`
-- Windows: `%LocalAppData%\pql\<fingerprint>\index.sqlite`
+- Linux: `${XDG_CACHE_HOME:-~/.cache}/pql/<fingerprint>/index.db`
+- macOS: `~/Library/Caches/pql/<fingerprint>/index.db`
+- Windows: `%LocalAppData%\pql\<fingerprint>\index.db`
 
 The fallback triggers when creating `<vault>/.pql/` fails with `EROFS`, `EACCES`, or `EPERM`. `pql doctor` reports which path is in use and which rule chose it.
 
@@ -95,8 +97,8 @@ A single `pql` invocation, in order:
 
 1. Resolve the vault root (CLI/env/walk-up — see `internal/config/discover.go`).
 2. Load `.pql/config.yaml` if present (vault-local, then `~/.config/pql/config.yaml` global).
-3. Resolve the index location: `--db` / `PQL_DB` / `db:` override → otherwise `<vault>/.pql/index.sqlite` → fall back to user cache if the vault is read-only.
-4. Open or create the index, applying or verifying the v1 schema.
+3. Resolve the index location: `--db` / `PQL_DB` / `db:` override → otherwise `<vault>/.pql/index.db` → fall back to user cache if the vault is read-only.
+4. Open or create the index, applying or verifying the v1 schema. (State-store commands also open `<vault>/.pql/pql.db` lazily; no cache fallback — a write-intent command against a read-only vault fails with a clear diagnostic.)
 5. Compose the active ignore matcher stack: built-in non-overridable defaults + each file in `ignore_files` (in order, later wins) + `exclude:` patterns from YAML (highest priority).
 6. Hand control to the requested subcommand.
 

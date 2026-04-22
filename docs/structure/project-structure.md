@@ -17,8 +17,8 @@ This document is the canonical reference for `pql`'s repository layout, build pi
 - **Always an off-switch for enrichment.** A global `--flat-search` flag forces raw query results — disables `connect/` entirely, even on intent subcommands that would otherwise enrich by default. *"Sometimes you just need the exact result queried exactly where you want it to look."* The DSL path (`pql query <DSL>`) is already flat by default and doubles as the explicit "give me only what I asked for" entry point; `--flat-search` covers the cross-cutting case so any subcommand can be reduced to its primitive layer.
 - **Generate wide, rank careful, return sparingly.** Architecturally separate packages; neither imports the other.
 - **Provenance is data, not a cross-cutting concern.** Each signal returns its own `Contribution{Name, Raw, Normalized, Weight}`; the combiner aggregates. No central `explain.go`.
-- **Consumer-agnostic core.** `internal/intent/` and below must not import `internal/cli/`. CLI today, MCP server tomorrow — both adapters.
-- **One store, one transaction, one artifact.** SQLite with FTS5; schema versioned; drop-and-rebuild on mismatch (the index is a pure cache).
+- **Consumer-agnostic core.** `internal/intent/`, `internal/query/`, and `internal/planning/` must not import `internal/cli/`. CLI today, MCPs (plural) tomorrow — a query-surface MCP and a planning-surface MCP are different scopes, different permissions, different audiences; no reason to assume one fused server. Every consumer is an adapter.
+- **Two stores, two regimes.** `<vault>/.pql/index.db` is the regenerable cache — SQLite with FTS5; schema versioned; drop-and-rebuild on mismatch. `<vault>/.pql/pql.db` is user-authored state (planning, possibly other features later) — forward-only migrations, lazily created by the first writer. The split is codified in `docs/adr/0003-pql-db-for-user-state.md`.
 
 ## Directory layout
 
@@ -32,6 +32,9 @@ pql/
 │   │   ├── query_*.go                # primitive query subcommands (files, tags, backlinks, outlinks, schema, meta)
 │   │   ├── intent_*.go               # intent subcommands (related, search, context, base)
 │   │   ├── dsl.go                    # `pql query <DSL>` escape hatch
+│   │   ├── decisions_*.go            # planning: `pql decisions …` (see planning.md)
+│   │   ├── ticket_*.go               # planning: `pql ticket …`
+│   │   ├── plan_*.go                 # planning: `pql plan …` (cross-cutting)
 │   │   ├── render/                   # JSON / JSONL / table / CSV; exit-code mapping
 │   │   └── integration_test.go       # //go:build integration — shells the binary
 │   ├── query/                        # primitive query surface (query engine feel)
@@ -53,6 +56,12 @@ pql/
 │   │   ├── search/
 │   │   ├── context/
 │   │   └── …                         # NEW INTENT = NEW SUBPACKAGE + one cli/intent_*.go file
+│   ├── planning/                     # decisions + tickets; writes to pql.db (see planning.md, ADR 0003)
+│   │   ├── db.go                     # opens <vault>/.pql/pql.db; applies migrations
+│   │   ├── schema.go                 # schema SQL + forward-only migration runner (distinct from store/)
+│   │   ├── parser/                   # decisions/*.md → []Record (regex per planning.md)
+│   │   ├── repo/                     # decisions.go, tickets.go: upsert, list, joins, history
+│   │   └── format/                   # markdown / json / table renderers for joined views
 │   ├── index/                        # walker, parsers, incremental update
 │   │   ├── walker.go
 │   │   ├── extractor/                # Registry pattern — extractors register by file pattern
@@ -60,7 +69,7 @@ pql/
 │   │   │   ├── code/                 # placeholder; tree-sitter later
 │   │   │   └── registry.go
 │   │   └── incremental.go            # change detection, mtime + content_hash
-│   ├── store/                        # SQLite layer
+│   ├── store/                        # SQLite layer for index.db (the cache)
 │   │   ├── schema/                   # versioned SQL
 │   │   ├── migrate.go                # drop-and-rebuild on schema_version mismatch
 │   │   ├── conn.go                   # WAL, BEGIN IMMEDIATE per indexer invocation
@@ -82,14 +91,15 @@ pql/
 │   ├── structure/
 │   │   ├── design-philosophy.md      # source of truth for "why"
 │   │   ├── initial-plan.md           # original v1 plan; grammar/schema/CLI specifics
-│   │   └── project-structure.md      # this file
+│   │   ├── project-structure.md      # this file
+│   │   └── planning.md               # decisions + tickets spec (pql.db, the state store)
 │   ├── intents.md                    # intent catalog + per-intent contract
 │   ├── signals.md                    # signal catalog: what it measures, where it shines/fails
 │   ├── pql-grammar.md                # DSL grammar
 │   ├── output-contract.md            # stdout JSON, stderr JSON, exit codes (0/2/65/66/69)
 │   ├── compatibility.md              # binary↔skill schema_version negotiation
 │   ├── skill.md
-│   └── adr/                          # ADRs; first two: 0001-no-vectors.md, 0002-intents-not-primitives.md
+│   └── adr/                          # ADRs: 0001-no-vectors, 0002-intents-not-primitives, 0003-pql-db-for-user-state
 ├── examples/
 ├── ci/                               # entry scripts shelled out to by .github/workflows/*.yaml
 │   ├── lint.sh                       # golangci-lint + goreleaser check + govulncheck
@@ -108,7 +118,7 @@ pql/
 └── LICENSE                           # MIT
 ```
 
-> **Tier-2 packages.** Many of the directories above (`internal/store/`, `internal/index/`, `internal/query/…`, `internal/connect/…`, `internal/intent/…`, `tools/eval-report/`, `testdata/`) are **planned**, not yet scaffolded. They land alongside their first feature so empty package directories don't sit in the tree.
+> **Tier-2 packages.** Many of the directories above (`internal/query/…`, `internal/connect/…`, `internal/intent/…`, `internal/planning/…`, `tools/eval-report/`) are **planned**, not yet scaffolded. They land alongside their first feature so empty package directories don't sit in the tree. `internal/store/` and `internal/index/` already exist (0.1.0 shipped them); `testdata/council-snapshot/` is populated; `internal/planning/` arrives with the first decisions/ticket commit per `planning.md`.
 
 ## The query → connect → bundle pipeline
 
@@ -137,8 +147,10 @@ cli/render                               ← stdout JSON; provenance inline in c
 | New intent | `internal/intent/<name>/` + `internal/cli/intent_<name>.go` | 2 new files |
 | New signal | `internal/connect/signal/<name>.go` + weight entries per intent | 1 new file + N-line edits |
 | New extractor | `internal/index/extractor/<name>/` + registry registration | 1 new subpackage |
-| New consumer (MCP) | `cmd/pql-mcp/` reusing `internal/intent/…`, `internal/query/…` | Bounded by consumer-agnostic core discipline |
-| Code-aware indexing | `internal/index/extractor/code/` with tree-sitter | No changes to `store/`, `connect/`, `query/` |
+| New planning verb | `internal/planning/repo/` method + `internal/cli/{decisions,ticket,plan}_<verb>.go` | 1 new CLI file + method on repo |
+| New pql.db table | `internal/planning/schema.go` forward migration + repo helpers | 1 migration step + repo additions |
+| New consumer (MCPs) | `cmd/pql-mcp-query/` reusing `internal/intent/`+`internal/query/`; `cmd/pql-mcp-plan/` reusing `internal/planning/` | Bounded by consumer-agnostic core discipline; query surface and planning surface can ship as separate binaries |
+| Code-aware indexing | `internal/index/extractor/code/` with tree-sitter | No changes to `store/`, `connect/`, `query/`, `planning/` |
 
 ## Test infrastructure
 
