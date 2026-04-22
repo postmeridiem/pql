@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,8 @@ import (
 	"github.com/postmeridiem/pql/internal/cli/render"
 	"github.com/postmeridiem/pql/internal/config"
 	"github.com/postmeridiem/pql/internal/diag"
+	"github.com/postmeridiem/pql/internal/planning"
+	"github.com/postmeridiem/pql/internal/planning/repo"
 	"github.com/postmeridiem/pql/internal/skill"
 )
 
@@ -28,6 +31,14 @@ type initResult struct {
 	Gitignore   initGitignore    `json:"gitignore"`
 	Skill       initSkillStat    `json:"skill"`
 	Permissions initPermissions  `json:"permissions"`
+	PlanImport  initPlanImport   `json:"plan_import"`
+}
+
+type initPlanImport struct {
+	File     string `json:"file,omitempty"`
+	Imported bool   `json:"imported"`
+	Count    int    `json:"count,omitempty"`
+	Skipped  string `json:"skipped,omitempty"`
 }
 
 type initPermissions struct {
@@ -151,6 +162,7 @@ drift.`,
 			}
 
 			permStat := ensurePqlPermissions(dir)
+			planStat := autoImportPlan(cmd.Context(), dir)
 
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
@@ -162,6 +174,7 @@ drift.`,
 				Gitignore:   giStat,
 				Skill:       skillStat,
 				Permissions: permStat,
+				PlanImport:  planStat,
 			}
 			if _, err := render.One(result, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
@@ -458,4 +471,37 @@ func ensurePqlPermissions(dir string) initPermissions {
 	}
 	stat.Added = added
 	return stat
+}
+
+func autoImportPlan(ctx context.Context, dir string) initPlanImport {
+	snapPath := filepath.Join(dir, defaultSnapshotFile)
+	data, err := os.ReadFile(snapPath) //nolint:gosec // G304: known snapshot file in vault root
+	if err != nil {
+		return initPlanImport{Skipped: "no " + defaultSnapshotFile + " found"}
+	}
+
+	var snap repo.Snapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return initPlanImport{File: snapPath, Skipped: "parse error: " + err.Error()}
+	}
+
+	if len(snap.Decisions) == 0 && len(snap.Tickets) == 0 {
+		return initPlanImport{File: snapPath, Skipped: "snapshot is empty"}
+	}
+
+	pdb, err := planning.Open(ctx, dir)
+	if err != nil {
+		return initPlanImport{File: snapPath, Skipped: "open pql.db: " + err.Error()}
+	}
+	defer func() { _ = pdb.Close() }()
+
+	if err := repo.Import(ctx, pdb.SQL(), &snap); err != nil {
+		return initPlanImport{File: snapPath, Skipped: "import: " + err.Error()}
+	}
+
+	return initPlanImport{
+		File:     snapPath,
+		Imported: true,
+		Count:    len(snap.Decisions) + len(snap.Tickets),
+	}
 }
