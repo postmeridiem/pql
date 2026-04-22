@@ -13,6 +13,7 @@ import (
 	"github.com/postmeridiem/pql/internal/index"
 	"github.com/postmeridiem/pql/internal/intent/related"
 	"github.com/postmeridiem/pql/internal/store"
+	"github.com/postmeridiem/pql/internal/telemetry"
 )
 
 func newRelatedCmd() *cobra.Command {
@@ -38,27 +39,39 @@ func runIntent(
 	fn func(ctx context.Context, st *store.Store, cfg *config.Config) ([]connect.Enriched, error),
 ) error {
 	ctx := cmd.Context()
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	tm := telemetry.New(verbose)
+	defer tm.Emit()
+
+	stopCfg := tm.Start("config")
 	cfg, err := config.Load(loadOptsFromFlags(cmd))
+	stopCfg()
 	if err != nil {
 		return &exitError{code: diag.NoInput, msg: err.Error()}
 	}
 
+	stopStore := tm.Start("store_open")
 	st, err := store.Open(ctx, cfg.DBPath)
+	stopStore()
 	if err != nil {
 		return &exitError{code: diag.Unavail, msg: err.Error()}
 	}
 	defer func() { _ = st.Close() }()
 
+	stopIndex := tm.Start("index")
 	if _, err := index.New(st, cfg).Run(ctx); err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}
 	}
+	stopIndex()
 
 	flatSearch, _ := cmd.Flags().GetBool("flat-search")
 	if flatSearch {
 		return runFlatFallback(cmd, st, cfg, targetPath)
 	}
 
+	stopEnrich := tm.Start("enrich")
 	results, err := fn(ctx, st, cfg)
+	stopEnrich()
 	if err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}
 	}
