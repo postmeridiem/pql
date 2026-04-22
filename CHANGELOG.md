@@ -53,6 +53,8 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   `assign`, `block`/`unblock`, `team`, `label`, `board`. Full
   lifecycle from backlog to done with state-machine enforcement,
   history tracking, decision joins, and kanban board view.
+- `pql plan status` — planning dashboard showing decision counts,
+  open questions, ticket summary by status, and coverage gaps.
 
 ### Changed
 
