@@ -45,38 +45,20 @@ what a fresh session should pick up; "Soon" and "Later" are runway.
 - [x] **`pql watch`** — fsnotify loop with 250ms debounce, pid file
   coordination, start/stop/status subcommands.
 
-## Later (v0.3+)
+## Shipped in 1.0
 
-- [ ] **Enrichment layer (`internal/connect/`)** — the query → connect →
-  bundle pipeline. Packages: `connect/signal/`, `connect/rank/`,
-  `connect/neighborhood/`, `connect/bundle/`. Wires up via the `--connect`
-  flag (off by default on primitives, on by default on intents). Global
-  `--flat-search` short-circuits enrichment from any subcommand. See
-  `docs/structure/design-philosophy.md` and the pipeline diagram in
-  `docs/structure/project-structure.md`.
-- [ ] **First intents (`internal/intent/`)** — `related`, `search`,
-  `context`. Each is `internal/intent/<name>/` (weights + query composition)
-  + `internal/cli/intent_<name>.go` (cobra wiring). Two files per intent.
-- [ ] **Ranking-quality eval harness** — `internal/connect/rank/eval_test.go`
-  gated by `//go:build eval`. Goldens at `internal/connect/rank/testdata/
-  golden/*.json`. Reports NDCG@k / MRR / P@k + per-signal contribution
-  diffs vs. the previous baseline. `make eval` + `make eval-baseline`.
-- [ ] **Telemetry (`internal/telemetry/`)** — per-phase timings
-  (`generate_ms`, `rank_ms`, per-signal ms) into the stderr diagnostic
-  stream on `--verbose`. Load-bearing for honest weight-tuning.
-- [ ] **`pql self-update`** — once v0.1 is distributed. Hits the configured
-  release endpoint, verifies SHA256, replaces atomically. Design in
-  `docs/structure/initial-plan.md`.
+- [x] **Enrichment layer** — five signals, normalization, ranking, neighborhood.
+- [x] **Intents** — `related`, `search`, `context` with `--flat-search`.
+- [x] **Eval harness** — NDCG@k, MRR, P@k with golden test cases.
+- [x] **Telemetry** — per-phase timings on `--verbose`.
+- [x] **Self-update** — GitHub Releases API, SHA256, atomic replace.
+
+## Later (v1.x+)
+
 - [ ] **Code-aware extractor** — `internal/index/extractor/code/` with
-  tree-sitter. Doesn't require changes to `store/`, `connect/`, or `query/`
-  (the point of the registry pattern).
-- [ ] **Further users of `<vault>/.pql/pql.db`** — the user-state store
-  gets cut in "Soon" alongside the planning subcommands (see
-  `docs/adr/0003-pql-db-for-user-state.md`). Once planning is in, consider
-  moving the skill install lock (`.pql-install.json`) into a `skill_state`
-  table there, and keep the door open for ranking-weight overrides once
-  the eval harness makes "hand-tuned weights per vault" a thing worth
-  persisting. Neither is urgent; file under "when the first caller appears."
+  tree-sitter.
+- [ ] **Further users of `pql.db`** — skill install lock migration,
+  ranking-weight overrides.
 
 ## Documentation debt
 

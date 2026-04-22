@@ -154,11 +154,11 @@ func Install(dir string, force bool) (*Status, error) {
 		}
 	}
 
-	if err := os.MkdirAll(dir, 0o750); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // G301: committed dir needs group/other read
 		return nil, fmt.Errorf("skill: mkdir %s: %w", dir, err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, SkillFile), []byte(embedded), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, SkillFile), []byte(embedded), 0o644); err != nil { //nolint:gosec // G306: committed file needs group/other read
 		return nil, fmt.Errorf("skill: write SKILL.md: %w", err)
 	}
 
@@ -168,7 +168,7 @@ func Install(dir string, force bool) (*Status, error) {
 		InstalledAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	lockData, _ := json.MarshalIndent(lock, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, LockFile), append(lockData, '\n'), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, LockFile), append(lockData, '\n'), 0o644); err != nil { //nolint:gosec // G306: committed file needs group/other read
 		return nil, fmt.Errorf("skill: write lock: %w", err)
 	}
 

@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -22,10 +23,17 @@ import (
 // initResult is the JSON shape `pql init` emits on stdout. Each sub-stat
 // describes one of the project-state fixers init runs through.
 type initResult struct {
-	Directory string         `json:"directory"`
-	Config    initConfigStat `json:"config"`
-	Gitignore initGitignore  `json:"gitignore"`
-	Skill     initSkillStat  `json:"skill"`
+	Directory   string           `json:"directory"`
+	Config      initConfigStat   `json:"config"`
+	Gitignore   initGitignore    `json:"gitignore"`
+	Skill       initSkillStat    `json:"skill"`
+	Permissions initPermissions  `json:"permissions"`
+}
+
+type initPermissions struct {
+	Path    string   `json:"path,omitempty"`
+	Added   []string `json:"added,omitempty"`
+	Existed bool     `json:"existed"`
 }
 
 type initConfigStat struct {
@@ -142,15 +150,18 @@ drift.`,
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
+			permStat := ensurePqlPermissions(dir)
+
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			result := &initResult{
-				Directory: dir,
-				Config:    cfgStat,
-				Gitignore: giStat,
-				Skill:     skillStat,
+				Directory:   dir,
+				Config:      cfgStat,
+				Gitignore:   giStat,
+				Skill:       skillStat,
+				Permissions: permStat,
 			}
 			if _, err := render.One(result, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
@@ -385,4 +396,66 @@ func promptYesNo(r io.Reader, w io.Writer, question string, defaultYes bool) (bo
 		return false, nil
 	}
 	return false, fmt.Errorf("unrecognised answer %q (expected y or n)", answer)
+}
+
+var requiredPermissions = []string{"Bash(pql)", "Bash(pql *)"}
+
+func ensurePqlPermissions(dir string) initPermissions {
+	settingsPath := filepath.Join(dir, ".claude", "settings.json")
+	stat := initPermissions{Path: settingsPath}
+
+	data, err := os.ReadFile(settingsPath) //nolint:gosec // G304: project settings file
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return stat
+		}
+		data = []byte("{}")
+	}
+	stat.Existed = !errors.Is(err, os.ErrNotExist)
+
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return stat
+	}
+
+	perms, _ := settings["permissions"].(map[string]any)
+	if perms == nil {
+		perms = make(map[string]any)
+		settings["permissions"] = perms
+	}
+
+	allowRaw, _ := perms["allow"].([]any)
+	existing := make(map[string]bool)
+	for _, v := range allowRaw {
+		if s, ok := v.(string); ok {
+			existing[s] = true
+		}
+	}
+
+	var added []string
+	for _, perm := range requiredPermissions {
+		if !existing[perm] {
+			allowRaw = append(allowRaw, perm)
+			added = append(added, perm)
+		}
+	}
+
+	if len(added) == 0 {
+		return stat
+	}
+
+	perms["allow"] = allowRaw
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return stat
+	}
+
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil { //nolint:gosec // G301: .claude/ is committed
+		return stat
+	}
+	if err := os.WriteFile(settingsPath, append(out, '\n'), 0o644); err != nil { //nolint:gosec // G306: settings file is committed
+		return stat
+	}
+	stat.Added = added
+	return stat
 }

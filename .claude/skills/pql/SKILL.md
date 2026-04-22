@@ -23,33 +23,37 @@ planning layer for decision records and tickets. One binary, two surfaces.
 command -v pql
 ```
 
-If absent, tell the user to install from the repo. Don't install it yourself.
+If absent, tell the user to install from
+https://github.com/postmeridiem/pql/releases/latest. Don't install it
+yourself. Don't fall back to grep unless the user explicitly asks.
 
----
-
-## Surface 1: Vault queries
-
-### First touch
+## First touch: learn the vault
 
 ```bash
 pql schema
 ```
 
-Returns frontmatter keys with observed types and file counts. Run once per session before writing queries.
+Returns one row per frontmatter key with observed types and file counts.
+Run once per session before writing queries.
+
+---
+
+## Surface 1: Vault queries
 
 ### Subcommands
 
 | Command | Purpose |
 |---|---|
-| `pql files [glob]` | List indexed files |
+| `pql files [glob]` | List indexed files; optional glob filter |
 | `pql tags [--sort count]` | Distinct tags with counts |
 | `pql backlinks <path>` | Files linking TO a path |
 | `pql outlinks <path>` | Links FROM a file |
 | `pql meta <path>` | Frontmatter + tags + outlinks + headings for one file |
 | `pql schema` | Typed frontmatter schema |
 | `pql base <name>` | Execute an Obsidian .base file |
-| `pql shell` | Interactive REPL |
-| `pql query "<DSL>"` | SQL-derived DSL |
+| `pql shell` | Interactive REPL (indexes once, then query per line) |
+| `pql query "<DSL>"` | SQL-derived DSL for complex queries |
+| `pql doctor` | Resolved vault/config/DB/index state |
 
 ### DSL examples
 
@@ -59,7 +63,8 @@ SELECT path WHERE 'project' IN tags ORDER BY path
 SELECT name, fm.prior_job WHERE fm.type = 'council-member' ORDER BY name
 ```
 
-Use `--file q.pql` or `--stdin` for long queries. Don't interpolate vault content into the command line.
+Use `--file q.pql` or `--stdin` for long queries. Don't interpolate vault
+content into the command line.
 
 ### Query cookbook
 
@@ -74,8 +79,8 @@ Use `--file q.pql` or `--stdin` for long queries. Don't interpolate vault conten
 
 ## Surface 2: Planning (decisions + tickets)
 
-Planning state lives in `<vault>/.pql/pql.db` (user-authored, not a cache).
-Decision records come from `decisions/*.md` in the vault; tickets are
+Planning state lives in `<vault>/.pql/pql.db` (user-authored state, not a
+cache). Decision records come from `decisions/*.md`; tickets are
 SQLite-native.
 
 ### Decision subcommands
@@ -84,13 +89,13 @@ SQLite-native.
 |---|---|
 | `pql decisions sync` | Parse decisions/*.md → upsert into pql.db |
 | `pql decisions validate` | Dry-run parse; exits non-zero on malformed records |
-| `pql decisions claim <D\|Q\|R> <domain> "title"` | Print next available ID (no side effects) |
+| `pql decisions claim <D\|Q\|R> <domain> "title"` | Print next available ID |
 | `pql decisions list [--type X] [--domain X] [--status X]` | List decisions |
-| `pql decisions show <id> [--with-refs] [--with-tickets]` | Show with optional joins |
-| `pql decisions coverage` | Confirmed decisions without implementing tickets |
+| `pql decisions show <id> [--with-refs] [--with-tickets]` | Show with joins |
+| `pql decisions coverage` | Confirmed decisions without tickets |
 | `pql decisions refs <id>` | Cross-references involving a decision |
 
-Always run `pql decisions sync` before querying if decisions/*.md may have changed.
+Always `pql decisions sync` before querying if decisions/*.md may have changed.
 
 ### Ticket subcommands
 
@@ -119,21 +124,21 @@ Status flow: backlog → ready → in_progress → review → done (also cancell
 ### Planning cookbook
 
 - **Sync and list confirmed** → `pql decisions sync && pql decisions list --type confirmed`
-- **Show decision with refs** → `pql decisions show D-005 --with-refs --pretty`
-- **Create ticket for a decision** → `pql ticket new task "implement X" --decision D-005`
-- **Move ticket forward** → `pql ticket status T-001 in_progress`
-- **What needs tickets?** → `pql decisions coverage`
-- **Quick dashboard** → `pql plan status --pretty`
+- **Show with refs** → `pql decisions show D-005 --with-refs --pretty`
+- **Create ticket** → `pql ticket new task "implement X" --decision D-005`
+- **Move forward** → `pql ticket status T-001 in_progress`
+- **Coverage gaps** → `pql decisions coverage`
+- **Dashboard** → `pql plan status --pretty`
 
 ---
 
 ## Output contract (both surfaces)
 
-- **stdout:** JSON array (default), `--jsonl` for one object/line, `--pretty`, `--limit N`.
-- **stderr:** JSON diagnostics.
+- **stdout:** JSON array (default); `--jsonl` for one object/line; `--pretty`; `--limit N`.
+- **stderr:** JSON diagnostics `{"level":"…","code":"pql.<phase>.<kind>","msg":"…"}`.
 - **Exit codes:**
   - `0` — success, ≥1 result
-  - `2` — zero matches (not an error)
+  - `2` — zero matches (not an error — say "no matches", not "failed")
   - `64` — bad flag
   - `65` — parse/compile error (pass stderr back)
   - `66` — vault/config not found
@@ -144,16 +149,20 @@ Status flow: backlog → ready → in_progress → review → done (also cancell
 
 - Don't pipe to `jq` for simple projections — use `--limit`, `--pretty`, `--jsonl`.
 - Don't chain `pql files` + `pql meta` — one `pql query` with WHERE.
-- Don't parse errors for the user — pass stderr diagnostics back directly.
-- Don't forget to `pql decisions sync` before querying decisions.
+- Don't parse errors — pass stderr diagnostics back directly.
+- Don't forget `pql decisions sync` before querying decisions.
+- Don't try to install or upgrade pql — instruct the user if missing.
 
 ## When NOT to use
 
 - **Body text search** → `grep`/`rg`.
 - **Reading file contents** → `Read` tool.
+- **Code structure** → tree-sitter / LSP.
 - **Modifying vault files** → `Write`/`Edit`. pql doesn't write to vault content.
 
 ## Permissions
+
+The consuming project's `.claude/settings.json` should allow:
 
 ```json
 {
@@ -162,3 +171,8 @@ Status flow: backlog → ready → in_progress → review → done (also cancell
   }
 }
 ```
+
+## Updating the skill
+
+`pql skill status` reports drift. `pql skill install` writes/updates;
+`--force` overrides hand-edits. `pql doctor` also surfaces skill state.

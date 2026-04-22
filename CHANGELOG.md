@@ -11,7 +11,23 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
-## [0.2.1-dev]
+## [1.0.0] - 2026-04-22
+
+### Added
+
+- Enrichment layer (`internal/connect/`): five signals (link_overlap,
+  tag_overlap, path_proximity, recency, centrality), max-normalization,
+  intent-specific weight profiles, one-hop neighborhood connections.
+- Intent subcommands: `pql related <path>`, `pql search <query>`,
+  `pql context <path>`. Each returns ranked, provenance-carrying results
+  with `signals[]` and `connections[]`.
+- `--flat-search` global flag forces the primitive path on any subcommand,
+  bypassing enrichment entirely.
+- `pql self-update` — downloads latest release from GitHub, verifies
+  SHA256, replaces atomically.
+- Per-phase telemetry on `--verbose` (config, store_open, index, enrich).
+- Ranking-quality eval harness (`go test -tags=eval`): NDCG@k, MRR,
+  P@k against golden test cases.
 
 ## [0.2.0] - 2026-04-22
 
