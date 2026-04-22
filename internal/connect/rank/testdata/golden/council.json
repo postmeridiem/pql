@@ -1,0 +1,36 @@
+[
+  {
+    "query": "related members/vaasa/persona.md",
+    "intent": "related",
+    "target_path": "members/vaasa/persona.md",
+    "expected_top_k": [
+      "members/vaasa/journal.md",
+      "members/vaasa/on-the-user.md",
+      "members/vaasa/revisit.md"
+    ],
+    "k": 5,
+    "notes": "same-directory files should rank highest for related"
+  },
+  {
+    "query": "search council",
+    "intent": "search",
+    "target_path": "",
+    "expected_top_k": [
+      "README.md",
+      "sessions/2026-04-19_volt-nl-fit/outcome.md"
+    ],
+    "k": 5,
+    "notes": "README and outcome are the most central council-related files"
+  },
+  {
+    "query": "context sessions/2026-04-19_volt-nl-fit/outcome.md",
+    "intent": "context",
+    "target_path": "sessions/2026-04-19_volt-nl-fit/outcome.md",
+    "expected_top_k": [
+      "sessions/2026-04-19_volt-nl-fit/summary.md",
+      "sessions/2026-04-19_volt-nl-fit/votes.md"
+    ],
+    "k": 5,
+    "notes": "same-session files should appear in context"
+  }
+]
