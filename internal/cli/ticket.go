@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -10,6 +11,22 @@ import (
 	"github.com/postmeridiem/pql/internal/diag"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
+
+// parseIDs splits a comma-separated ID argument into one or more IDs.
+// A single ID passes through unchanged; commas signal a batch:
+//
+//	"T-001"             → ["T-001"]
+//	"T-001,T-002,T-003" → ["T-001", "T-002", "T-003"]
+func parseIDs(arg string) []string {
+	parts := strings.Split(arg, ",")
+	ids := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			ids = append(ids, s)
+		}
+	}
+	return ids
+}
 
 func newTicketCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -221,11 +238,21 @@ func newTicketShowCmd() *cobra.Command {
 
 func newTicketStatusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status <id> <new-status>",
-		Short: "Transition a ticket's status",
-		Args:  cobra.ExactArgs(2),
+		Use:   "status <id[,id,...]> <new-status>",
+		Short: "Transition one or more tickets to a new status",
+		Long: `Transition tickets to a new status. Use commas to batch:
+
+  pql ticket status T-001 done
+  pql ticket status T-001,T-002,T-003 done
+
+Status flow: backlog → ready → in_progress → review → done (also cancelled).
+Invalid transitions are rejected per ticket.`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			ids := parseIDs(args[0])
+			newStatus := args[1]
+
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
@@ -236,24 +263,21 @@ func newTicketStatusCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			if err := repo.SetStatus(ctx, pdb.SQL(), args[0], args[1], ""); err != nil {
-				return &exitError{code: diag.DataErr, msg: err.Error()}
+			var results []repo.Ticket
+			for _, id := range ids {
+				if err := repo.SetStatus(ctx, pdb.SQL(), id, newStatus, ""); err != nil {
+					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
+				}
+				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				if tk != nil {
+					results = append(results, *tk)
+				}
 			}
 
-			tk, err := repo.GetTicket(ctx, pdb.SQL(), args[0])
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(tk, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
+			return renderTicketResults(cmd, results)
 		},
 	}
 }
@@ -262,11 +286,18 @@ func newTicketStatusCmd() *cobra.Command {
 
 func newTicketAssignCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "assign <id> <agent>",
-		Short: "Assign a ticket",
-		Args:  cobra.ExactArgs(2),
+		Use:   "assign <id[,id,...]> <agent>",
+		Short: "Assign one or more tickets",
+		Long: `Assign tickets to an agent. Use commas to batch:
+
+  pql ticket assign T-001 claude
+  pql ticket assign T-001,T-002,T-003 claude`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			ids := parseIDs(args[0])
+			agent := args[1]
+
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
@@ -277,24 +308,21 @@ func newTicketAssignCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			if err := repo.Assign(ctx, pdb.SQL(), args[0], args[1], ""); err != nil {
-				return &exitError{code: diag.DataErr, msg: err.Error()}
+			var results []repo.Ticket
+			for _, id := range ids {
+				if err := repo.Assign(ctx, pdb.SQL(), id, agent, ""); err != nil {
+					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
+				}
+				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				if tk != nil {
+					results = append(results, *tk)
+				}
 			}
 
-			tk, err := repo.GetTicket(ctx, pdb.SQL(), args[0])
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return err
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(tk, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
+			return renderTicketResults(cmd, results)
 		},
 	}
 }
@@ -392,11 +420,18 @@ func newTicketUnblockCmd() *cobra.Command {
 
 func newTicketTeamCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "team <id> <team>",
-		Short: "Set a ticket's team",
-		Args:  cobra.ExactArgs(2),
+		Use:   "team <id[,id,...]> <team>",
+		Short: "Set team for one or more tickets",
+		Long: `Set a ticket's team. Use commas to batch:
+
+  pql ticket team T-001 backend
+  pql ticket team T-001,T-002 backend`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			ids := parseIDs(args[0])
+			team := args[1]
+
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
@@ -407,29 +442,24 @@ func newTicketTeamCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			if _, err := pdb.SQL().ExecContext(ctx, `
-				UPDATE tickets SET team = ?, updated_at = datetime('now') WHERE id = ?
-			`, args[1], args[0]); err != nil {
-				return &exitError{code: diag.DataErr, msg: err.Error()}
+			var results []repo.Ticket
+			for _, id := range ids {
+				if _, err := pdb.SQL().ExecContext(ctx, `
+					UPDATE tickets SET team = ?, updated_at = datetime('now') WHERE id = ?
+				`, team, id); err != nil {
+					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
+				}
+				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				if tk == nil {
+					return &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", id)}
+				}
+				results = append(results, *tk)
 			}
 
-			tk, err := repo.GetTicket(ctx, pdb.SQL(), args[0])
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if tk == nil {
-				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", args[0])}
-			}
-
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(tk, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
+			return renderTicketResults(cmd, results)
 		},
 	}
 }
@@ -438,12 +468,18 @@ func newTicketTeamCmd() *cobra.Command {
 
 func newTicketLabelCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "label <id> <add|rm> <label>",
-		Short: "Add or remove a label on a ticket",
-		Args:  cobra.ExactArgs(3),
+		Use:   "label <id[,id,...]> <add|rm> <label>",
+		Short: "Add or remove a label on one or more tickets",
+		Long: `Manage labels. Use commas to batch:
+
+  pql ticket label T-001 add urgent
+  pql ticket label T-001,T-002,T-003 add blocked
+  pql ticket label T-001,T-002 rm urgent`,
+		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			id, action, label := args[0], args[1], args[2]
+			ids := parseIDs(args[0])
+			action, label := args[1], args[2]
 
 			cfg, err := loadConfig(cmd)
 			if err != nil {
@@ -455,33 +491,36 @@ func newTicketLabelCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			switch action {
-			case "add":
-				_, err = pdb.SQL().ExecContext(ctx, `
-					INSERT OR IGNORE INTO ticket_labels (ticket_id, label) VALUES (?, ?)
-				`, id, label)
-			case "rm":
-				_, err = pdb.SQL().ExecContext(ctx, `
-					DELETE FROM ticket_labels WHERE ticket_id = ? AND label = ?
-				`, id, label)
-			default:
-				return &exitError{code: diag.Usage, msg: fmt.Sprintf("unknown label action %q (use add or rm)", action)}
-			}
-			if err != nil {
-				return &exitError{code: diag.DataErr, msg: err.Error()}
+			for _, id := range ids {
+				if action != "add" && action != "rm" {
+					return &exitError{code: diag.Usage, msg: fmt.Sprintf("unknown label action %q (use add or rm)", action)}
+				}
+				switch action {
+				case "add":
+					_, err = pdb.SQL().ExecContext(ctx, `
+						INSERT OR IGNORE INTO ticket_labels (ticket_id, label) VALUES (?, ?)
+					`, id, label)
+				case "rm":
+					_, err = pdb.SQL().ExecContext(ctx, `
+						DELETE FROM ticket_labels WHERE ticket_id = ? AND label = ?
+					`, id, label)
+				}
+				if err != nil {
+					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
+				}
 			}
 
+			type labelResult struct {
+				TicketIDs []string `json:"ticket_ids"`
+				Action    string   `json:"action"`
+				Label     string   `json:"label"`
+			}
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			type labelResult struct {
-				TicketID string `json:"ticket_id"`
-				Action   string `json:"action"`
-				Label    string `json:"label"`
-			}
-			if _, err := render.One(&labelResult{TicketID: id, Action: action, Label: label}, rOpts); err != nil {
+			if _, err := render.One(&labelResult{TicketIDs: ids, Action: action, Label: label}, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			return nil
@@ -550,6 +589,24 @@ func newTicketBoardCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&teamFlag, "team", "", "filter by team")
 	return cmd
+}
+
+func renderTicketResults(cmd *cobra.Command, results []repo.Ticket) error {
+	rOpts, err := renderOptsFromFlags(cmd)
+	if err != nil {
+		return &exitError{code: diag.Usage, msg: err.Error()}
+	}
+	rOpts.Out = cmd.OutOrStdout()
+	if len(results) == 1 {
+		if _, err := render.One(&results[0], rOpts); err != nil {
+			return &exitError{code: diag.Software, msg: err.Error()}
+		}
+	} else {
+		if _, err := render.Render(results, rOpts); err != nil {
+			return &exitError{code: diag.Software, msg: err.Error()}
+		}
+	}
+	return nil
 }
 
 // loadConfig is a short helper shared by ticket subcommands.
