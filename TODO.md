@@ -35,21 +35,15 @@ what a fresh session should pick up; "Soon" and "Later" are runway.
   `<vault>/.pql/pql.db` file). P-Q-003 resolved: in-house migration
   runner (~50 lines). FTS search and ticket export deferred — see
   open questions in `planning.md`.
-- [ ] **First distributed release** — tag `v0.1.0` on commit `0c4aa6a`,
-  run `goreleaser release --clean --skip=publish` locally to verify the
-  5-platform archive build works end-to-end against the current toolchain,
-  then (when ready to distribute) re-enable `.github/workflows/release.yaml`
-  and push the tag. See `.goreleaser.yaml` + `ci/release.sh`.
-- [ ] **Re-enable CI workflows** — both `.github/workflows/{ci,release}.yaml`
-  are currently `workflow_dispatch`-only. Flip `ci.yaml` to `on: push` once
-  the project is ready to treat CI as load-bearing; flip `release.yaml` to
-  `on: push: tags: ['v*']` for the first real release.
-- [ ] **Outlinks/inlinks/headings/body access in the DSL** — grammar
-  already reserves these names (see `compile.go` `bare_array_ref` error).
-  Resolution rules are in `docs/structure/initial-plan.md` open question #6.
-- [ ] **`pql watch`** — fsnotify loop wrapping the indexer. Designed in
-  `docs/watching.md`. One watcher per vault, explicit user invocation only,
-  no daemon. Lands in `internal/cli/watch.go` + `internal/index/watch.go`.
+- [x] **First distributed release** — v0.2.0 tagged. Goreleaser
+  verified with snapshot build; release.yaml triggers on v* tags.
+- [x] **Re-enable CI workflows** — ci.yaml on push+PR, release.yaml
+  on v* tags. Both keep workflow_dispatch for manual runs.
+- [x] **Outlinks/inlinks/headings access in the DSL** — `'x' IN
+  outlinks`, `'x' IN inlinks`, `'x' IN headings` compile to EXISTS
+  subqueries. Body access deferred (requires FTS5).
+- [x] **`pql watch`** — fsnotify loop with 250ms debounce, pid file
+  coordination, start/stop/status subcommands.
 
 ## Later (v0.3+)
 
