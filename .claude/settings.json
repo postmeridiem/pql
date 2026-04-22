@@ -6,7 +6,13 @@
       "Bash(go *)",
       "Bash(make *)",
       "Bash(golangci-lint *)",
-      "Bash(goreleaser *)"
+      "Bash(goreleaser *)",
+      "Bash(pql)",
+      "Bash(pql *)",
+      "Bash(pql-dev)",
+      "Bash(pql-dev *)",
+      "Bash(./bin/pql)",
+      "Bash(./bin/pql *)"
     ],
     "deny": [
       "Bash(rm -rf /*)",

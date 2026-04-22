@@ -1,16 +1,10 @@
 name: ci
 
-# Disabled: triggers reduced to workflow_dispatch (manual run only) while
-# we iterate locally. Push / PR triggers were producing failure noise on
-# every commit before the pipeline was ready. Re-enable by restoring the
-# push: + pull_request: blocks below.
-#
-# on:
-#   push:
-#     branches: [main]
-#   pull_request:
-#     branches: [main]
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
