@@ -10,7 +10,7 @@ what a fresh session should pick up; "Soon" and "Later" are runway.
 
 ## Next (pick up first)
 
-- [ ] **`pql shell` REPL** — small, contained; builds confidence in the DSL
+- [x] **`pql shell` REPL** — small, contained; builds confidence in the DSL
   surface before heavier work. Read a DSL line, eval via the existing
   compiler/executor, print rows in the current `--format`. Needs: readline
   or equivalent (prefer stdlib `bufio` + terminal detection, not a new dep).

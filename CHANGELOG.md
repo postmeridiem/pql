@@ -27,6 +27,11 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   the repo's `./bin/pql` so the dev binary tracks every `make build`
   without re-copying. Companion to `make install`, which stays a
   plain copy for the stable binary.
+- `pql shell` — interactive REPL for PQL DSL queries. Indexes the
+  vault once at startup, then reads one query per line. Prompt shown
+  only on TTY; piped input works silently. Blank lines, `--` comments,
+  `exit`/`quit`, and Ctrl-D all behave as expected. Respects
+  `--pretty`/`--jsonl`/`--limit`.
 
 ### Changed
 
