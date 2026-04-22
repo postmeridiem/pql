@@ -37,6 +37,9 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   selects a named view (default: first). `pql base` with no arguments
   lists available bases. Filters, properties, and sort compile to the
   same AST the DSL uses, so all output and exit-code contracts apply.
+- `pql completion {bash,zsh,fish,powershell}` — generates shell
+  completion scripts. Source directly (`eval "$(pql completion bash)"`)
+  or save to the appropriate shell-specific location.
 
 ### Changed
 

@@ -20,7 +20,7 @@ what a fresh session should pick up; "Soon" and "Later" are runway.
   in `docs/pql-grammar.md`. Council vault has `testdata/council-snapshot/
   council-members.base` and `council-sessions.base` as ready-made fixtures.
   Lands in `internal/query/dsl/base/`.
-- [ ] **Shell completions** — `pql completion {bash,zsh,fish}`. Cobra
+- [x] **Shell completions** — `pql completion {bash,zsh,fish}`. Cobra
   generates these natively; wire the subcommand and ship the files under
   `docs/` or embed. Unblocks "can tab-complete subcommand and flag names"
   demo.
