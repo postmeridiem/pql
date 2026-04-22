@@ -49,6 +49,10 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   the D/Q/R-NNN heading convention, upserts into `pql.db`, and
   queries with filters and joins. Compatible with databases created
   by the Python stopgap.
+- `pql ticket` subcommand tree: `new`, `list`, `show`, `status`,
+  `assign`, `block`/`unblock`, `team`, `label`, `board`. Full
+  lifecycle from backlog to done with state-machine enforcement,
+  history tracking, decision joins, and kanban board view.
 
 ### Changed
 
