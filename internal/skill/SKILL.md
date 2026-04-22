@@ -1,165 +1,164 @@
 ---
 name: pql
 description: >
-  Structural queries over a markdown vault — frontmatter, wikilinks, tags,
-  headings, and Obsidian Bases — from outside Obsidian. Use whenever the
-  user asks about the contents or shape of a vault: "which sessions…",
-  "find notes where…", "what tags are used", "who links to X", "inspect
-  frontmatter", "run a Base", "query the vault". Requires the `pql` CLI
-  on PATH. Returns structured JSON on stdout; exit 2 means "ran cleanly,
-  zero matches" (not an error).
+  Query and plan against a markdown vault via the pql CLI. Two surfaces:
+  (1) structural queries — frontmatter, wikilinks, tags, headings, Bases,
+  DSL — use when the user asks about vault contents ("which notes…", "find
+  where…", "what tags", "who links to X", "run a Base", "query the vault");
+  (2) planning — decision records, tickets, project status — use when the
+  user asks about decisions, tickets, work items, or project planning
+  ("sync decisions", "create a ticket", "what's the plan status", "show
+  D-005", "board"). Requires `pql` on PATH. JSON on stdout; exit 2 = zero
+  matches (not an error).
 ---
 
-# pql — querying a markdown vault from the CLI
+# pql — vault queries + project planning
 
-`pql` indexes a vault's frontmatter, wikilinks, tags, and headings into a
-local SQLite database and exposes them through a small set of subcommands
-plus a SQL-derived DSL. Reach for this skill instead of grep+read when
-the user's question is **structural** (about shape, metadata, relationships)
-rather than textual (about body content).
+`pql` indexes a vault into SQLite and exposes structural queries plus a
+planning layer for decision records and tickets. One binary, two surfaces.
 
-## Precondition check
-
-Before the first `pql` call in a session, verify the binary is installed:
+## Precondition
 
 ```bash
 command -v pql
 ```
 
-If absent, tell the user:
+If absent, tell the user to install from
+https://github.com/postmeridiem/pql/releases/latest. Don't install it
+yourself. Don't fall back to grep unless the user explicitly asks.
 
-> `pql` isn't on PATH. Install the latest static binary from
-> https://github.com/postmeridiem/pql/releases/latest (drop into
-> `~/.local/bin/` and `chmod +x`), then re-run.
-
-Don't try to install it yourself. Don't fall back to grep unless the user
-explicitly asks for raw text search.
-
-## First-touch: learn the vault's shape
-
-Before answering a structural question, run:
+## First touch: learn the vault
 
 ```bash
 pql schema
 ```
 
-This returns one row per frontmatter key across the vault, with the
-observed types (string / number / bool / list / object) and the number of
-files that use each key. Read this once per session to know which keys
-and types the queries you're about to write can rely on.
+Returns one row per frontmatter key with observed types and file counts.
+Run once per session before writing queries.
 
-## Subcommands
+---
 
-Short-form queries (no DSL needed):
+## Surface 1: Vault queries
+
+### Subcommands
 
 | Command | Purpose |
 |---|---|
-| `pql files [glob]` | list indexed files; optional GLOB filter on path |
-| `pql tags [--sort count]` | distinct tags with counts |
-| `pql backlinks <path>` | files that link TO `<path>` |
-| `pql outlinks <path>` | links FROM `<path>` |
-| `pql meta <path>` | all metadata for one file: frontmatter, tags, outlinks, headings |
-| `pql schema` | typed frontmatter schema across the vault |
-| `pql base <name>` | execute an Obsidian `.base` file as a query |
-| `pql doctor` | report resolved vault, config, DB, index state |
+| `pql files [glob]` | List indexed files; optional glob filter |
+| `pql tags [--sort count]` | Distinct tags with counts |
+| `pql backlinks <path>` | Files linking TO a path |
+| `pql outlinks <path>` | Links FROM a file |
+| `pql meta <path>` | Frontmatter + tags + outlinks + headings for one file |
+| `pql schema` | Typed frontmatter schema |
+| `pql base <name>` | Execute an Obsidian .base file |
+| `pql shell` | Interactive REPL (indexes once, then query per line) |
+| `pql query "<DSL>"` | SQL-derived DSL for complex queries |
+| `pql doctor` | Resolved vault/config/DB/index state |
 
-DSL for anything else:
+### DSL examples
 
-```bash
-pql query "SELECT name, fm.prior_job WHERE fm.type = 'council-member' ORDER BY name"
+```sql
+SELECT name, fm.date WHERE fm.type = 'meeting' ORDER BY fm.date DESC LIMIT 10
+SELECT path WHERE 'project' IN tags ORDER BY path
+SELECT name, fm.prior_job WHERE fm.type = 'council-member' ORDER BY name
 ```
 
-See the grammar at https://github.com/postmeridiem/pql/blob/main/docs/pql-grammar.md.
+Use `--file q.pql` or `--stdin` for long queries. Don't interpolate vault
+content into the command line.
 
-## Cookbook
+### Query cookbook
 
-These are the patterns that come up most. Pick the closest and edit.
+- **Files in folder** → `pql files 'sessions/*'`
+- **Top tags** → `pql tags --sort count --limit 20`
+- **What links to X?** → `pql backlinks members/vaasa/persona.md`
+- **Date range** → `pql query "SELECT name, fm.date WHERE fm.date BETWEEN '2024-01-01' AND '2024-12-31'"`
+- **Run a Base** → `pql base council-sessions`
+- **Inspect one file** → `pql meta members/vaasa/persona.md --pretty`
 
-**"List all council members"** →
-```bash
-pql query "SELECT name, fm.prior_job WHERE fm.type = 'council-member' ORDER BY name"
-```
+---
 
-**"Which files are tagged X?"** →
-```bash
-pql query "SELECT path WHERE 'council-member' IN tags ORDER BY path"
-```
+## Surface 2: Planning (decisions + tickets)
 
-**"Most-used tags"** →
-```bash
-pql tags --sort count --limit 20
-```
+Planning state lives in `<vault>/.pql/pql.db` (user-authored state, not a
+cache). Decision records come from `decisions/*.md`; tickets are
+SQLite-native.
 
-**"Files in this folder"** →
-```bash
-pql files 'members/vaasa/*'
-```
+### Decision subcommands
 
-**"Recently modified"** →
-```bash
-pql query "SELECT name, mtime WHERE mtime > strftime('%s','now','-30 days') ORDER BY mtime DESC LIMIT 10"
-```
+| Command | Purpose |
+|---|---|
+| `pql decisions sync` | Parse decisions/*.md → upsert into pql.db |
+| `pql decisions validate` | Dry-run parse; exits non-zero on malformed records |
+| `pql decisions claim <D\|Q\|R> <domain> "title"` | Print next available ID |
+| `pql decisions list [--type X] [--domain X] [--status X]` | List decisions |
+| `pql decisions show <id> [--with-refs] [--with-tickets]` | Show with joins |
+| `pql decisions coverage` | Confirmed decisions without tickets |
+| `pql decisions refs <id>` | Cross-references involving a decision |
 
-**"What links to this file?"** →
-```bash
-pql backlinks members/vaasa/persona.md
-```
+Always `pql decisions sync` before querying if decisions/*.md may have changed.
 
-**"What does this file link to?"** →
-```bash
-pql outlinks sessions/2026-04-19/outcome.md
-```
+### Ticket subcommands
 
-**"Sessions where Vaasa won"** →
-```bash
-pql query "SELECT name, fm.date FROM files WHERE fm.winner = 'vaasa' ORDER BY fm.date DESC"
-```
+| Command | Purpose |
+|---|---|
+| `pql ticket new <type> "title" [--decision D-NNN] [--priority P]` | Create (emits T-NNN) |
+| `pql ticket list [--status S] [--team T] [--assigned A] [--label L]` | List with filters |
+| `pql ticket show <id> [--with-decision] [--with-blockers] [--with-children]` | Show with joins |
+| `pql ticket status <id> <new-status>` | Transition (enforces state machine) |
+| `pql ticket assign <id> <agent>` | Set assignee |
+| `pql ticket block <id> --by <other>` | Add blocker |
+| `pql ticket unblock <id> --from <other>` | Remove blocker |
+| `pql ticket team <id> <team>` | Set team |
+| `pql ticket label <id> add\|rm <label>` | Manage labels |
+| `pql ticket board [--team T]` | Kanban board view |
 
-**"Files by frontmatter range"** →
-```bash
-pql query "SELECT name, fm.date WHERE fm.date BETWEEN '2024-01-01' AND '2024-12-31' ORDER BY fm.date"
-```
+Ticket types: initiative, epic, story, task, bug.
+Status flow: backlog → ready → in_progress → review → done (also cancelled).
 
-**"Inspect one file's structure"** →
-```bash
-pql meta members/vaasa/persona.md --pretty
-```
+### Plan subcommands
 
-**"Run a saved Obsidian Base"** →
-```bash
-pql base council-sessions
-```
+| Command | Purpose |
+|---|---|
+| `pql plan status` | Dashboard: decision counts, open Qs, ticket summary, coverage gaps |
 
-## Output contract
+### Planning cookbook
 
-- **stdout:** JSON. Default is a single array; `--jsonl` for one object per
-  line; `--pretty` to indent; `--limit N` to cap.
-- **stderr:** JSON-per-line diagnostics with `{"level":"warn|error","code":"pql.<phase>.<kind>","msg":"…","hint":"…"}`.
-- **Exit codes** are distinguished — check these before interpreting output:
-  - `0` — success with ≥1 result
-  - `2` — **zero matches (NOT an error)** — the query ran cleanly, nothing matched. Tell the user "no matches" rather than claiming failure.
-  - `64` — bad CLI flag
-  - `65` — DSL parse/compile error (user's query is malformed; pass the stderr message back)
-  - `66` — vault / config not found
-  - `69` — index corrupt or unavailable
-  - `70` — internal error (bug report worthy)
+- **Sync and list confirmed** → `pql decisions sync && pql decisions list --type confirmed`
+- **Show with refs** → `pql decisions show D-005 --with-refs --pretty`
+- **Create ticket** → `pql ticket new task "implement X" --decision D-005`
+- **Move forward** → `pql ticket status T-001 in_progress`
+- **Coverage gaps** → `pql decisions coverage`
+- **Dashboard** → `pql plan status --pretty`
 
-When you check `$?` or invoke via subprocess, distinguish 2 from 0.
+---
+
+## Output contract (both surfaces)
+
+- **stdout:** JSON array (default); `--jsonl` for one object/line; `--pretty`; `--limit N`.
+- **stderr:** JSON diagnostics `{"level":"…","code":"pql.<phase>.<kind>","msg":"…"}`.
+- **Exit codes:**
+  - `0` — success, ≥1 result
+  - `2` — zero matches (not an error — say "no matches", not "failed")
+  - `64` — bad flag
+  - `65` — parse/compile error (pass stderr back)
+  - `66` — vault/config not found
+  - `69` — unavailable
+  - `70` — internal error
 
 ## Anti-patterns
 
-- **Don't pipe to `jq` for simple projections.** Use `--limit`, `--pretty`, `--jsonl` first; reach for `jq` only for non-trivial restructuring.
-- **Don't interpolate vault content into the command line.** Put long queries in a file and use `pql query --file q.pql`, or pipe via `--stdin`. Unquoted `#`, `&`, `|` will break the shell.
-- **Don't chain `pql files` + `pql meta` to iterate.** One `pql query` with a `WHERE` clause is one subprocess instead of N+1.
-- **Don't parse the DSL for the user.** If their query has a syntax error, pass the stderr diagnostic back — it carries line/col pointers.
-- **Don't try to install or upgrade `pql`.** If the binary is missing, instruct the user; otherwise assume the version on PATH is the one they want.
+- Don't pipe to `jq` for simple projections — use `--limit`, `--pretty`, `--jsonl`.
+- Don't chain `pql files` + `pql meta` — one `pql query` with WHERE.
+- Don't parse errors — pass stderr diagnostics back directly.
+- Don't forget `pql decisions sync` before querying decisions.
+- Don't try to install or upgrade pql — instruct the user if missing.
 
-## When NOT to use pql
+## When NOT to use
 
-- **Raw text search inside note bodies** → `Grep` / `rg`. pql's FTS5 is opt-in and usually off.
-- **Reading a single file's full contents** → `Read`. pql's `meta` is for structure, not prose.
-- **Code structure** → tree-sitter / LSP. pql is for prose, not code.
-- **Modifying files** → `Write` / `Edit`. pql is read-only.
+- **Body text search** → `grep`/`rg`.
+- **Reading file contents** → `Read` tool.
+- **Code structure** → tree-sitter / LSP.
+- **Modifying vault files** → `Write`/`Edit`. pql doesn't write to vault content.
 
 ## Permissions
 
@@ -173,8 +172,7 @@ The consuming project's `.claude/settings.json` should allow:
 }
 ```
 
-Two entries because `Bash(pql *)` requires at least one argument; `Bash(pql)` covers bare invocations like `pql --help`. No deny rules needed — pql is read-only against the filesystem.
-
 ## Updating the skill
 
-`pql skill status` reports whether the installed skill is current relative to the binary. `pql skill install` writes/updates; `--force` overrides hand-edits (which the skill preserves by default). `pql doctor` also surfaces skill drift alongside the rest of the resolved state.
+`pql skill status` reports drift. `pql skill install` writes/updates;
+`--force` overrides hand-edits. `pql doctor` also surfaces skill state.

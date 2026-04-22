@@ -58,6 +58,10 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ### Changed
 
+- Embedded Claude Code skill (`internal/skill/SKILL.md`) updated to
+  cover both vault-query and planning surfaces. Consumers running
+  `pql skill status` will see `stale`; `pql skill install` updates.
+
 - `make vuln` now runs `go run golang.org/x/vuln/cmd/govulncheck@v1.2.0`
   instead of requiring a local `govulncheck` install. Version is
   pinned in the Makefile so every dev (and the pre-push hook) runs
