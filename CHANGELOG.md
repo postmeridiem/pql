@@ -44,6 +44,11 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   forward-only migration runner. Six tables (decisions, decision_refs,
   tickets, ticket_deps, ticket_history, ticket_labels) for the
   planning subcommands. See `docs/adr/0003-pql-db-for-user-state.md`.
+- `pql decisions` subcommand tree: `sync`, `validate`, `claim`,
+  `list`, `show`, `coverage`, `refs`. Parses `decisions/*.md` using
+  the D/Q/R-NNN heading convention, upserts into `pql.db`, and
+  queries with filters and joins. Compatible with databases created
+  by the Python stopgap.
 
 ### Changed
 

@@ -16,7 +16,7 @@ var migrations = []migration{
 }
 
 const migrationV1 = `
-CREATE TABLE decisions (
+CREATE TABLE IF NOT EXISTS decisions (
     id          TEXT PRIMARY KEY,
     type        TEXT NOT NULL CHECK(type IN ('confirmed','question','rejected')),
     domain      TEXT NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE decisions (
     synced_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE decision_refs (
+CREATE TABLE IF NOT EXISTS decision_refs (
     source_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
     target_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
     ref_type    TEXT NOT NULL
@@ -37,7 +37,7 @@ CREATE TABLE decision_refs (
     PRIMARY KEY (source_id, target_id, ref_type)
 );
 
-CREATE TABLE tickets (
+CREATE TABLE IF NOT EXISTS tickets (
     id           TEXT PRIMARY KEY,
     type         TEXT NOT NULL CHECK(type IN ('initiative','epic','story','task','bug')),
     parent_id    TEXT REFERENCES tickets(id),
@@ -54,13 +54,13 @@ CREATE TABLE tickets (
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE ticket_deps (
+CREATE TABLE IF NOT EXISTS ticket_deps (
     blocker_id   TEXT NOT NULL REFERENCES tickets(id),
     blocked_id   TEXT NOT NULL REFERENCES tickets(id),
     PRIMARY KEY (blocker_id, blocked_id)
 );
 
-CREATE TABLE ticket_history (
+CREATE TABLE IF NOT EXISTS ticket_history (
     ticket_id    TEXT NOT NULL REFERENCES tickets(id),
     field        TEXT NOT NULL,
     old_value    TEXT,
@@ -69,19 +69,19 @@ CREATE TABLE ticket_history (
     changed_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE ticket_labels (
+CREATE TABLE IF NOT EXISTS ticket_labels (
     ticket_id    TEXT NOT NULL REFERENCES tickets(id),
     label        TEXT NOT NULL,
     PRIMARY KEY (ticket_id, label)
 );
 
-CREATE INDEX idx_tickets_status        ON tickets(status);
-CREATE INDEX idx_tickets_team          ON tickets(team);
-CREATE INDEX idx_tickets_decision_ref  ON tickets(decision_ref);
-CREATE INDEX idx_tickets_assigned      ON tickets(assigned_to);
-CREATE INDEX idx_decisions_domain      ON decisions(domain);
-CREATE INDEX idx_decisions_type        ON decisions(type);
-CREATE INDEX idx_decision_refs_target  ON decision_refs(target_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_status        ON tickets(status);
+CREATE INDEX IF NOT EXISTS idx_tickets_team          ON tickets(team);
+CREATE INDEX IF NOT EXISTS idx_tickets_decision_ref  ON tickets(decision_ref);
+CREATE INDEX IF NOT EXISTS idx_tickets_assigned      ON tickets(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_decisions_domain      ON decisions(domain);
+CREATE INDEX IF NOT EXISTS idx_decisions_type        ON decisions(type);
+CREATE INDEX IF NOT EXISTS idx_decision_refs_target  ON decision_refs(target_id);
 `
 
 // Migrate brings db up to the latest schema version by applying any
