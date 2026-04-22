@@ -23,6 +23,10 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   lint + vuln + test + test-race. Opt in per clone with
   `git config core.hooksPath .githooks`. Integration tests are
   deliberately excluded to keep the gate fast; they belong in CI.
+- `make install-dev` target — symlinks `$(INSTALL_DIR)/pql-dev` to
+  the repo's `./bin/pql` so the dev binary tracks every `make build`
+  without re-copying. Companion to `make install`, which stays a
+  plain copy for the stable binary.
 
 ### Changed
 

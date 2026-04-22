@@ -32,6 +32,10 @@ build: ## Build the pql binary into ./bin/pql with version stamped.
 install: build ## Install ./bin/pql into $(INSTALL_DIR).
 	install -m 0755 $(BIN_DIR)/pql $(INSTALL_DIR)/pql
 
+.PHONY: install-dev
+install-dev: build ## Symlink ./bin/pql as $(INSTALL_DIR)/pql-dev (tracks rebuilds).
+	ln -sf $(abspath $(BIN_DIR)/pql) $(INSTALL_DIR)/pql-dev
+
 .PHONY: test
 test: ## Unit tests, fast.
 	$(GO) test $(GO_PACKAGES)
