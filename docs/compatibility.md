@@ -1,58 +1,60 @@
 # Compatibility
 
-How the `pql` binary, the SQLite index, and the Claude Code skill negotiate compatibility across versions.
+How pql handles version mismatches between the binary, the SQLite index, and the Claude Code skill.
 
-## Versioned things
+## The short version
 
-| Thing | Where | Versioning |
+- **Index out of date?** pql drops it and rebuilds automatically. The index is a cache.
+- **Skill out of date?** Run `pql skill install` to update. `pql skill status` tells you if it's stale.
+- **Binary out of date?** Run `pql self-update` to grab the latest release.
+
+## What's versioned
+
+| Component | Where it lives | How to check |
 |---|---|---|
-| Binary | `pql --version` / `pql version --build-info` | semver tag (`v0.X.Y`) |
-| Index schema | `index_meta.schema_version` row in SQLite | monotonic integer (`internal/version.SchemaVersion`) |
-| Skill | `internal/skill/SKILL.md` frontmatter (embedded in binary) | semver tag, declares **min binary schema_version** |
-| Output contract | `docs/output-contract.md` | tied to `schema_version` — bump implies contract change |
+| Binary | `~/.local/bin/pql` | `pql version` |
+| Index schema | `<vault>/.pql/index.db` | `pql version --build-info` → `schema_version` |
+| Skill | `.claude/skills/pql/SKILL.md` | `pql skill status` |
+| Planning DB | `<vault>/.pql/pql.db` | `schema_migrations` table |
 
 ## Binary ↔ index
 
-The binary owns the schema. On startup, if `index_meta.schema_version` doesn't match `internal/version.SchemaVersion`, the binary **drops the DB file and rebuilds**. The index is a pure cache, so this is safe and cheap. There is no migration code.
+The binary owns the index schema. If the on-disk `schema_version` doesn't match what the binary expects, it drops and rebuilds the index. This is safe because the index is a pure cache — everything in it is regenerated from your vault files.
 
-Stderr emits one warning when this happens:
-```json
-{"level":"warn","code":"store.schema.rebuild","msg":"index schema version mismatch; rebuilding","hint":"first run after upgrade"}
+You'll see a stderr warning when this happens:
 ```
+{"level":"warn","code":"store.schema.rebuild","msg":"index schema version mismatch; rebuilding"}
+```
+
+No action needed. Next run is fast again.
 
 ## Binary ↔ skill
 
-The skill declares the minimum binary schema version it supports in its SKILL.md frontmatter. On invocation, the skill should:
+The skill is embedded in the binary and installed into your project by `pql skill install` or `pql init`. When you upgrade the binary, the embedded skill may be newer than the installed copy.
 
-1. Run `pql version --build-info` and parse the JSON.
-2. Compare `schema_version` against its own minimum.
-3. On mismatch, abort with a clear remediation hint (`upgrade pql to v0.X.Y or later`).
-
-This avoids the failure mode where an old skill assumes a result shape that newer binaries no longer emit (or vice versa).
-
-## When to bump `schema_version`
-
-Bump for any of:
-- New required column or table (rebuild needed for old indexes).
-- Removed or renamed table/column referenced by `query/`.
-- Change to the JSON shape on stdout (added optional fields are safe; removed or renamed fields are not).
-- Change to exit-code semantics.
-
-Don't bump for:
-- Internal SQL refactors that produce identical query results.
-- Lint, dependency, or doc-only changes.
-- New CLI flags that add behaviour without changing existing output.
-
-## Version display
-
-`pql --version` → bare semver string (`v0.1.3`).
-`pql version --build-info` → JSON:
-```json
-{
-  "version": "v0.1.3",
-  "commit": "abc1234",
-  "date": "2026-04-19T16:00:00Z",
-  "go_version": "go1.25.0",
-  "schema_version": 1
-}
+```sh
+pql skill status     # shows: current, stale, modified, or missing
+pql skill install    # updates to match the binary
 ```
+
+If you've hand-edited the installed SKILL.md, `pql skill install` won't overwrite it. Use `--force` to replace it.
+
+## Binary ↔ planning DB
+
+The planning database (`pql.db`) uses forward-only migrations — it never drops data. When you upgrade the binary and new tables or columns are needed, they're added automatically on first access.
+
+## Upgrading
+
+```sh
+pql self-update          # downloads latest, verifies SHA256, replaces atomically
+pql skill install        # updates the Claude Code skill to match
+```
+
+Or manually: download from [Releases](https://github.com/postmeridiem/pql/releases/latest), replace the binary, run `pql skill install`.
+
+## When schema_version bumps
+
+The `schema_version` integer bumps when the index schema changes in a way that affects query results. This triggers an automatic rebuild on next run. It does **not** bump for:
+- Internal refactors with identical output
+- New CLI flags that add behavior without changing existing output
+- Documentation or dependency changes
