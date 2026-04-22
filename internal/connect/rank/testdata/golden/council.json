@@ -17,20 +17,20 @@
     "target_path": "",
     "expected_top_k": [
       "README.md",
-      "sessions/2026-04-19_volt-nl-fit/outcome.md"
+      "members/koskela/persona.md"
     ],
     "k": 5,
-    "notes": "README and outcome are the most central council-related files"
+    "notes": "README and linked personas are the most central council files"
   },
   {
-    "query": "context sessions/2026-04-19_volt-nl-fit/outcome.md",
+    "query": "context members/vaasa/persona.md",
     "intent": "context",
-    "target_path": "sessions/2026-04-19_volt-nl-fit/outcome.md",
+    "target_path": "members/vaasa/persona.md",
     "expected_top_k": [
-      "sessions/2026-04-19_volt-nl-fit/summary.md",
-      "sessions/2026-04-19_volt-nl-fit/votes.md"
+      "members/koskela/persona",
+      "members/vaasa/journal.md"
     ],
     "k": 5,
-    "notes": "same-session files should appear in context"
+    "notes": "koskela is linked from vaasa; journal is same directory"
   }
 ]
