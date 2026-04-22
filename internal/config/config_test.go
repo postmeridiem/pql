@@ -285,7 +285,7 @@ func TestDBPath_DefaultsToInVaultPqlDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	want := filepath.Join(vault, ".pql", "index.sqlite")
+	want := filepath.Join(vault, ".pql", "index.db")
 	if cfg.DBPath != want {
 		t.Errorf("DBPath = %q, want in-vault %q", cfg.DBPath, want)
 	}
@@ -316,8 +316,8 @@ func TestDBPath_FallsBackToCacheOnReadOnlyVault(t *testing.T) {
 	if !strings.HasPrefix(cfg.DBPath, filepath.Join(cache, "pql")) {
 		t.Errorf("DBPath = %q, want fallback under %s/pql", cfg.DBPath, cache)
 	}
-	if !strings.HasSuffix(cfg.DBPath, "index.sqlite") {
-		t.Errorf("DBPath = %q, want suffix index.sqlite", cfg.DBPath)
+	if !strings.HasSuffix(cfg.DBPath, "index.db") {
+		t.Errorf("DBPath = %q, want suffix index.db", cfg.DBPath)
 	}
 }
 

@@ -39,6 +39,13 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   `render.RenderOne` → `render.One` per the `stutters` rule; 70
   pre-existing findings cleared in one pass so `make lint` now
   exits 0.
+- Default index filename renamed `index.sqlite` → `index.db` (and
+  WAL sidecars `index.db-wal` / `index.db-shm`). `.db` is the more
+  idiomatic SQLite extension; leaves room for a future non-cache
+  `pql.db` store alongside the index without the extension carrying
+  type information. `IndexFileName` in `internal/config/paths.go`
+  and docs updated; override paths (`--db`, `PQL_DB`, `db:`) are
+  unaffected.
 
 ## [0.1.0] - 2026-04-20
 

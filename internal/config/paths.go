@@ -17,7 +17,7 @@ const VaultStateDir = ".pql"
 
 // IndexFileName is the SQLite file pql writes inside VaultStateDir (or the
 // per-vault cache subdirectory when falling back).
-const IndexFileName = "index.sqlite"
+const IndexFileName = "index.db"
 
 // resolveDBPath determines where the SQLite index lives for this vault.
 //
@@ -25,8 +25,8 @@ const IndexFileName = "index.sqlite"
 //  1. --db flag (LoadOpts.DBFlag)
 //  2. PQL_DB env var (LoadOpts.DBEnv)
 //  3. db: field in .pql/config.yaml (cfgDB)
-//  4. <vault>/.pql/index.sqlite — created in place if writeable
-//  5. <cache>/pql/<sha256(vault)[:16]>/index.sqlite — fallback when the vault
+//  4. <vault>/.pql/index.db — created in place if writeable
+//  5. <cache>/pql/<sha256(vault)[:16]>/index.db — fallback when the vault
 //     is read-only (EROFS / EACCES / EPERM)
 //
 // Override paths from rules 1–3 are returned verbatim; the store layer's
