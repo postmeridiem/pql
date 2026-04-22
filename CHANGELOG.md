@@ -40,6 +40,10 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 - `pql completion {bash,zsh,fish,powershell}` — generates shell
   completion scripts. Source directly (`eval "$(pql completion bash)"`)
   or save to the appropriate shell-specific location.
+- `internal/planning/` package skeleton with `pql.db` schema and
+  forward-only migration runner. Six tables (decisions, decision_refs,
+  tickets, ticket_deps, ticket_history, ticket_labels) for the
+  planning subcommands. See `docs/adr/0003-pql-db-for-user-state.md`.
 
 ### Changed
 
