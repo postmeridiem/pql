@@ -69,12 +69,12 @@ Each result carries `signals[]` (what contributed to its score) and `connections
 # Decision records (from decisions/*.md)
 pql decisions sync                        # parse markdown → pql.db
 pql decisions list --type confirmed       # list confirmed decisions
-pql decisions show D-005 --with-refs      # show with cross-references
+pql decisions show D-5 --with-refs        # show with cross-references
 pql decisions coverage                    # decisions without tickets
 
 # Tickets (SQLite-native)
 pql ticket new task "implement auth"      # create a ticket
-pql ticket status T-001 in_progress       # transition status
+pql ticket status T-1 in_progress         # transition status
 pql ticket board                          # kanban view
 pql plan status --pretty                  # dashboard
 ```

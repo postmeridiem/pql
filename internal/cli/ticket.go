@@ -99,9 +99,9 @@ func newTicketNewCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&parentID, "parent", "", "parent ticket ID (e.g. T-001)")
+	cmd.Flags().StringVar(&parentID, "parent", "", "parent ticket ID (e.g. T-1)")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority (critical|high|medium|low)")
-	cmd.Flags().StringVar(&decisionRef, "decision", "", "linked decision ID (e.g. D-001)")
+	cmd.Flags().StringVar(&decisionRef, "decision", "", "linked decision ID (e.g. D-1)")
 	cmd.Flags().StringVar(&team, "team", "", "team name")
 	cmd.Flags().StringVar(&assignedTo, "assign", "", "assignee")
 	cmd.Flags().StringVar(&description, "description", "", "ticket description")

@@ -8,7 +8,7 @@ description: >
   (2) planning — decision records, tickets, project status — use when the
   user asks about decisions, tickets, work items, or project planning
   ("sync decisions", "create a ticket", "what's the plan status", "show
-  D-005", "board"). Requires `pql` on PATH. JSON on stdout; exit 2 = zero
+  D-5", "board"). Requires `pql` on PATH. JSON on stdout; exit 2 = zero
   matches (not an error).
 ---
 
@@ -124,9 +124,9 @@ Status flow: backlog → ready → in_progress → review → done (also cancell
 ### Planning cookbook
 
 - **Sync and list confirmed** → `pql decisions sync && pql decisions list --type confirmed`
-- **Show with refs** → `pql decisions show D-005 --with-refs --pretty`
-- **Create ticket** → `pql ticket new task "implement X" --decision D-005`
-- **Move forward** → `pql ticket status T-001 in_progress`
+- **Show with refs** → `pql decisions show D-5 --with-refs --pretty`
+- **Create ticket** → `pql ticket new task "implement X" --decision D-5`
+- **Move forward** → `pql ticket status T-1 in_progress`
 - **Coverage gaps** → `pql decisions coverage`
 - **Dashboard** → `pql plan status --pretty`
 

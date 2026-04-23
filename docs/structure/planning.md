@@ -37,7 +37,7 @@ Reference materials outside this repo:
    write-intent command fails with a clear diagnostic (we do **not**
    fall back to the user cache for writes — would be invisible to the
    vault itself).
-3. **Record IDs as TEXT PKs.** `D-042`, `Q-013`, `T-007` are strings,
+3. **Record IDs as TEXT PKs.** `D-42`, `Q-13`, `T-7` are strings,
    not integers. Easier to preserve identity across imports; no
    translation layer; matches markdown verbatim.
 4. **Ticket source of truth = SQLite, for now.** Markdown-mirror
@@ -279,9 +279,9 @@ Specific verifications:
 2. `pql decisions list --type confirmed` returns ~39 D-records (post-backfill at 2026-04-21).
 3. `pql decisions show D-005 --with-refs` shows supersedence of R-002.
 4. `pql decisions show D-020 --with-tickets` — empty today, populated once tickets land.
-5. `pql ticket new task "probe" --decision D-005` creates `T-001`.
-6. `pql ticket show T-001 --with-decision` renders ticket + D-005 body.
-7. `pql ticket status T-001 in_progress` — updates DB, records in `ticket_history`.
-8. `pql ticket board` — columnar kanban view with `T-001` under `in_progress`.
+5. `pql ticket new task "probe" --decision D-005` creates `T-1`.
+6. `pql ticket show T-1 --with-decision` renders ticket + D-005 body.
+7. `pql ticket status T-1 in_progress` — updates DB, records in `ticket_history`.
+8. `pql ticket board` — columnar kanban view with `T-1` under `in_progress`.
 9. `pql decisions coverage` — flags every D-record without a ticket.
 10. `pql plan status` — prints dashboard.

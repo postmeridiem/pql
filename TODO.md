@@ -9,11 +9,11 @@ canonical tracker.
 
 See `decisions/questions.md` for the full list. Highlights:
 
-- **Q-005:** Body access in DSL (requires FTS5)
-- **Q-006:** Outlink target normalization
-- **Q-007:** Code-aware extractor (tree-sitter)
-- **Q-001:** Markdown mirror for tickets
-- **Q-002:** FTS for ticket/decision search
+- **Q-5:** Body access in DSL (requires FTS5)
+- **Q-6:** Outlink target normalization
+- **Q-7:** Code-aware extractor (tree-sitter)
+- **Q-1:** Markdown mirror for tickets
+- **Q-2:** FTS for ticket/decision search
 
 ## Shipped
 
