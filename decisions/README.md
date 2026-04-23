@@ -40,7 +40,7 @@ Open questions (`Q-NNN`):
 ```bash
 pql decisions sync                        # parse → pql.db
 pql decisions list --type confirmed       # list D-records
-pql decisions show D-001 --with-refs      # show with cross-references
+pql decisions show D-1 --with-refs        # show with cross-references
 pql decisions coverage                    # D-records without tickets
 pql decisions validate                    # check for errors
 ```
