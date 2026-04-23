@@ -296,6 +296,11 @@ func ensureGitignoreEntry(path, entry string) (initGitignore, error) {
 	return stat, nil
 }
 
+const (
+	pqlDirIgnore = ".pql/"
+	pqlGlobIgnore = ".pql/*"
+)
+
 // ensurePqlGitignore manages the pql block in .gitignore. Uses .pql/*
 // (not .pql/) so individual files can be un-ignored. Adds explicit
 // includes for the plan export and hooks directory.
@@ -312,7 +317,7 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 	lines := strings.Split(string(body), "\n")
 
 	needed := map[string]bool{
-		".pql/*":              true,
+		pqlGlobIgnore:         true,
 		"!.pql/pql-plan.json": true,
 		"!.pql/hooks/":        true,
 	}
@@ -321,17 +326,16 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		delete(needed, trimmed)
-		if trimmed == ".pql/" {
+		if trimmed == pqlDirIgnore {
 			hasDirForm = true
 		}
 	}
 
 	if hasDirForm {
-		// Replace .pql/ with .pql/* so un-ignore rules work.
 		for i, line := range lines {
-			if strings.TrimSpace(line) == ".pql/" {
-				lines[i] = ".pql/*"
-				delete(needed, ".pql/*")
+			if strings.TrimSpace(line) == pqlDirIgnore {
+				lines[i] = pqlGlobIgnore
+				delete(needed, pqlGlobIgnore)
 				break
 			}
 		}
@@ -348,7 +352,7 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 		buf.WriteByte('\n')
 	}
 
-	for _, entry := range []string{".pql/*", "!.pql/pql-plan.json", "!.pql/hooks/"} {
+	for _, entry := range []string{pqlGlobIgnore, "!.pql/pql-plan.json", "!.pql/hooks/"} {
 		if needed[entry] {
 			buf.WriteString(entry)
 			buf.WriteByte('\n')
