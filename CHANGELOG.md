@@ -11,6 +11,13 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.3.1] - 2026-04-23
+
+### Fixed
+
+- Decision list sorts by type prefix (D, Q, R) first, then by number.
+  Previously numeric-only sort interleaved record types.
+
 ## [1.3.0] - 2026-04-23
 
 ### Fixed

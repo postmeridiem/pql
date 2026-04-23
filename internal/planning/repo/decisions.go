@@ -144,7 +144,7 @@ func ListDecisions(ctx context.Context, db *sql.DB, f DecisionFilter) ([]Decisio
 		query += " AND status = ?"
 		params = append(params, f.Status)
 	}
-	query += " ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)"
+	query += " ORDER BY SUBSTR(id, 1, 1), CAST(SUBSTR(id, 3) AS INTEGER)"
 
 	rows, err := db.QueryContext(ctx, query, params...)
 	if err != nil {
@@ -227,7 +227,7 @@ type TicketSummary struct {
 func TicketsForDecision(ctx context.Context, db *sql.DB, decisionID string) ([]TicketSummary, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, type, title, status, priority
-		FROM tickets WHERE decision_ref = ? ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)
+		FROM tickets WHERE decision_ref = ? ORDER BY SUBSTR(id, 1, 1), CAST(SUBSTR(id, 3) AS INTEGER)
 	`, decisionID)
 	if err != nil {
 		return nil, fmt.Errorf("repo: tickets for %s: %w", decisionID, err)
@@ -259,7 +259,7 @@ func Coverage(ctx context.Context, db *sql.DB) ([]CoverageGap, error) {
 		FROM decisions d
 		LEFT JOIN tickets t ON t.decision_ref = d.id
 		WHERE d.type = 'confirmed' AND t.id IS NULL
-		ORDER BY CAST(SUBSTR(d.id, 3) AS INTEGER)
+		ORDER BY SUBSTR(d.id, 1, 1), CAST(SUBSTR(d.id, 3) AS INTEGER)
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("repo: coverage: %w", err)
