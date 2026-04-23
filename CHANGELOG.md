@@ -11,6 +11,40 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.3.0] - 2026-04-23
+
+### Fixed
+
+- Reference parser no longer matches substrings like "D-3" inside
+  "BSD-3-Clause" or "Q-1" inside "FAQ-1". Added `\b` word boundaries
+  to the `refIDRe` regex.
+- `pql decisions sync` now prunes stale records that no longer exist
+  in the markdown source, preventing ghost entries after ID renames.
+
+### Changed
+
+- Record IDs are no longer zero-padded. `NextID` and `nextTicketID`
+  produce `D-14`, `T-44` instead of `D-014`, `T-044`. Existing
+  zero-padded IDs in pql.db are accepted; owners clean up at their
+  own pace.
+- SQL `ORDER BY id` replaced with numeric sort
+  (`CAST(SUBSTR(id, 3) AS INTEGER)`) so IDs above 999 sort correctly.
+- `pql plan export` writes to `.pql/pql-plan.json` (was `pql-plan.json`
+  at vault root). `pql plan import` falls back to the legacy location.
+- `pql init` gitignore entry changed from `.pql/` to `.pql/*` with
+  explicit includes for `.pql/pql-plan.json` and `.pql/hooks/`.
+
+### Added
+
+- `pql ticket setparent <id[,...]> <parent-id | none>` — set or clear
+  a ticket's parent after creation. Supports batching. Idempotent:
+  no-op if the parent already matches.
+- Pre-commit hook auto-installed by `pql init` at `.pql/hooks/pre-commit`.
+  Runs `pql plan export` and stages the file if it changed. A thin shim
+  in `.git/hooks/pre-commit` sources it.
+- Schema test expectations now track `len(migrations)` instead of a
+  hardcoded version number.
+
 ## [1.2.0] - 2026-04-22
 
 ### Added
