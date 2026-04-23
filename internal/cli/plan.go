@@ -14,7 +14,7 @@ import (
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
 
-const defaultSnapshotFile = "pql-plan.json"
+const defaultSnapshotFile = ".pql/pql-plan.json"
 
 func newPlanCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -159,13 +159,12 @@ func newPlanExportCmd() *cobra.Command {
 history) to a single JSON file. The file is meant to be committed
 to git — pql.db itself stays gitignored.
 
-  pql plan export                         # writes pql-plan.json
+  pql plan export                         # writes .pql/pql-plan.json
   pql plan export --to planning.json      # custom filename
 
-Wire this into your workflow however you like:
-  - pre-push hook: .githooks/pre-push calls pql plan export && git add pql-plan.json
-  - sprint skill: a Claude Code skill that exports + commits on sprint close
-  - manual: run it before committing when planning state changed`,
+Automatically wired by pql init: a pre-commit hook at .pql/hooks/pre-commit
+runs plan export and stages the file if it changed. Manual export is also
+fine — run it before committing when planning state changed.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -212,7 +211,7 @@ func newPlanImportCmd() *cobra.Command {
 is upserted (decisions, tickets) or replaced (refs, deps, labels,
 history).
 
-  pql plan import                         # reads pql-plan.json
+  pql plan import                         # reads .pql/pql-plan.json
   pql plan import --from planning.json    # custom filename`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {

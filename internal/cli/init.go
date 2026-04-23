@@ -32,6 +32,14 @@ type initResult struct {
 	Skill       initSkillStat    `json:"skill"`
 	Permissions initPermissions  `json:"permissions"`
 	PlanImport  initPlanImport   `json:"plan_import"`
+	Hook        initHookStat     `json:"hook"`
+}
+
+type initHookStat struct {
+	Path     string `json:"path,omitempty"`
+	Installed bool  `json:"installed"`
+	Existed   bool  `json:"existed"`
+	Skipped  string `json:"skipped,omitempty"`
 }
 
 type initPlanImport struct {
@@ -151,7 +159,7 @@ drift.`,
 			}
 
 			giPath := filepath.Join(dir, ".gitignore")
-			giStat, err := ensureGitignoreEntry(giPath, ".pql/")
+			giStat, err := ensurePqlGitignore(giPath)
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
@@ -163,6 +171,7 @@ drift.`,
 
 			permStat := ensurePqlPermissions(dir)
 			planStat := autoImportPlan(cmd.Context(), dir)
+			hookStat := ensurePlanExportHook(dir)
 
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
@@ -175,6 +184,7 @@ drift.`,
 				Skill:       skillStat,
 				Permissions: permStat,
 				PlanImport:  planStat,
+				Hook:        hookStat,
 			}
 			if _, err := render.One(result, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
@@ -284,6 +294,172 @@ func ensureGitignoreEntry(path, entry string) (initGitignore, error) {
 	stat.Appended = true
 	stat.Entry = entry
 	return stat, nil
+}
+
+// ensurePqlGitignore manages the pql block in .gitignore. Uses .pql/*
+// (not .pql/) so individual files can be un-ignored. Adds explicit
+// includes for the plan export and hooks directory.
+func ensurePqlGitignore(path string) (initGitignore, error) {
+	body, err := os.ReadFile(path) //nolint:gosec // G304: project's own .gitignore
+	if errors.Is(err, os.ErrNotExist) {
+		return initGitignore{}, nil
+	}
+	if err != nil {
+		return initGitignore{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	stat := initGitignore{Path: path, Exists: true}
+
+	lines := strings.Split(string(body), "\n")
+
+	needed := map[string]bool{
+		".pql/*":              true,
+		"!.pql/pql-plan.json": true,
+		"!.pql/hooks/":        true,
+	}
+	hasDirForm := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		delete(needed, trimmed)
+		if trimmed == ".pql/" {
+			hasDirForm = true
+		}
+	}
+
+	if hasDirForm {
+		// Replace .pql/ with .pql/* so un-ignore rules work.
+		for i, line := range lines {
+			if strings.TrimSpace(line) == ".pql/" {
+				lines[i] = ".pql/*"
+				delete(needed, ".pql/*")
+				break
+			}
+		}
+	}
+
+	if len(needed) == 0 && !hasDirForm {
+		return stat, nil
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString(strings.Join(lines, "\n"))
+	content := buf.String()
+	if len(content) > 0 && content[len(content)-1] != '\n' {
+		buf.WriteByte('\n')
+	}
+
+	for _, entry := range []string{".pql/*", "!.pql/pql-plan.json", "!.pql/hooks/"} {
+		if needed[entry] {
+			buf.WriteString(entry)
+			buf.WriteByte('\n')
+		}
+	}
+
+	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
+		return stat, fmt.Errorf("write %s: %w", path, err)
+	}
+	stat.Appended = true
+	return stat, nil
+}
+
+const pqlHookMarker = "# --- pql plan export ---"
+
+const pqlPreCommitHook = `# --- pql plan export ---
+# Auto-installed by pql init. Exports planning state so it's
+# committed alongside code changes. Safe no-op if pql is absent.
+if command -v pql >/dev/null 2>&1; then
+    pql plan export 2>/dev/null
+    if ! git diff --quiet -- .pql/pql-plan.json 2>/dev/null; then
+        git add .pql/pql-plan.json
+    fi
+fi
+# --- end pql ---
+`
+
+func ensurePlanExportHook(dir string) initHookStat {
+	gitDir := filepath.Join(dir, ".git")
+	if _, err := os.Stat(gitDir); err != nil {
+		return initHookStat{Skipped: "not a git repository"}
+	}
+
+	hookDir := filepath.Join(dir, ".pql", "hooks")
+	hookPath := filepath.Join(hookDir, "pre-commit")
+	stat := initHookStat{Path: hookPath}
+
+	if err := os.MkdirAll(hookDir, 0o750); err != nil {
+		stat.Skipped = "mkdir: " + err.Error()
+		return stat
+	}
+
+	existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: known hook path
+	if err == nil {
+		stat.Existed = true
+		if strings.Contains(string(existing), pqlHookMarker) {
+			return stat
+		}
+		// Prepend our block to existing hook content.
+		var buf bytes.Buffer
+		buf.WriteString(pqlPreCommitHook)
+		buf.WriteByte('\n')
+		buf.Write(existing)
+		if err := os.WriteFile(hookPath, buf.Bytes(), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
+			stat.Skipped = "write: " + err.Error()
+			return stat
+		}
+		stat.Installed = true
+		return stat
+	}
+
+	content := "#!/bin/sh\n" + pqlPreCommitHook
+	if err := os.WriteFile(hookPath, []byte(content), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
+		stat.Skipped = "write: " + err.Error()
+		return stat
+	}
+	stat.Installed = true
+
+	ensureGitHookShim(dir)
+	return stat
+}
+
+const pqlShimMarker = "# pql: source .pql/hooks/pre-commit"
+
+func ensureGitHookShim(dir string) {
+	shimPath := filepath.Join(dir, ".git", "hooks", "pre-commit")
+	sourceLine := `. "$(git rev-parse --show-toplevel)/.pql/hooks/pre-commit"`
+
+	existing, err := os.ReadFile(shimPath) //nolint:gosec // G304: known git hook path
+	if err == nil {
+		if strings.Contains(string(existing), pqlShimMarker) {
+			return
+		}
+		// Prepend source line to existing hook.
+		var buf bytes.Buffer
+		// Find the shebang line if present, insert after it.
+		lines := strings.SplitN(string(existing), "\n", 2)
+		if strings.HasPrefix(lines[0], "#!") {
+			buf.WriteString(lines[0])
+			buf.WriteByte('\n')
+			buf.WriteString(pqlShimMarker)
+			buf.WriteByte('\n')
+			buf.WriteString(sourceLine)
+			buf.WriteByte('\n')
+			if len(lines) > 1 {
+				buf.WriteString(lines[1])
+			}
+		} else {
+			buf.WriteString(pqlShimMarker)
+			buf.WriteByte('\n')
+			buf.WriteString(sourceLine)
+			buf.WriteByte('\n')
+			buf.Write(existing)
+		}
+		_ = os.WriteFile(shimPath, buf.Bytes(), 0o750) //nolint:gosec // G306: hook must be executable
+		return
+	}
+
+	shim := "#!/bin/sh\n" + pqlShimMarker + "\n" + sourceLine + "\n"
+	_ = os.MkdirAll(filepath.Dir(shimPath), 0o750)
+	_ = os.WriteFile(shimPath, []byte(shim), 0o750) //nolint:gosec // G306: hook must be executable
 }
 
 // initSkillStep handles the --with-skill flag. Returns a stat describing
@@ -475,9 +651,15 @@ func ensurePqlPermissions(dir string) initPermissions {
 
 func autoImportPlan(ctx context.Context, dir string) initPlanImport {
 	snapPath := filepath.Join(dir, defaultSnapshotFile)
-	data, err := os.ReadFile(snapPath) //nolint:gosec // G304: known snapshot file in vault root
+	data, err := os.ReadFile(snapPath) //nolint:gosec // G304: known snapshot file
 	if err != nil {
-		return initPlanImport{Skipped: "no " + defaultSnapshotFile + " found"}
+		// Fall back to legacy root-level location.
+		legacyPath := filepath.Join(dir, "pql-plan.json")
+		data, err = os.ReadFile(legacyPath) //nolint:gosec // G304: legacy snapshot file
+		if err != nil {
+			return initPlanImport{Skipped: "no " + defaultSnapshotFile + " found"}
+		}
+		snapPath = legacyPath
 	}
 
 	var snap repo.Snapshot
