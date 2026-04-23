@@ -344,7 +344,7 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 	var buf bytes.Buffer
 	buf.WriteString(strings.Join(lines, "\n"))
 	content := buf.String()
-	if len(content) > 0 && content[len(content)-1] != '\n' {
+	if content != "" && content[len(content)-1] != '\n' {
 		buf.WriteByte('\n')
 	}
 
