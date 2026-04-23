@@ -5,6 +5,7 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/postmeridiem/pql/internal/planning/parser"
@@ -60,6 +61,14 @@ func SyncDecisions(ctx context.Context, db *sql.DB, decisionsDir, repoRoot strin
 		knownIDs[r.ID] = true
 	}
 
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM decisions WHERE id NOT IN (
+			SELECT value FROM json_each(?)
+		)
+	`, idsJSON(records)); err != nil {
+		return nil, fmt.Errorf("repo: prune stale decisions: %w", err)
+	}
+
 	refsCreated := 0
 	broken := 0
 	for _, r := range records {
@@ -88,6 +97,15 @@ func SyncDecisions(ctx context.Context, db *sql.DB, decisionsDir, repoRoot strin
 		Broken:   broken,
 		Warnings: warnings,
 	}, nil
+}
+
+func idsJSON(records []parser.Record) string {
+	ids := make([]string, len(records))
+	for i, r := range records {
+		ids[i] = r.ID
+	}
+	b, _ := json.Marshal(ids)
+	return string(b)
 }
 
 // Decision is a row from the decisions table.
@@ -126,7 +144,7 @@ func ListDecisions(ctx context.Context, db *sql.DB, f DecisionFilter) ([]Decisio
 		query += " AND status = ?"
 		params = append(params, f.Status)
 	}
-	query += " ORDER BY id"
+	query += " ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)"
 
 	rows, err := db.QueryContext(ctx, query, params...)
 	if err != nil {
@@ -209,7 +227,7 @@ type TicketSummary struct {
 func TicketsForDecision(ctx context.Context, db *sql.DB, decisionID string) ([]TicketSummary, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, type, title, status, priority
-		FROM tickets WHERE decision_ref = ? ORDER BY id
+		FROM tickets WHERE decision_ref = ? ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)
 	`, decisionID)
 	if err != nil {
 		return nil, fmt.Errorf("repo: tickets for %s: %w", decisionID, err)
@@ -241,7 +259,7 @@ func Coverage(ctx context.Context, db *sql.DB) ([]CoverageGap, error) {
 		FROM decisions d
 		LEFT JOIN tickets t ON t.decision_ref = d.id
 		WHERE d.type = 'confirmed' AND t.id IS NULL
-		ORDER BY d.id
+		ORDER BY CAST(SUBSTR(d.id, 3) AS INTEGER)
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("repo: coverage: %w", err)

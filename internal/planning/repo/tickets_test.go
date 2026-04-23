@@ -16,8 +16,8 @@ func TestCreateAndGetTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if id != "T-001" {
-		t.Errorf("id = %q, want T-001", id)
+	if id != "T-1" {
+		t.Errorf("id = %q, want T-1", id)
 	}
 
 	tk, err := GetTicket(ctx, db, id)
@@ -134,7 +134,7 @@ func TestNextTicketID_Increments(t *testing.T) {
 	id1, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "first"})
 	id2, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "second"})
 
-	if id1 != "T-001" || id2 != "T-002" {
-		t.Errorf("ids = %q, %q — want T-001, T-002", id1, id2)
+	if id1 != "T-1" || id2 != "T-2" {
+		t.Errorf("ids = %q, %q — want T-1, T-2", id1, id2)
 	}
 }

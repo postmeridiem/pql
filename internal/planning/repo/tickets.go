@@ -105,7 +105,7 @@ func nextTicketID(ctx context.Context, db *sql.DB) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("repo: next ticket id: %w", err)
 	}
-	return fmt.Sprintf("T-%03d", maxNum+1), nil
+	return fmt.Sprintf("T-%d", maxNum+1), nil
 }
 
 // TicketFilter constrains ListTickets results.
@@ -148,7 +148,7 @@ func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, err
 		query += " AND id IN (SELECT ticket_id FROM ticket_labels WHERE label = ?)"
 		params = append(params, f.Label)
 	}
-	query += " ORDER BY id"
+	query += " ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)"
 
 	rows, err := db.QueryContext(ctx, query, params...)
 	if err != nil {
@@ -275,7 +275,7 @@ func BlockersOf(ctx context.Context, db *sql.DB, id string) ([]BlockerInfo, erro
 		FROM ticket_deps d
 		JOIN tickets t ON t.id = d.blocker_id
 		WHERE d.blocked_id = ?
-		ORDER BY t.id
+		ORDER BY CAST(SUBSTR(t.id, 3) AS INTEGER)
 	`, id)
 	if err != nil {
 		return nil, fmt.Errorf("repo: blockers of %s: %w", id, err)
@@ -297,7 +297,7 @@ func BlockersOf(ctx context.Context, db *sql.DB, id string) ([]BlockerInfo, erro
 func ChildrenOf(ctx context.Context, db *sql.DB, parentID string) ([]TicketSummary, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, type, title, status, priority
-		FROM tickets WHERE parent_id = ? ORDER BY id
+		FROM tickets WHERE parent_id = ? ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)
 	`, parentID)
 	if err != nil {
 		return nil, fmt.Errorf("repo: children of %s: %w", parentID, err)

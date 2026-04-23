@@ -22,7 +22,7 @@ var (
 	resolvesRe    = regexp.MustCompile(`(?i)^\s*-\s+\*\*Resolves:\*\*`)
 	dependsRe     = regexp.MustCompile(`(?i)^\s*-\s+\*\*Depends\s+on:\*\*`)
 	amendsRe      = regexp.MustCompile(`(?i)^\s*\*\*Amendment\s*\(`)
-	refIDRe       = regexp.MustCompile(`[DQRT]-\d+`)
+	refIDRe       = regexp.MustCompile(`\b[DQRT]-\d+\b`)
 )
 
 var typeFromPrefix = map[byte]string{
@@ -294,5 +294,5 @@ func NextID(records []Record, prefix string) string {
 			highest = n
 		}
 	}
-	return fmt.Sprintf("%s-%03d", prefix, highest+1)
+	return fmt.Sprintf("%s-%d", prefix, highest+1)
 }

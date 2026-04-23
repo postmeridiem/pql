@@ -147,14 +147,33 @@ func TestNextID(t *testing.T) {
 		prefix string
 		want   string
 	}{
-		{"D", "D-011"},
-		{"Q", "Q-006"},
-		{"R", "R-002"},
+		{"D", "D-11"},
+		{"Q", "Q-6"},
+		{"R", "R-2"},
 	}
 	for _, tt := range tests {
 		if got := NextID(records, tt.prefix); got != tt.want {
 			t.Errorf("NextID(%q) = %q, want %q", tt.prefix, got, tt.want)
 		}
+	}
+}
+
+func TestExtractRefs_IgnoresEmbeddedIDs(t *testing.T) {
+	md := `### D-058: Format engines are adoptable dependencies
+- **Date:** 2026-04-23
+- **Decision:** BSD-3-Clause licensed engines are fine. See FAQ-1 for rationale.
+- **Cross-reference:** [D-031](tooling.md#d-031)
+`
+	records := parseText(md, "tooling", "decisions/tooling.md")
+	if len(records) != 1 {
+		t.Fatalf("got %d records, want 1", len(records))
+	}
+	r := records[0]
+	if len(r.Refs) != 1 {
+		t.Fatalf("got %d refs, want 1: %+v", len(r.Refs), r.Refs)
+	}
+	if r.Refs[0].TargetID != "D-031" {
+		t.Errorf("ref target = %q, want D-031", r.Refs[0].TargetID)
 	}
 }
 

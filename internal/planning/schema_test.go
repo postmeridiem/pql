@@ -37,8 +37,9 @@ func TestMigrate_Fresh(t *testing.T) {
 	if err := db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&v); err != nil {
 		t.Fatalf("read version: %v", err)
 	}
-	if v != 1 {
-		t.Errorf("version = %d, want 1", v)
+	want := len(migrations)
+	if v != want {
+		t.Errorf("version = %d, want %d", v, want)
 	}
 }
 
@@ -57,8 +58,9 @@ func TestMigrate_Idempotent(t *testing.T) {
 	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("schema_migrations rows = %d, want 1", count)
+	want := len(migrations)
+	if count != want {
+		t.Errorf("schema_migrations rows = %d, want %d", count, want)
 	}
 }
 
