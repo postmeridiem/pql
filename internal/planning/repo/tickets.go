@@ -261,6 +261,61 @@ func Assign(ctx context.Context, db *sql.DB, id, agent, changedBy string) error 
 	return tx.Commit()
 }
 
+// SetParent sets a ticket's parent (or clears it with ""). Idempotent:
+// if the parent is already the requested value, returns nil without
+// writing history.
+func SetParent(ctx context.Context, db *sql.DB, id, parentID, changedBy string) error {
+	t, err := GetTicket(ctx, db, id)
+	if err != nil {
+		return err
+	}
+	if t == nil {
+		return fmt.Errorf("repo: ticket %s not found", id)
+	}
+
+	oldVal := ""
+	if t.ParentID != nil {
+		oldVal = *t.ParentID
+	}
+	if oldVal == parentID {
+		return nil
+	}
+
+	if parentID != "" {
+		if parentID == id {
+			return fmt.Errorf("repo: ticket %s cannot be its own parent", id)
+		}
+		p, err := GetTicket(ctx, db, parentID)
+		if err != nil {
+			return err
+		}
+		if p == nil {
+			return fmt.Errorf("repo: parent ticket %s not found", parentID)
+		}
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("repo: begin setparent: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE tickets SET parent_id = ?, updated_at = datetime('now') WHERE id = ?
+	`, nullIfEmpty(parentID), id); err != nil {
+		return fmt.Errorf("repo: update parent_id: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by)
+		VALUES (?, 'parent_id', ?, ?, ?)
+	`, id, nullIfEmpty(oldVal), nullIfEmpty(parentID), nullIfEmpty(changedBy)); err != nil {
+		return fmt.Errorf("repo: record setparent history: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // BlockerInfo is a ticket that blocks another.
 type BlockerInfo struct {
 	ID     string `json:"id"`

@@ -42,6 +42,7 @@ func newTicketCmd() *cobra.Command {
 	cmd.AddCommand(newTicketShowCmd())
 	cmd.AddCommand(newTicketStatusCmd())
 	cmd.AddCommand(newTicketAssignCmd())
+	cmd.AddCommand(newTicketSetParentCmd())
 	cmd.AddCommand(newTicketBlockCmd())
 	cmd.AddCommand(newTicketUnblockCmd())
 	cmd.AddCommand(newTicketTeamCmd())
@@ -311,6 +312,55 @@ func newTicketAssignCmd() *cobra.Command {
 			var results []repo.Ticket
 			for _, id := range ids {
 				if err := repo.Assign(ctx, pdb.SQL(), id, agent, ""); err != nil {
+					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
+				}
+				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				if tk != nil {
+					results = append(results, *tk)
+				}
+			}
+
+			return renderTicketResults(cmd, results)
+		},
+	}
+}
+
+// --- setparent ---
+
+func newTicketSetParentCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "setparent <id[,id,...]> <parent-id | none>",
+		Short: "Set or clear the parent of one or more tickets",
+		Long: `Set or clear the parent of one or more tickets. Use commas to batch:
+
+  pql ticket setparent T-9 T-2
+  pql ticket setparent T-9,T-10,T-12 T-3
+  pql ticket setparent T-9 none`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			ids := parseIDs(args[0])
+			parentID := args[1]
+			if parentID == "none" {
+				parentID = ""
+			}
+
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			var results []repo.Ticket
+			for _, id := range ids {
+				if err := repo.SetParent(ctx, pdb.SQL(), id, parentID, ""); err != nil {
 					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
 				}
 				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
