@@ -28,6 +28,9 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ### Changed
 
+- `pql ticket show` replaces `--with-decision` with `--with-context`,
+  which includes the full ancestor tree and all linked decisions from
+  the chain (same context bundle as whatnext/review).
 - Ticket status transitions are no longer enforced by pql. Any valid
   status can move to any other valid status; callers can layer their
   own transition rules on top.

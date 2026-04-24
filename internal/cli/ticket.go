@@ -166,7 +166,7 @@ func newTicketListCmd() *cobra.Command {
 // --- show ---
 
 func newTicketShowCmd() *cobra.Command {
-	var withDecision, withBlockers, withChildren bool
+	var withContext, withBlockers, withChildren bool
 	cmd := &cobra.Command{
 		Use:   "show <id>",
 		Short: "Show a ticket with optional joins",
@@ -193,17 +193,20 @@ func newTicketShowCmd() *cobra.Command {
 
 			type showResult struct {
 				repo.Ticket
-				Decision *repo.Decision     `json:"decision,omitempty"`
-				Blockers []repo.BlockerInfo  `json:"blockers,omitempty"`
-				Children []repo.TicketSummary `json:"children,omitempty"`
+				Ancestors []repo.Ticket      `json:"ancestors,omitempty"`
+				Decisions []repo.Decision     `json:"decisions,omitempty"`
+				Blockers  []repo.BlockerInfo  `json:"blockers,omitempty"`
+				Children  []repo.TicketSummary `json:"children,omitempty"`
 			}
 			out := showResult{Ticket: *tk}
 
-			if withDecision && tk.DecisionRef != nil {
-				out.Decision, err = repo.GetDecision(ctx, pdb.SQL(), *tk.DecisionRef)
+			if withContext {
+				enriched, err := enrichTicket(ctx, pdb.SQL(), tk)
 				if err != nil {
 					return &exitError{code: diag.Software, msg: err.Error()}
 				}
+				out.Ancestors = enriched.Ancestors
+				out.Decisions = enriched.Decisions
 			}
 			if withBlockers {
 				out.Blockers, err = repo.BlockersOf(ctx, pdb.SQL(), args[0])
@@ -229,7 +232,7 @@ func newTicketShowCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&withDecision, "with-decision", false, "include linked decision")
+	cmd.Flags().BoolVar(&withContext, "with-context", false, "include ancestor tree and linked decisions")
 	cmd.Flags().BoolVar(&withBlockers, "with-blockers", false, "include blocking tickets")
 	cmd.Flags().BoolVar(&withChildren, "with-children", false, "include child tickets")
 	return cmd
