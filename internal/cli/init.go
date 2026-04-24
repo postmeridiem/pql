@@ -432,11 +432,21 @@ const pqlPostMergeMarker = "# --- pql plan import ---"
 
 const pqlPostMergeHook = `# --- pql plan import ---
 # Auto-installed by pql init. Imports planning state when the
-# snapshot file changes on pull/merge. Safe no-op if pql is absent.
+# snapshot file changes on pull/merge. Skips if local planning
+# state has uncommitted changes to avoid data loss.
+# Safe no-op if pql is absent.
 if command -v pql >/dev/null 2>&1; then
     changed=$(git diff-tree -r --name-only ORIG_HEAD HEAD -- .pql/pql-plan.json 2>/dev/null)
     if [ -n "$changed" ]; then
-        pql plan import 2>/dev/null
+        tmpfile=$(mktemp)
+        pql plan export --to "$tmpfile" 2>/dev/null
+        if git show ORIG_HEAD:.pql/pql-plan.json 2>/dev/null | diff -q - "$tmpfile" >/dev/null 2>&1; then
+            pql plan import 2>/dev/null
+        else
+            echo "pql: skipping plan import — local planning state has uncommitted changes" >&2
+            echo "pql: run 'pql plan export' then merge manually, then 'pql plan import'" >&2
+        fi
+        rm -f "$tmpfile"
     fi
 fi
 # --- end pql ---

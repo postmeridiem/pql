@@ -41,3 +41,8 @@
 - **Status:** Resolved → [D-13](architecture.md#d-13-plan-export-and-plan-import)
 - **Question:** How should users snapshot planning state (pql.db) into version control? What events trigger it, and what's the artifact shape?
 - **Context:** Resolved: `pql plan export` and `pql plan import` with a committed JSON artifact. Users wire the trigger (pre-push hook, sprint skill, manual) to their own workflow.
+
+### Q-9: Multi-user ticket ID distribution
+- **Status:** Open
+- **Question:** How do multiple contributors create tickets without ID collisions? Current `T-<n>` sequential IDs assume a single writer.
+- **Context:** Two agents or contributors independently creating T-5 is a data integrity problem no merge strategy can fix. Leading candidate: namespaced temporary IDs (e.g. `T~jeroen-1`) that a central processor (CI action) canonicalizes to `T-<n>` on merge to main. This preserves local ergonomics while making collisions impossible by construction. Blocks on deciding the canonicalization trigger (GitHub Action, Gitea hook, pre-merge check) and the temp ID syntax. Related to [Q-3](#q-3-multi-user-planning-db).

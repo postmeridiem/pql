@@ -7,24 +7,24 @@ Core design constraints for pql.
 ### D-1: No vector retrieval
 - **Date:** 2026-04-19
 - **Decision:** Retrieval is built from cheap, inspectable, structured signals — textual match, structural centrality, path proximity, recency, co-occurrence. No vector index.
-- **Rationale:** The available embedded options are not tier-one infrastructure; the tier-one options are not embeddable as a single static binary. The class of queries where vectors beat structured retrieval is narrower than the ecosystem narrative suggests on code-and-prose repos. The absence forces the ranker to do its job properly with the signals genuinely available.
-- **Cost:** Some paraphrase queries will miss. Users reach for ripgrep when they need raw text recall. If a specific repeatable failure mode emerges where structured signals can't compensate, revisit.
+- **Rationale:** The available embedded options are not tier-one infrastructure; the tier-one options are not embeddable as a single static binary. Shipping vectors means shipping a second store — new consistency problem, new lifecycle, new failure mode. The class of queries where vectors beat structured retrieval is narrower than the ecosystem narrative suggests on code-and-prose repos where identifiers, paths, and structure carry most of the signal. The absence is not a gap — it is a constraint that forces the ranker to do its job properly with the signals genuinely available.
+- **Cost:** Some paraphrase queries will miss. Users reach for ripgrep when they need raw text recall. The ranker is the product; weight tuning and signal coverage are first-class engineering.
 - **Raised by:** Design philosophy founding decision.
+- **Revisit when:** (a) a specific class of agent task is shown, with examples, to fail on structured retrieval and succeed on semantic; AND (b) a pure-Go embedded vector store reaches tier-one quality. Either alone is insufficient.
 
 ### D-2: Intent-level surface for agents, primitives as escape hatch
 - **Date:** 2026-04-19
-- **Decision:** Expose intent-level commands (`pql related`, `pql search`, `pql context`) as the primary surface. Each intent does internal candidate generation, ranking, and bundle assembly. The DSL and primitive subcommands are the escape hatch for exact queries. `--flat-search` reduces any intent to its primitive layer.
-- **Rationale:** Each agent tool call is a permission event (chains erode trust), a round trip (the binary's internal queries are cheaper), and a drift opportunity (composition inside the binary is deterministic). The correct shape is one tool call per intent, not N chained primitives.
-- **Cost:** New capabilities require new intents, not new primitives. If agents reach for the escape hatch frequently, the intent surface is wrong.
+- **Decision:** Expose intent-level commands (`pql related`, `pql search`, `pql context`) as the primary surface. Each intent does internal candidate generation, ranking, and bundle assembly. The DSL and primitive subcommands are the escape hatch for exact queries. A global `--flat-search` flag reduces any intent to its primitive layer for one invocation.
+- **Rationale:** Each agent tool call is a permission event (chains erode trust), a round trip (the binary's internal queries are cheaper), and a drift opportunity (composition inside the binary is deterministic). The correct shape is one tool call per intent, not N chained primitives. The intent layer must not import the CLI layer (`internal/intent/` consumer-agnostic) to keep future MCP consumers cheap.
+- **Cost:** New capabilities require new intents, not new primitives. Two files per feature (core + CLI adapter). If agents reach for the escape hatch frequently, the intent surface is wrong and should be revisited — not supplemented with more primitives.
 - **Raised by:** Design philosophy founding decision.
 
 ### D-3: Two SQLite stores — index.db (cache) and pql.db (state)
 - **Date:** 2026-04-22
-- **Decision:** `<vault>/.pql/index.db` is a pure cache — drop and rebuild on schema mismatch. `<vault>/.pql/pql.db` is user-authored state (decisions, tickets) — forward-only migrations.
-- **Rationale:** One store fails both tests: as a cache it's too durable, as user state it's too fragile. The CLI-today / MCPs-tomorrow split reinforces this: a query MCP needs only index.db, a planning MCP needs only pql.db.
+- **Decision:** `<vault>/.pql/index.db` is a pure cache — drop and rebuild on schema mismatch. `<vault>/.pql/pql.db` is user-authored state (decisions, tickets) — forward-only migrations. Both live in `<vault>/.pql/` alongside `config.yaml`. The read-only-vault fallback applies to index.db; pql.db writes to a read-only vault fail cleanly.
+- **Rationale:** One store fails both tests: as a cache it's too durable, as user state it's too fragile. The CLI-today / MCPs-tomorrow split reinforces this: a query MCP needs only index.db, a planning MCP needs only pql.db. The skill install lock sits outside SQLite so the cache invariant survived; planning cannot — status transitions, ticket history, and the D-record ↔ ticket join graph are user-authored state that must survive index rebuilds.
 - **Cost:** Two files to manage. pql.db must survive upgrades; uninstalling pql leaves it in place.
 - **Raised by:** Planning subcommands feature design.
-- **Cross-reference:** Full rationale in [docs/adr/0003-pql-db-for-user-state.md](../docs/adr/0003-pql-db-for-user-state.md)
 
 ### D-4: Consumer-agnostic core
 - **Date:** 2026-04-22
@@ -70,6 +70,7 @@ Core design constraints for pql.
 
 ### D-10: State machine for ticket status transitions
 - **Date:** 2026-04-22
+- **Status:** Superseded by [D-14](#d-14-no-status-transition-enforcement-in-pql)
 - **Decision:** Ticket status follows a directed graph: backlog→ready→in_progress→review→done, with shortcuts (in_progress→done, any→cancelled) and reverse paths (done→in_progress, cancelled→backlog). Transitions outside the graph are rejected.
 - **Rationale:** Prevents nonsensical jumps (backlog→done) that make ticket history meaningless. The allowed transitions match common kanban workflows.
 - **Cost:** Users can't force arbitrary transitions. If a new workflow needs a different graph, the transitions map in `repo/tickets.go` is the single edit point.
@@ -95,3 +96,11 @@ Core design constraints for pql.
 - **Rationale:** Planning state is valuable enough to version but SQLite files don't belong in git. A JSON export is diffable, portable, and merge-friendly. The trigger is the user's choice — pre-push hook, sprint skill, manual — pql provides the verbs, not the policy.
 - **Cost:** Two representations of the same data (pql.db + export file) can drift. The export is a snapshot, not a live mirror. Users who want the export current must run `pql plan export` before committing.
 - **Raised by:** Resolved [Q-8](questions.md#q-8-occasional-pqldb-backups-into-git).
+
+### D-14: No status transition enforcement in pql
+- **Date:** 2026-04-24
+- **Supersedes:** [D-10](#d-10-state-machine-for-ticket-status-transitions)
+- **Decision:** pql validates that the target status is a known value but does not enforce a transition graph. Any valid status can move to any other valid status. Callers (scripts, IDE plugins, agents) layer their own workflow rules on top.
+- **Rationale:** pql is a local tool — the caller is better positioned to enforce workflow-specific transitions. Hardcoding a state machine in the core blocks legitimate use cases (e.g. an agent that moves backlog→done after batch processing). The audit log records every transition regardless.
+- **Cost:** Nothing prevents nonsensical transitions at the pql level. Callers that need guardrails must implement them.
+- **Raised by:** User feedback during planning usage.
