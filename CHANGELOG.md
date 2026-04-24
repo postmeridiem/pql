@@ -19,6 +19,9 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   record with its full markdown body extracted from the source file.
   All existing metadata fields are included alongside the new `body`
   field.
+- `pql init` installs a post-merge hook that auto-imports planning
+  state when `.pql/pql-plan.json` changes on pull/merge. Companion
+  to the existing pre-commit export hook.
 - `pql plan whatsnext` — surfaces the single best ticket to work on
   (in-progress first, then highest-priority ready) with ancestor tree,
   children, and linked decisions for instant context. Review tickets

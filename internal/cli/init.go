@@ -26,13 +26,14 @@ import (
 // initResult is the JSON shape `pql init` emits on stdout. Each sub-stat
 // describes one of the project-state fixers init runs through.
 type initResult struct {
-	Directory   string           `json:"directory"`
-	Config      initConfigStat   `json:"config"`
-	Gitignore   initGitignore    `json:"gitignore"`
-	Skill       initSkillStat    `json:"skill"`
-	Permissions initPermissions  `json:"permissions"`
-	PlanImport  initPlanImport   `json:"plan_import"`
-	Hook        initHookStat     `json:"hook"`
+	Directory       string           `json:"directory"`
+	Config          initConfigStat   `json:"config"`
+	Gitignore       initGitignore    `json:"gitignore"`
+	Skill           initSkillStat    `json:"skill"`
+	Permissions     initPermissions  `json:"permissions"`
+	PlanImport      initPlanImport   `json:"plan_import"`
+	Hook            initHookStat     `json:"hook"`
+	PostMergeHook   initHookStat     `json:"post_merge_hook"`
 }
 
 type initHookStat struct {
@@ -172,19 +173,21 @@ drift.`,
 			permStat := ensurePqlPermissions(dir)
 			planStat := autoImportPlan(cmd.Context(), dir)
 			hookStat := ensurePlanExportHook(dir)
+			postMergeStat := ensurePlanImportHook(dir)
 
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			result := &initResult{
-				Directory:   dir,
-				Config:      cfgStat,
-				Gitignore:   giStat,
-				Skill:       skillStat,
-				Permissions: permStat,
-				PlanImport:  planStat,
-				Hook:        hookStat,
+				Directory:     dir,
+				Config:        cfgStat,
+				Gitignore:     giStat,
+				Skill:         skillStat,
+				Permissions:   permStat,
+				PlanImport:    planStat,
+				Hook:          hookStat,
+				PostMergeHook: postMergeStat,
 			}
 			if _, err := render.One(result, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
@@ -421,29 +424,84 @@ func ensurePlanExportHook(dir string) initHookStat {
 	}
 	stat.Installed = true
 
-	ensureGitHookShim(dir)
+	ensureGitHookShim(dir, "pre-commit")
 	return stat
 }
 
-const pqlShimMarker = "# pql: source .pql/hooks/pre-commit"
+const pqlPostMergeMarker = "# --- pql plan import ---"
 
-func ensureGitHookShim(dir string) {
-	shimPath := filepath.Join(dir, ".git", "hooks", "pre-commit")
-	sourceLine := `. "$(git rev-parse --show-toplevel)/.pql/hooks/pre-commit"`
+const pqlPostMergeHook = `# --- pql plan import ---
+# Auto-installed by pql init. Imports planning state when the
+# snapshot file changes on pull/merge. Safe no-op if pql is absent.
+if command -v pql >/dev/null 2>&1; then
+    changed=$(git diff-tree -r --name-only ORIG_HEAD HEAD -- .pql/pql-plan.json 2>/dev/null)
+    if [ -n "$changed" ]; then
+        pql plan import 2>/dev/null
+    fi
+fi
+# --- end pql ---
+`
+
+func ensurePlanImportHook(dir string) initHookStat {
+	gitDir := filepath.Join(dir, ".git")
+	if _, err := os.Stat(gitDir); err != nil {
+		return initHookStat{Skipped: "not a git repository"}
+	}
+
+	hookDir := filepath.Join(dir, ".pql", "hooks")
+	hookPath := filepath.Join(hookDir, "post-merge")
+	stat := initHookStat{Path: hookPath}
+
+	if err := os.MkdirAll(hookDir, 0o750); err != nil {
+		stat.Skipped = "mkdir: " + err.Error()
+		return stat
+	}
+
+	existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: known hook path
+	if err == nil {
+		stat.Existed = true
+		if strings.Contains(string(existing), pqlPostMergeMarker) {
+			return stat
+		}
+		var buf bytes.Buffer
+		buf.WriteString(pqlPostMergeHook)
+		buf.WriteByte('\n')
+		buf.Write(existing)
+		if err := os.WriteFile(hookPath, buf.Bytes(), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
+			stat.Skipped = "write: " + err.Error()
+			return stat
+		}
+		stat.Installed = true
+		return stat
+	}
+
+	content := "#!/bin/sh\n" + pqlPostMergeHook
+	if err := os.WriteFile(hookPath, []byte(content), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
+		stat.Skipped = "write: " + err.Error()
+		return stat
+	}
+	stat.Installed = true
+
+	ensureGitHookShim(dir, "post-merge")
+	return stat
+}
+
+func ensureGitHookShim(dir, hookName string) {
+	shimPath := filepath.Join(dir, ".git", "hooks", hookName)
+	marker := "# pql: source .pql/hooks/" + hookName
+	sourceLine := `. "$(git rev-parse --show-toplevel)/.pql/hooks/` + hookName + `"`
 
 	existing, err := os.ReadFile(shimPath) //nolint:gosec // G304: known git hook path
 	if err == nil {
-		if strings.Contains(string(existing), pqlShimMarker) {
+		if strings.Contains(string(existing), marker) {
 			return
 		}
-		// Prepend source line to existing hook.
 		var buf bytes.Buffer
-		// Find the shebang line if present, insert after it.
 		lines := strings.SplitN(string(existing), "\n", 2)
 		if strings.HasPrefix(lines[0], "#!") {
 			buf.WriteString(lines[0])
 			buf.WriteByte('\n')
-			buf.WriteString(pqlShimMarker)
+			buf.WriteString(marker)
 			buf.WriteByte('\n')
 			buf.WriteString(sourceLine)
 			buf.WriteByte('\n')
@@ -451,7 +509,7 @@ func ensureGitHookShim(dir string) {
 				buf.WriteString(lines[1])
 			}
 		} else {
-			buf.WriteString(pqlShimMarker)
+			buf.WriteString(marker)
 			buf.WriteByte('\n')
 			buf.WriteString(sourceLine)
 			buf.WriteByte('\n')
@@ -461,7 +519,7 @@ func ensureGitHookShim(dir string) {
 		return
 	}
 
-	shim := "#!/bin/sh\n" + pqlShimMarker + "\n" + sourceLine + "\n"
+	shim := "#!/bin/sh\n" + marker + "\n" + sourceLine + "\n"
 	_ = os.MkdirAll(filepath.Dir(shimPath), 0o750)
 	_ = os.WriteFile(shimPath, []byte(shim), 0o750) //nolint:gosec // G306: hook must be executable
 }
