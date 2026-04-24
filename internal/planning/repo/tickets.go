@@ -348,6 +348,100 @@ func ChildrenOf(ctx context.Context, db *sql.DB, parentID string) ([]TicketSumma
 	return result, rows.Err()
 }
 
+// WhatNext returns the single best ticket to work on, or nil when
+// nothing is actionable. Selection order: in_progress (finish current
+// work), then ready (pick up new work), each bucket sorted by priority.
+// Review tickets are deliberately excluded — the author context should
+// not review its own work.
+func WhatNext(ctx context.Context, db *sql.DB) (*Ticket, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, type, parent_id, title, description, status, priority,
+			assigned_to, team, decision_ref, created_at, updated_at
+		FROM tickets
+		WHERE status IN ('in_progress', 'ready')
+		ORDER BY
+			CASE status WHEN 'in_progress' THEN 0 ELSE 1 END,
+			CASE priority
+				WHEN 'critical' THEN 0
+				WHEN 'high' THEN 1
+				WHEN 'medium' THEN 2
+				WHEN 'low' THEN 3
+			END,
+			CAST(SUBSTR(id, 3) AS INTEGER)
+		LIMIT 1
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("repo: whatnext query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	tickets, err := scanTickets(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(tickets) == 0 {
+		return nil, nil
+	}
+	return &tickets[0], nil
+}
+
+// NextReview returns the highest-priority ticket in review status,
+// or nil when nothing needs review.
+func NextReview(ctx context.Context, db *sql.DB) (*Ticket, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, type, parent_id, title, description, status, priority,
+			assigned_to, team, decision_ref, created_at, updated_at
+		FROM tickets
+		WHERE status = 'review'
+		ORDER BY
+			CASE priority
+				WHEN 'critical' THEN 0
+				WHEN 'high' THEN 1
+				WHEN 'medium' THEN 2
+				WHEN 'low' THEN 3
+			END,
+			CAST(SUBSTR(id, 3) AS INTEGER)
+		LIMIT 1
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("repo: next review query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	tickets, err := scanTickets(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(tickets) == 0 {
+		return nil, nil
+	}
+	return &tickets[0], nil
+}
+
+// Ancestors walks the parent chain from a ticket up to the root,
+// returning the path from immediate parent to top-level ancestor.
+func Ancestors(ctx context.Context, db *sql.DB, t *Ticket) ([]Ticket, error) {
+	var result []Ticket
+	seen := map[string]bool{t.ID: true}
+	current := t
+	for current.ParentID != nil {
+		if seen[*current.ParentID] {
+			break
+		}
+		parent, err := GetTicket(ctx, db, *current.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		if parent == nil {
+			break
+		}
+		seen[parent.ID] = true
+		result = append(result, *parent)
+		current = parent
+	}
+	return result, nil
+}
+
 func scanTickets(rows *sql.Rows) ([]Ticket, error) {
 	var result []Ticket
 	for rows.Next() {

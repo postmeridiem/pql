@@ -19,6 +19,12 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   record with its full markdown body extracted from the source file.
   All existing metadata fields are included alongside the new `body`
   field.
+- `pql plan whatnext` — surfaces the single best ticket to work on
+  (in-progress first, then highest-priority ready) with ancestor tree
+  and linked decisions for instant context. Review tickets are excluded
+  to prevent author-reviews-own-work.
+- `pql plan review` — surfaces the next ticket awaiting review, with
+  the same context bundle as whatnext.
 
 ### Changed
 

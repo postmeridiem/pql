@@ -26,6 +26,8 @@ func newPlanCmd() *cobra.Command {
 		},
 	}
 	cmd.AddCommand(newPlanStatusCmd())
+	cmd.AddCommand(newPlanWhatNextCmd())
+	cmd.AddCommand(newPlanReviewCmd())
 	cmd.AddCommand(newPlanExportCmd())
 	cmd.AddCommand(newPlanImportCmd())
 	return cmd
@@ -146,6 +148,159 @@ func buildDashboard(ctx context.Context, db *sql.DB) (*dashboard, error) {
 	d.CoverageGaps = len(gaps)
 
 	return &d, nil
+}
+
+// --- whatnext ---
+
+type whatNextResult struct {
+	Ticket    *repo.Ticket    `json:"ticket"`
+	Ancestors []repo.Ticket   `json:"ancestors,omitempty"`
+	Decisions []repo.Decision `json:"decisions,omitempty"`
+	Message   string          `json:"message,omitempty"`
+}
+
+func newPlanWhatNextCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "whatnext",
+		Short: "Surface the next ticket to work on",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			db := pdb.SQL()
+			out, err := buildWhatNext(ctx, db)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
+			rOpts, err := renderOptsFromFlags(cmd)
+			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			rOpts.Out = cmd.OutOrStdout()
+			if _, err := render.One(out, rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			return nil
+		},
+	}
+}
+
+func buildWhatNext(ctx context.Context, db *sql.DB) (*whatNextResult, error) {
+	t, err := repo.WhatNext(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	if t == nil {
+		return &whatNextResult{
+			Message: "no in-progress or ready tickets; review backlog to flag tickets ready for work",
+		}, nil
+	}
+	return enrichTicket(ctx, db, t)
+}
+
+// --- review ---
+
+func newPlanReviewCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "review",
+		Short: "Surface the next ticket awaiting review",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			db := pdb.SQL()
+			t, err := repo.NextReview(ctx, db)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			if t == nil {
+				out := &whatNextResult{Message: "no tickets awaiting review"}
+				rOpts, err := renderOptsFromFlags(cmd)
+				if err != nil {
+					return &exitError{code: diag.Usage, msg: err.Error()}
+				}
+				rOpts.Out = cmd.OutOrStdout()
+				if _, err := render.One(out, rOpts); err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				return nil
+			}
+
+			out, err := enrichTicket(ctx, db, t)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
+			rOpts, err := renderOptsFromFlags(cmd)
+			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			rOpts.Out = cmd.OutOrStdout()
+			if _, err := render.One(out, rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			return nil
+		},
+	}
+}
+
+func enrichTicket(ctx context.Context, db *sql.DB, t *repo.Ticket) (*whatNextResult, error) {
+	out := &whatNextResult{Ticket: t}
+
+	ancestors, err := repo.Ancestors(ctx, db, t)
+	if err != nil {
+		return nil, err
+	}
+	if len(ancestors) > 0 {
+		out.Ancestors = ancestors
+	}
+
+	refs := collectDecisionRefs(t, ancestors)
+	for _, ref := range refs {
+		d, err := repo.GetDecision(ctx, db, ref)
+		if err != nil {
+			return nil, err
+		}
+		if d != nil {
+			out.Decisions = append(out.Decisions, *d)
+		}
+	}
+	return out, nil
+}
+
+func collectDecisionRefs(t *repo.Ticket, ancestors []repo.Ticket) []string {
+	seen := map[string]bool{}
+	var refs []string
+	add := func(ref *string) {
+		if ref != nil && !seen[*ref] {
+			seen[*ref] = true
+			refs = append(refs, *ref)
+		}
+	}
+	add(t.DecisionRef)
+	for i := range ancestors {
+		add(ancestors[i].DecisionRef)
+	}
+	return refs
 }
 
 // --- export ---

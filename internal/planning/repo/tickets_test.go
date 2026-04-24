@@ -117,6 +117,113 @@ func TestListTickets_Filters(t *testing.T) {
 	}
 }
 
+func TestWhatNext(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+
+	// Nothing actionable → nil ticket, no error.
+	tk, err := WhatNext(ctx, db)
+	if err != nil {
+		t.Fatalf("whatnext empty: %v", err)
+	}
+	if tk != nil {
+		t.Fatal("expected nil ticket when nothing is actionable")
+	}
+
+	// Create two tickets: low-priority ready and high-priority ready.
+	id1, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "low ready", Priority: "low"})
+	_ = SetStatus(ctx, db, id1, "ready", "test")
+
+	id2, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "high ready", Priority: "high"})
+	_ = SetStatus(ctx, db, id2, "ready", "test")
+
+	tk, err = WhatNext(ctx, db)
+	if err != nil {
+		t.Fatalf("whatnext ready: %v", err)
+	}
+	if tk == nil || tk.ID != id2 {
+		t.Fatalf("expected %s (high priority), got %v", id2, tk)
+	}
+
+	// In-progress beats ready regardless of priority.
+	_ = SetStatus(ctx, db, id1, "in_progress", "test")
+	tk, err = WhatNext(ctx, db)
+	if err != nil {
+		t.Fatalf("whatnext in_progress: %v", err)
+	}
+	if tk == nil || tk.ID != id1 {
+		t.Fatalf("expected %s (in_progress), got %v", id1, tk)
+	}
+
+	// Review tickets are excluded.
+	_ = SetStatus(ctx, db, id1, "review", "test")
+	tk, err = WhatNext(ctx, db)
+	if err != nil {
+		t.Fatalf("whatnext skip review: %v", err)
+	}
+	if tk == nil || tk.ID != id2 {
+		t.Fatalf("expected %s (ready, skipping review), got %v", id2, tk)
+	}
+}
+
+func TestNextReview(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+
+	tk, err := NextReview(ctx, db)
+	if err != nil {
+		t.Fatalf("next review empty: %v", err)
+	}
+	if tk != nil {
+		t.Fatal("expected nil when no review tickets")
+	}
+
+	id1, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "review me", Priority: "medium"})
+	_ = SetStatus(ctx, db, id1, "review", "test")
+
+	tk, err = NextReview(ctx, db)
+	if err != nil {
+		t.Fatalf("next review: %v", err)
+	}
+	if tk == nil || tk.ID != id1 {
+		t.Fatalf("expected %s, got %v", id1, tk)
+	}
+}
+
+func TestAncestors(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+
+	id1, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "initiative", Title: "top"})
+	id2, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "epic", Title: "mid", ParentID: id1})
+	id3, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "leaf", ParentID: id2})
+
+	leaf, _ := GetTicket(ctx, db, id3)
+	ancestors, err := Ancestors(ctx, db, leaf)
+	if err != nil {
+		t.Fatalf("ancestors: %v", err)
+	}
+	if len(ancestors) != 2 {
+		t.Fatalf("expected 2 ancestors, got %d", len(ancestors))
+	}
+	if ancestors[0].ID != id2 {
+		t.Errorf("ancestors[0] = %s, want %s", ancestors[0].ID, id2)
+	}
+	if ancestors[1].ID != id1 {
+		t.Errorf("ancestors[1] = %s, want %s", ancestors[1].ID, id1)
+	}
+
+	// No parent → empty ancestors.
+	top, _ := GetTicket(ctx, db, id1)
+	ancestors, err = Ancestors(ctx, db, top)
+	if err != nil {
+		t.Fatalf("ancestors root: %v", err)
+	}
+	if len(ancestors) != 0 {
+		t.Errorf("expected 0 ancestors for root, got %d", len(ancestors))
+	}
+}
+
 func TestNextTicketID_Increments(t *testing.T) {
 	ctx := context.Background()
 	db := setupDB(t)
