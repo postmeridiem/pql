@@ -70,28 +70,18 @@ func TestSetStatus(t *testing.T) {
 
 	id, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "test"})
 
-	// backlog → ready (allowed)
-	if err := SetStatus(ctx, db, id, "ready", "test"); err != nil {
-		t.Fatalf("backlog->ready: %v", err)
+	for _, next := range []string{"ready", "done", "backlog", "in_progress", "cancelled"} {
+		if err := SetStatus(ctx, db, id, next, "test"); err != nil {
+			t.Fatalf("%s->%s: %v", "prev", next, err)
+		}
+		tk, _ := GetTicket(ctx, db, id)
+		if tk.Status != next {
+			t.Errorf("status = %q, want %q", tk.Status, next)
+		}
 	}
 
-	tk, _ := GetTicket(ctx, db, id)
-	if tk.Status != "ready" {
-		t.Errorf("status = %q, want ready", tk.Status)
-	}
-
-	// ready → done (not allowed — must go through in_progress)
-	err := SetStatus(ctx, db, id, "done", "test")
-	if err == nil {
-		t.Fatal("expected error for ready->done")
-	}
-
-	// ready → in_progress → done (allowed)
-	if err := SetStatus(ctx, db, id, "in_progress", "test"); err != nil {
-		t.Fatalf("ready->in_progress: %v", err)
-	}
-	if err := SetStatus(ctx, db, id, "done", "test"); err != nil {
-		t.Fatalf("in_progress->done: %v", err)
+	if err := SetStatus(ctx, db, id, "bogus", "test"); err == nil {
+		t.Fatal("expected error for invalid status")
 	}
 }
 

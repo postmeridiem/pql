@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
 var validStatuses = map[string]bool{
@@ -21,16 +20,6 @@ var validPriorities = map[string]bool{
 	"critical": true, "high": true, "medium": true, "low": true,
 }
 
-// statusTransitions defines allowed status transitions. The key is the
-// current status; the value is the set of statuses it can move to.
-var statusTransitions = map[string]map[string]bool{
-	"backlog":     {"ready": true, "cancelled": true},
-	"ready":       {"backlog": true, "in_progress": true, "cancelled": true},
-	"in_progress": {"ready": true, "review": true, "done": true, "cancelled": true},
-	"review":      {"in_progress": true, "done": true, "cancelled": true},
-	"done":        {"in_progress": true},
-	"cancelled":   {"backlog": true},
-}
 
 // Ticket is a row from the tickets table.
 type Ticket struct {
@@ -177,8 +166,7 @@ func GetTicket(ctx context.Context, db *sql.DB, id string) (*Ticket, error) {
 	return &t, nil
 }
 
-// SetStatus transitions a ticket to a new status, enforcing the state
-// machine. Records the change in ticket_history.
+// SetStatus changes a ticket's status. Records the change in ticket_history.
 func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string) error {
 	if !validStatuses[newStatus] {
 		return fmt.Errorf("repo: invalid status %q", newStatus)
@@ -190,16 +178,6 @@ func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string)
 	}
 	if t == nil {
 		return fmt.Errorf("repo: ticket %s not found", id)
-	}
-
-	allowed := statusTransitions[t.Status]
-	if !allowed[newStatus] {
-		valid := make([]string, 0, len(allowed))
-		for s := range allowed {
-			valid = append(valid, s)
-		}
-		return fmt.Errorf("repo: cannot transition %s from %s to %s (allowed: %s)",
-			id, t.Status, newStatus, strings.Join(valid, ", "))
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
