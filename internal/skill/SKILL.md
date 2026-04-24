@@ -103,8 +103,8 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 |---|---|
 | `pql ticket new <type> "title" [--decision D-NNN] [--priority P]` | Create (emits T-NNN) |
 | `pql ticket list [--status S] [--team T] [--assigned A] [--label L]` | List with filters |
-| `pql ticket show <id> [--with-decision] [--with-blockers] [--with-children]` | Show with joins |
-| `pql ticket status <id> <new-status>` | Transition (enforces state machine) |
+| `pql ticket show <id> [--with-context] [--with-blockers] [--with-children]` | Show with joins |
+| `pql ticket status <id> <new-status>` | Change status (any valid status accepted) |
 | `pql ticket assign <id> <agent>` | Set assignee |
 | `pql ticket block <id> --by <other>` | Add blocker |
 | `pql ticket unblock <id> --from <other>` | Remove blocker |
@@ -113,13 +113,16 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | `pql ticket board [--team T]` | Kanban board view |
 
 Ticket types: initiative, epic, story, task, bug.
-Status flow: backlog → ready → in_progress → review → done (also cancelled).
+Valid statuses: backlog, ready, in_progress, review, done, cancelled.
+Any status can transition to any other — pql does not enforce a state machine.
 
 ### Plan subcommands
 
 | Command | Purpose |
 |---|---|
 | `pql plan status` | Dashboard: decision counts, open Qs, ticket summary, coverage gaps |
+| `pql plan whatsnext` | Next ticket to work on (in_progress or ready) with full context bundle |
+| `pql plan review` | Next ticket awaiting review with full context bundle |
 | `pql plan export [--to FILE]` | Snapshot planning state to JSON (default: `pql-plan.json`) |
 | `pql plan import [--from FILE]` | Restore planning state from a JSON snapshot |
 
@@ -139,8 +142,12 @@ On a fresh clone, `pql plan import` restores from the snapshot.
 
 - **Sync and list confirmed** → `pql decisions sync && pql decisions list --type confirmed`
 - **Show with refs** → `pql decisions show D-5 --with-refs --pretty`
+- **Read full body** → `pql decisions read D-5`
 - **Create ticket** → `pql ticket new task "implement X" --decision D-5`
 - **Batch close** → `pql ticket status T-1,T-2,T-3 done`
+- **Full context** → `pql ticket show T-5 --with-context --pretty`
+- **What's next?** → `pql plan whatsnext --pretty`
+- **Review queue** → `pql plan review --pretty`
 - **Coverage gaps** → `pql decisions coverage`
 - **Dashboard** → `pql plan status --pretty`
 - **Snapshot for git** → `pql plan export`
