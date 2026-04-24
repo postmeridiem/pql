@@ -19,7 +19,7 @@ There's a gap: **structural, cross-file querying of a prose-structured repositor
 
 - Not a Dataview replacement. PQL is its own SQL-derived language and runs outside Obsidian; Dataview lives inside the app and stays there. Inspiration credit in the README.
 - Not a generic "query anything" tool. Code → use tree-sitter/LSP. Configs → use jq/yq. Raw text → use ripgrep. `pql` is for Markdown + frontmatter + wikilinks + tags + Bases.
-- Does not write to **vault content files.** Markdown is authored by the user (or their editor, which Obsidian's watcher picks up). Pql never mutates vault notes — no "edit this frontmatter field" CLI. Pql *does* own state under `<vault>/.pql/` (the regenerable `index.db`, the skill install lock, and from the planning feature onward a user-authored `pql.db` per `docs/adr/0003-pql-db-for-user-state.md` and `docs/structure/planning.md`). The "read-only against the vault" line was sharper than intended in the original draft; the load-bearing rule is **read-only against vault content, full ownership of `.pql/`.**
+- Does not write to **vault content files.** Markdown is authored by the user (or their editor, which Obsidian's watcher picks up). Pql never mutates vault notes — no "edit this frontmatter field" CLI. Pql *does* own state under `<vault>/.pql/` (the regenerable `index.db`, the skill install lock, and from the planning feature onward a user-authored `pql.db` per `decisions/architecture.md (D-3)` and `docs/structure/planning.md`). The "read-only against the vault" line was sharper than intended in the original draft; the load-bearing rule is **read-only against vault content, full ownership of `.pql/`.**
 - No `dataviewjs` or JavaScript evaluation.
 - No inline-field parsing (`Rating:: 5` mid-paragraph) in v1. Revisit if users demand it.
 - No GUI, no web UI, no network daemon. CLI in, JSON out.
@@ -297,7 +297,7 @@ All writes in a single `BEGIN IMMEDIATE` transaction per invocation. Readers are
 
 `schema_version` in `index_meta`. On mismatch, drop `index.db` and rebuild — the index is a cache; never store anything in it that isn't regenerable from the vault. This keeps migration code at zero *for the index*.
 
-User-authored state lives in a separate file (`<vault>/.pql/pql.db` — first real user is the planning feature; see `docs/adr/0003-pql-db-for-user-state.md` and `docs/structure/planning.md`). That store *does* use forward-only migrations, because losing the data is a bug rather than a cache refresh. The two regimes coexist: drop-and-rebuild for `index.db`, real migrations for `pql.db`.
+User-authored state lives in a separate file (`<vault>/.pql/pql.db` — first real user is the planning feature; see `decisions/architecture.md (D-3)` and `docs/structure/planning.md`). That store *does* use forward-only migrations, because losing the data is a bug rather than a cache refresh. The two regimes coexist: drop-and-rebuild for `index.db`, real migrations for `pql.db`.
 
 ## Obsidian Bases as first-class queries
 

@@ -1,7 +1,7 @@
 // Package planning implements the decisions + tickets user-state store
 // backed by <vault>/.pql/pql.db. This is user-authored state with
 // forward-only migrations, distinct from the regenerable index.db cache.
-// See docs/adr/0003-pql-db-for-user-state.md.
+// See decisions/architecture.md (D-3).
 package planning
 
 import (

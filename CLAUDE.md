@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/structure/project-structure.md` — canonical layout, build pipeline, test infrastructure, growth model.
 - `docs/structure/initial-plan.md` — original v1 plan (PQL grammar, SQLite schema, CLI specifics). Some framing superseded by the philosophy + structure docs; grammar/schema/exit-codes still authoritative.
 - `docs/structure/planning.md` — spec for `pql decisions` / `pql ticket` / `pql plan`. First real writer to the user-state DB (`pql.db`), distinct from the cache (`index.db`).
-- `docs/adr/0003-pql-db-for-user-state.md` — the cache (`index.db`) vs user-authored state (`pql.db`) split. Read before touching anything that persists under `.pql/`.
+- `decisions/architecture.md (D-3)` — the cache (`index.db`) vs user-authored state (`pql.db`) split. Read before touching anything that persists under `.pql/`.
 - `docs/vault-layout.md` — the three vault-level conventions (`.pql/config.yaml`, `.pqlignore`, `.pql/`). The index defaults to `<vault>/.pql/index.db` (in-vault, like `.git/`); falls back to user cache on read-only vaults. Planning state lives beside it at `<vault>/.pql/pql.db` — no cache fallback, writes to a read-only vault fail cleanly.
 - `docs/pqlignore.md` — gitignore-compatible exclusion file spec.
 - `docs/watching.md` — `pql watch` toggle command spec. Explicit user invocation only; one watcher per vault; no daemon, no cross-vault registry.
@@ -32,7 +32,7 @@ These are load-bearing — preserve them when implementing. Full rationale in th
 - **Generate vs rank as separate packages.** Neither imports the other. Generation is wide and cheap; ranking is bounded and careful.
 - **Provenance is data, not a cross-cutting concern.** Each signal returns `Contribution{Name, Raw, Normalized, Weight}`; the combiner aggregates. Don't centralize into an `explain.go`.
 - **Consumer-agnostic core.** `internal/intent/`, `internal/query/`, and `internal/planning/` must not import `internal/cli/`. CLI today, MCPs (plural) tomorrow — a query-surface MCP and a planning-surface MCP are different scopes, different permissions, different audiences. Every consumer is an adapter.
-- **Two stores, two regimes.** `<vault>/.pql/index.db` is a pure cache — anything in it must be regenerable from the vault; on `schema_version` mismatch, drop and rebuild (no migration code). `<vault>/.pql/pql.db` is user-authored state (planning, skill state later) — forward-only migrations in `internal/planning/schema.go`, because losing this data is a bug, not a cache refresh. See `docs/adr/0003-pql-db-for-user-state.md`.
+- **Two stores, two regimes.** `<vault>/.pql/index.db` is a pure cache — anything in it must be regenerable from the vault; on `schema_version` mismatch, drop and rebuild (no migration code). `<vault>/.pql/pql.db` is user-authored state (planning, skill state later) — forward-only migrations in `internal/planning/schema.go`, because losing this data is a bug, not a cache refresh. See `decisions/architecture.md (D-3)`.
 - **Output contract is load-bearing for agents.** stdout JSON, stderr JSON-per-line diagnostics, exit codes 0/2/64/65/66/69/70 — distinguished. `2` (zero matches) is success, not an error. See `internal/diag/diag.go` and `docs/output-contract.md`.
 
 ## Build & test

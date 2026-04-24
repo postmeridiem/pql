@@ -149,7 +149,7 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 - `internal/planning/` package skeleton with `pql.db` schema and
   forward-only migration runner. Six tables (decisions, decision_refs,
   tickets, ticket_deps, ticket_history, ticket_labels) for the
-  planning subcommands. See `docs/adr/0003-pql-db-for-user-state.md`.
+  planning subcommands. See `decisions/architecture.md (D-3)`.
 - `pql decisions` subcommand tree: `sync`, `validate`, `claim`,
   `list`, `show`, `coverage`, `refs`. Parses `decisions/*.md` using
   the D/Q/R-NNN heading convention, upserts into `pql.db`, and

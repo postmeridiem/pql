@@ -18,7 +18,7 @@ This document is the canonical reference for `pql`'s repository layout, build pi
 - **Generate wide, rank careful, return sparingly.** Architecturally separate packages; neither imports the other.
 - **Provenance is data, not a cross-cutting concern.** Each signal returns its own `Contribution{Name, Raw, Normalized, Weight}`; the combiner aggregates. No central `explain.go`.
 - **Consumer-agnostic core.** `internal/intent/`, `internal/query/`, and `internal/planning/` must not import `internal/cli/`. CLI today, MCPs (plural) tomorrow — a query-surface MCP and a planning-surface MCP are different scopes, different permissions, different audiences; no reason to assume one fused server. Every consumer is an adapter.
-- **Two stores, two regimes.** `<vault>/.pql/index.db` is the regenerable cache — SQLite with FTS5; schema versioned; drop-and-rebuild on mismatch. `<vault>/.pql/pql.db` is user-authored state (planning, possibly other features later) — forward-only migrations, lazily created by the first writer. The split is codified in `docs/adr/0003-pql-db-for-user-state.md`.
+- **Two stores, two regimes.** `<vault>/.pql/index.db` is the regenerable cache — SQLite with FTS5; schema versioned; drop-and-rebuild on mismatch. `<vault>/.pql/pql.db` is user-authored state (planning, possibly other features later) — forward-only migrations, lazily created by the first writer. The split is codified in `decisions/architecture.md` (D-3).
 
 ## Directory layout
 
@@ -205,7 +205,7 @@ The substance of CI lives in `ci/*.sh` so it can run identically locally and in 
 - **Catalog docs** sit at the top of `docs/`:
   - `docs/intents.md` — intent catalog + per-intent contract.
   - `docs/signals.md` — every signal: what it measures, where it shines, where it fails.
-  - `docs/adr/` — Architecture Decision Records. First two to land: `0001-no-vectors.md`, `0002-intents-not-primitives.md`.
+  - `decisions/` — Decision records parsed by `pql decisions sync`.
 
 ## Verification
 

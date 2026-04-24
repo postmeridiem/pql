@@ -2,7 +2,7 @@
 
 Canonical spec for the `pql decisions`, `pql ticket`, and `pql plan`
 command trees. Read alongside `design-philosophy.md` (the "why"),
-`project-structure.md` (canonical layout), and `docs/adr/0003-pql-db-for-user-state.md`
+`project-structure.md` (canonical layout), and `decisions/architecture.md (D-3)`
 (the cache vs state split this feature is the first real user of).
 
 This document originated as a hand-off from clide's April 2026 planning
@@ -30,7 +30,7 @@ Reference materials outside this repo:
 1. **Go implementation.** Planning subcommands are new packages under
    `internal/planning/`. No Python, no shellout to the clide stopgap.
 2. **DB location: `<vault>/.pql/pql.db`.** Resolves the original
-   P-Q-001. Rationale in `docs/adr/0003-pql-db-for-user-state.md`:
+   P-Q-001. Rationale in `decisions/architecture.md (D-3)`:
    `index.db` stays the regenerable cache, `pql.db` is user-authored
    state. Discovered the same way as `.pql/config.yaml` (walk up from
    cwd); created lazily by the first writer. Read-only vault +
