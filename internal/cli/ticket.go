@@ -206,6 +206,7 @@ func newTicketShowCmd() *cobra.Command {
 					return &exitError{code: diag.Software, msg: err.Error()}
 				}
 				out.Ancestors = enriched.Ancestors
+				out.Children = enriched.Children
 				out.Decisions = enriched.Decisions
 			}
 			if withBlockers {

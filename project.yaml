@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.4.1
-status: v1.4.1 — plan whatnext/review, ticket show --with-context.
+version: 1.4.2
+status: v1.4.2 — plan whatsnext/review with children, --with-context includes full tree.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

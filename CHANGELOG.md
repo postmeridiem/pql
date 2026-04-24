@@ -19,18 +19,18 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   record with its full markdown body extracted from the source file.
   All existing metadata fields are included alongside the new `body`
   field.
-- `pql plan whatnext` — surfaces the single best ticket to work on
-  (in-progress first, then highest-priority ready) with ancestor tree
-  and linked decisions for instant context. Review tickets are excluded
-  to prevent author-reviews-own-work.
+- `pql plan whatsnext` — surfaces the single best ticket to work on
+  (in-progress first, then highest-priority ready) with ancestor tree,
+  children, and linked decisions for instant context. Review tickets
+  are excluded to prevent author-reviews-own-work.
 - `pql plan review` — surfaces the next ticket awaiting review, with
-  the same context bundle as whatnext.
+  the same context bundle as whatsnext.
 
 ### Changed
 
 - `pql ticket show` replaces `--with-decision` with `--with-context`,
-  which includes the full ancestor tree and all linked decisions from
-  the chain (same context bundle as whatnext/review).
+  which includes ancestors, children, and all linked decisions from
+  the chain (same context bundle as whatsnext/review).
 - Ticket status transitions are no longer enforced by pql. Any valid
   status can move to any other valid status; callers can layer their
   own transition rules on top.

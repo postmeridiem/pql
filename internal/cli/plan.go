@@ -26,7 +26,7 @@ func newPlanCmd() *cobra.Command {
 		},
 	}
 	cmd.AddCommand(newPlanStatusCmd())
-	cmd.AddCommand(newPlanWhatNextCmd())
+	cmd.AddCommand(newPlanWhatsNextCmd())
 	cmd.AddCommand(newPlanReviewCmd())
 	cmd.AddCommand(newPlanExportCmd())
 	cmd.AddCommand(newPlanImportCmd())
@@ -150,18 +150,19 @@ func buildDashboard(ctx context.Context, db *sql.DB) (*dashboard, error) {
 	return &d, nil
 }
 
-// --- whatnext ---
+// --- whatsnext ---
 
 type whatNextResult struct {
-	Ticket    *repo.Ticket    `json:"ticket"`
-	Ancestors []repo.Ticket   `json:"ancestors,omitempty"`
-	Decisions []repo.Decision `json:"decisions,omitempty"`
-	Message   string          `json:"message,omitempty"`
+	Ticket    *repo.Ticket         `json:"ticket"`
+	Ancestors []repo.Ticket        `json:"ancestors,omitempty"`
+	Children  []repo.TicketSummary `json:"children,omitempty"`
+	Decisions []repo.Decision      `json:"decisions,omitempty"`
+	Message   string               `json:"message,omitempty"`
 }
 
-func newPlanWhatNextCmd() *cobra.Command {
+func newPlanWhatsNextCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "whatnext",
+		Use:   "whatsnext",
 		Short: "Surface the next ticket to work on",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -272,6 +273,14 @@ func enrichTicket(ctx context.Context, db *sql.DB, t *repo.Ticket) (*whatNextRes
 	}
 	if len(ancestors) > 0 {
 		out.Ancestors = ancestors
+	}
+
+	children, err := repo.ChildrenOf(ctx, db, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(children) > 0 {
+		out.Children = children
 	}
 
 	refs := collectDecisionRefs(t, ancestors)
