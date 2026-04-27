@@ -33,6 +33,7 @@ in a decisions/ directory at the vault root and are indexed into
 	cmd.AddCommand(newDecisionsClaimCmd())
 	cmd.AddCommand(newDecisionsListCmd())
 	cmd.AddCommand(newDecisionsShowCmd())
+	cmd.AddCommand(newDecisionsReadCmd())
 	cmd.AddCommand(newDecisionsCoverageCmd())
 	cmd.AddCommand(newDecisionsRefsCmd())
 	return cmd
@@ -286,6 +287,47 @@ func newDecisionsShowCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&withTickets, "with-tickets", false, "include linked tickets")
 	cmd.Flags().BoolVar(&withRefs, "with-refs", false, "include cross-references")
 	return cmd
+}
+
+// --- read ---
+
+func newDecisionsReadCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "read <id>",
+		Short: "Read a record with its full markdown body",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			cfg, err := config.Load(loadOptsFromFlags(cmd))
+			if err != nil {
+				return &exitError{code: diag.NoInput, msg: err.Error()}
+			}
+
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			d, err := repo.ReadDecision(ctx, pdb.SQL(), cfg.Vault.Path, args[0])
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			if d == nil {
+				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("decision %s not found", args[0])}
+			}
+
+			rOpts, err := renderOptsFromFlags(cmd)
+			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			rOpts.Out = cmd.OutOrStdout()
+			if _, err := render.One(d, rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			return nil
+		},
+	}
 }
 
 // --- coverage ---

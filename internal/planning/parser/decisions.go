@@ -41,6 +41,7 @@ type Record struct {
 	Date     string // YYYY-MM-DD or empty
 	FilePath string // relative to repo root
 	Refs     []Ref
+	Body     string // raw markdown between this heading and the next
 }
 
 // Ref is a cross-reference extracted from a record's body.
@@ -93,6 +94,7 @@ func parseText(text, domain, filePath string) []Record {
 			Date:     extractDate(curBody),
 			FilePath: filePath,
 			Refs:     extractRefs(curID, curBody),
+			Body:     trimBody(stripMetaLines(curBody)),
 		}
 		records = append(records, rec)
 		curID = ""
@@ -271,6 +273,45 @@ func Validate(decisionsDir, repoRoot string) (ok bool, errs []string) {
 		}
 	}
 	return len(errs) == 0, errs
+}
+
+func stripMetaLines(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if dateRe.MatchString(line) || statusRe.MatchString(line) {
+			continue
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+func trimBody(lines []string) string {
+	start, end := 0, len(lines)
+	for start < end && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	for end > start && strings.TrimSpace(lines[end-1]) == "" {
+		end--
+	}
+	if start >= end {
+		return ""
+	}
+	return strings.Join(lines[start:end], "\n")
+}
+
+// FindRecord parses a single file and returns the record with the given ID.
+func FindRecord(path, repoRoot, id string) (*Record, error) {
+	records, err := ParseFile(path, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	for i := range records {
+		if records[i].ID == id {
+			return &records[i], nil
+		}
+	}
+	return nil, nil
 }
 
 // NextID returns the next available ID for the given prefix (D, Q, or R)

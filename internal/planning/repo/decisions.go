@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/postmeridiem/pql/internal/planning/parser"
 )
@@ -179,6 +180,36 @@ func GetDecision(ctx context.Context, db *sql.DB, id string) (*Decision, error) 
 		return nil, fmt.Errorf("repo: get decision %s: %w", id, err)
 	}
 	return &d, nil
+}
+
+// DecisionDetail is a Decision with its full markdown body.
+type DecisionDetail struct {
+	Decision
+	Body string `json:"body"`
+}
+
+// ReadDecision returns a decision with its full markdown body extracted
+// from the source file. The body is the raw text between the record's
+// heading and the next heading (or end of section).
+func ReadDecision(ctx context.Context, db *sql.DB, vaultPath, id string) (*DecisionDetail, error) {
+	d, err := GetDecision(ctx, db, id)
+	if err != nil {
+		return nil, err
+	}
+	if d == nil {
+		return nil, nil
+	}
+
+	filePath := filepath.Join(vaultPath, d.FilePath)
+	rec, err := parser.FindRecord(filePath, vaultPath, id)
+	if err != nil {
+		return nil, fmt.Errorf("repo: read body for %s: %w", id, err)
+	}
+	body := ""
+	if rec != nil {
+		body = rec.Body
+	}
+	return &DecisionDetail{Decision: *d, Body: body}, nil
 }
 
 // DecisionRef is a row from the decision_refs table.
