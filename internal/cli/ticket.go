@@ -14,31 +14,60 @@ import (
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
 
-// ticketShowTree is the full join-tree shape used by `ticket show`,
-// `ticket refine next`, and `ticket refine write`. Fields mirror the
-// flag-gated joins on `ticket show`: ancestors+decisions for context,
-// blockers, and direct children.
+// ticketShowTree is the canonical join-tree shape used by every
+// ticket-centric surface — `ticket show`, `ticket refine next/write`,
+// `plan whatsnext`, `plan review`. Embedding *repo.Ticket promotes its
+// fields to the top level; when the pointer is nil only Message
+// renders, which lets the planning verbs report "no actionable ticket"
+// without inventing a parallel shape.
 type ticketShowTree struct {
-	repo.Ticket
+	*repo.Ticket
 	Ancestors []repo.Ticket        `json:"ancestors,omitempty"`
 	Decisions []repo.Decision      `json:"decisions,omitempty"`
 	Blockers  []repo.BlockerInfo   `json:"blockers,omitempty"`
 	Children  []repo.TicketSummary `json:"children,omitempty"`
+	Message   string               `json:"message,omitempty"`
 }
 
-// buildShowTree assembles the ticket show-tree from the requested joins.
-// Callers that want the whole tree (refinement flows) pass all three
-// flags true.
+// buildShowTree assembles the ticket show-tree from the requested
+// joins. Pass all three flags true for the full tree (planning verbs,
+// refinement flows). A nil ticket returns an empty tree — callers that
+// want a "nothing to do" response set Message on the result.
 func buildShowTree(ctx context.Context, db *sql.DB, t *repo.Ticket, withContext, withBlockers, withChildren bool) (*ticketShowTree, error) {
-	out := &ticketShowTree{Ticket: *t}
+	if t == nil {
+		return &ticketShowTree{}, nil
+	}
+	out := &ticketShowTree{Ticket: t}
+
+	var ancestors []repo.Ticket
 	if withContext {
-		enriched, err := enrichTicket(ctx, db, t)
+		var err error
+		ancestors, err = repo.Ancestors(ctx, db, t)
 		if err != nil {
 			return nil, err
 		}
-		out.Ancestors = enriched.Ancestors
-		out.Children = enriched.Children
-		out.Decisions = enriched.Decisions
+		if len(ancestors) > 0 {
+			out.Ancestors = ancestors
+		}
+
+		for _, ref := range collectDecisionRefs(t, ancestors) {
+			d, err := repo.GetDecision(ctx, db, ref)
+			if err != nil {
+				return nil, err
+			}
+			if d != nil {
+				out.Decisions = append(out.Decisions, *d)
+			}
+		}
+	}
+	if withChildren || withContext {
+		children, err := repo.ChildrenOf(ctx, db, t.ID)
+		if err != nil {
+			return nil, err
+		}
+		if len(children) > 0 {
+			out.Children = children
+		}
 	}
 	if withBlockers {
 		blockers, err := repo.BlockersOf(ctx, db, t.ID)
@@ -47,14 +76,25 @@ func buildShowTree(ctx context.Context, db *sql.DB, t *repo.Ticket, withContext,
 		}
 		out.Blockers = blockers
 	}
-	if withChildren {
-		children, err := repo.ChildrenOf(ctx, db, t.ID)
-		if err != nil {
-			return nil, err
-		}
-		out.Children = children
-	}
 	return out, nil
+}
+
+// collectDecisionRefs walks a ticket and its ancestors, returning the
+// distinct decision IDs referenced. Order is ticket-first then root-up.
+func collectDecisionRefs(t *repo.Ticket, ancestors []repo.Ticket) []string {
+	seen := map[string]bool{}
+	var refs []string
+	add := func(ref *string) {
+		if ref != nil && !seen[*ref] {
+			seen[*ref] = true
+			refs = append(refs, *ref)
+		}
+	}
+	add(t.DecisionRef)
+	for i := range ancestors {
+		add(ancestors[i].DecisionRef)
+	}
+	return refs
 }
 
 // parseIDs splits a comma-separated ID argument into one or more IDs.

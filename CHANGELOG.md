@@ -11,6 +11,18 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.8] - 2026-05-06
+
+### Changed
+
+- **Breaking JSON output:** `pql plan whatsnext` and `pql plan review`
+  now emit the same shape as `ticket show` / `ticket refine next` —
+  ticket fields are promoted to the top level instead of nested under
+  `"ticket": {...}`. Optional `ancestors`, `decisions`, `blockers`,
+  `children`, `message` siblings. The empty-queue case renders as
+  `{"message": "..."}`. Consumers parsing the old `ticket` envelope
+  need to flatten one level.
+
 ## [1.4.7] - 2026-05-06
 
 ### Added

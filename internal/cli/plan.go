@@ -153,14 +153,6 @@ func buildDashboard(ctx context.Context, db *sql.DB) (*dashboard, error) {
 
 // --- whatsnext ---
 
-type whatNextResult struct {
-	Ticket    *repo.Ticket         `json:"ticket"`
-	Ancestors []repo.Ticket        `json:"ancestors,omitempty"`
-	Children  []repo.TicketSummary `json:"children,omitempty"`
-	Decisions []repo.Decision      `json:"decisions,omitempty"`
-	Message   string               `json:"message,omitempty"`
-}
-
 func newPlanWhatsNextCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "whatsnext",
@@ -179,35 +171,22 @@ func newPlanWhatsNextCmd() *cobra.Command {
 			defer func() { _ = pdb.Close() }()
 
 			db := pdb.SQL()
-			out, err := buildWhatNext(ctx, db)
+			t, err := repo.WhatNext(ctx, db)
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
-			rOpts, err := renderOptsFromFlags(cmd)
+			out, err := buildShowTree(ctx, db, t, true, true, true)
 			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(out, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
-			return nil
+			if t == nil {
+				out.Message = "no in-progress or ready tickets; review backlog to flag tickets ready for work"
+			}
+
+			return renderOne(cmd, out)
 		},
 	}
-}
-
-func buildWhatNext(ctx context.Context, db *sql.DB) (*whatNextResult, error) {
-	t, err := repo.WhatNext(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	if t == nil {
-		return &whatNextResult{
-			Message: "no in-progress or ready tickets; review backlog to flag tickets ready for work",
-		}, nil
-	}
-	return enrichTicket(ctx, db, t)
 }
 
 // --- review ---
@@ -234,83 +213,33 @@ func newPlanReviewCmd() *cobra.Command {
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
+
+			out, err := buildShowTree(ctx, db, t, true, true, true)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
 			if t == nil {
-				out := &whatNextResult{Message: "no tickets awaiting review"}
-				rOpts, err := renderOptsFromFlags(cmd)
-				if err != nil {
-					return &exitError{code: diag.Usage, msg: err.Error()}
-				}
-				rOpts.Out = cmd.OutOrStdout()
-				if _, err := render.One(out, rOpts); err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
-				return nil
+				out.Message = "no tickets awaiting review"
 			}
 
-			out, err := enrichTicket(ctx, db, t)
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(out, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
+			return renderOne(cmd, out)
 		},
 	}
 }
 
-func enrichTicket(ctx context.Context, db *sql.DB, t *repo.Ticket) (*whatNextResult, error) {
-	out := &whatNextResult{Ticket: t}
-
-	ancestors, err := repo.Ancestors(ctx, db, t)
+// renderOne is a small render helper for the planning verbs that emit
+// a single object. Mirrors the inline pattern used elsewhere; pulled
+// out so plan whatsnext / plan review aren't 12 lines of boilerplate.
+func renderOne[T any](cmd *cobra.Command, v *T) error {
+	rOpts, err := renderOptsFromFlags(cmd)
 	if err != nil {
-		return nil, err
+		return &exitError{code: diag.Usage, msg: err.Error()}
 	}
-	if len(ancestors) > 0 {
-		out.Ancestors = ancestors
+	rOpts.Out = cmd.OutOrStdout()
+	if _, err := render.One(v, rOpts); err != nil {
+		return &exitError{code: diag.Software, msg: err.Error()}
 	}
-
-	children, err := repo.ChildrenOf(ctx, db, t.ID)
-	if err != nil {
-		return nil, err
-	}
-	if len(children) > 0 {
-		out.Children = children
-	}
-
-	refs := collectDecisionRefs(t, ancestors)
-	for _, ref := range refs {
-		d, err := repo.GetDecision(ctx, db, ref)
-		if err != nil {
-			return nil, err
-		}
-		if d != nil {
-			out.Decisions = append(out.Decisions, *d)
-		}
-	}
-	return out, nil
-}
-
-func collectDecisionRefs(t *repo.Ticket, ancestors []repo.Ticket) []string {
-	seen := map[string]bool{}
-	var refs []string
-	add := func(ref *string) {
-		if ref != nil && !seen[*ref] {
-			seen[*ref] = true
-			refs = append(refs, *ref)
-		}
-	}
-	add(t.DecisionRef)
-	for i := range ancestors {
-		add(ancestors[i].DecisionRef)
-	}
-	return refs
+	return nil
 }
 
 // --- export ---
