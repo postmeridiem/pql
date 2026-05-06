@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-05-06T14:42:43Z",
+  "exported_at": "2026-05-06T15:04:22Z",
   "decisions": [
     {
       "id": "D-1",
@@ -426,6 +426,16 @@
       "assigned_to": "claude",
       "created_at": "2026-05-06 14:35:25",
       "updated_at": "2026-05-06 14:39:25"
+    },
+    {
+      "id": "T-15",
+      "type": "task",
+      "title": "exempt stance-shaped decisions from coverage report",
+      "description": "pql decisions coverage flags every confirmed D without a linked T. For pql itself, ~13 of 14 confirmed decisions are founding/architectural stances (D-2 'intent-level surface', D-4 'consumer-agnostic core', D-5 'CLI-first, not MCP', etc.) — they document commitments, not roadmap items. A T per stance is ceremony.\\n\\nProposal: introduce a frontmatter field on D records, e.g. 'coverage: stance' (free-form values to grow later — 'roadmap', 'sentinel', 'stance', default 'roadmap'). 'pql decisions coverage' filters out non-roadmap by default; --include-stance shows the full set.\\n\\nTouches: internal/planning/parser/decisions.go (parse new field), internal/planning/repo/decisions.go (Decision struct), internal/cli/decisions.go (filter + flag in coverage subcommand), the existing decisions/*.md (annotate D-2 through D-14 as 'coverage: stance' once the parser supports it). D-1 stays default ('roadmap') because it has T-12 tracking its revisit gate.",
+      "status": "backlog",
+      "priority": "low",
+      "created_at": "2026-05-06 15:04:02",
+      "updated_at": "2026-05-06 15:04:02"
     }
   ],
   "ticket_deps": null,
