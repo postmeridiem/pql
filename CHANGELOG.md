@@ -11,6 +11,29 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.13] - 2026-05-06
+
+### Changed
+
+- `pql skill install` (no `--user`) now auto-resolves which scope to
+  operate on. If any bundled skill is already installed at user-scope
+  (`~/.claude/skills/<name>/`), the whole suite installs/updates
+  there. Otherwise installs at project-scope. The first install at
+  user-scope must still be done explicitly via `pql skill install
+  --user`.
+- When auto-resolving to user-scope, a pristine project-scope
+  install (state in {current, stale, missing}) is tidied up
+  automatically. Hand-edited or unknown project-scope content is
+  preserved with a note.
+- `pql skill status`, `pql init`'s skill step, and the per-skill JSON
+  output gain a `scope` field (`"user"` | `"project"`) so callers
+  can tell which install they're looking at.
+- `pql skill uninstall` (no `--user`) operates on project-scope only;
+  removing user-scope still requires `--user` explicitly. Avoids the
+  surprise of a random uninstall wiping out global state.
+- `pql doctor` reports both scopes per skill (`user` and `project`
+  fields) so drift between them stays visible.
+
 ## [1.4.12] - 2026-05-06
 
 ### Added

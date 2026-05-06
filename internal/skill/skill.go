@@ -143,6 +143,7 @@ type Snapshot struct {
 // Status is the full report for a single skill.
 type Status struct {
 	Name      string    `json:"name"`
+	Scope     string    `json:"scope,omitempty"` // "user" | "project"; CLI-populated, package leaves empty
 	State     State     `json:"state"`
 	Path      string    `json:"path"` // install directory
 	Installed *Snapshot `json:"installed,omitempty"`

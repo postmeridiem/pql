@@ -65,17 +65,21 @@ type doctorIndex struct {
 }
 
 // doctorSkill mirrors skill.Status but flattens it for the doctor
-// report. Project = the install at <vault>/.claude/skills/<name>/.
+// report. Reports both scopes so drift between user-level and
+// project-level installs stays visible.
 type doctorSkill struct {
-	Name    string `json:"name"`
-	Project struct {
-		Path             string `json:"path"`
-		State            string `json:"state"`
-		InstalledHash    string `json:"installed_hash,omitempty"`
-		InstalledVersion string `json:"installed_version,omitempty"`
-	} `json:"project"`
+	Name    string             `json:"name"`
+	User    *doctorSkillScope  `json:"user,omitempty"`
+	Project *doctorSkillScope  `json:"project,omitempty"`
 	EmbeddedHash    string `json:"embedded_hash"`
 	EmbeddedVersion string `json:"embedded_version"`
+}
+
+type doctorSkillScope struct {
+	Path             string `json:"path"`
+	State            string `json:"state"`
+	InstalledHash    string `json:"installed_hash,omitempty"`
+	InstalledVersion string `json:"installed_version,omitempty"`
 }
 
 func newDoctorCmd() *cobra.Command {
@@ -208,25 +212,55 @@ func readMeta(ctx context.Context, db *sql.DB, key string) string {
 }
 
 // populateSkillState fills report.Skills by inspecting every bundled
-// skill at <vault>/.claude/skills/<name>/. Read-only — no install
-// offer here; that's `pql init`'s and `pql skill install`'s job.
+// skill at both user and project scopes. Read-only — no install offer
+// here; that's `pql init`'s and `pql skill install`'s job. Reports
+// both scopes so drift between them is visible from one place.
 func populateSkillState(vaultPath string, report *doctorReport) error {
-	statuses, err := skill.InspectAll(filepath.Join(vaultPath, skillsRelPath))
+	projStatuses, err := skill.InspectAll(filepath.Join(vaultPath, skillsRelPath))
 	if err != nil {
 		return err
 	}
-	report.Skills = make([]doctorSkill, 0, len(statuses))
-	for _, st := range statuses {
-		ds := doctorSkill{Name: st.Name}
-		ds.Project.Path = st.Path
-		ds.Project.State = string(st.State)
-		if st.Installed != nil {
-			ds.Project.InstalledHash = st.Installed.Hash
-			ds.Project.InstalledVersion = st.Installed.Version
+
+	var userStatuses []*skill.Status
+	if home, err := os.UserHomeDir(); err == nil {
+		userStatuses, _ = skill.InspectAll(filepath.Join(home, skillsRelPath))
+		// Errors here are non-fatal; the user-scope dir may not
+		// exist or be readable, which we report as missing rather
+		// than failing the whole doctor command.
+	}
+
+	byName := map[string]*skill.Status{}
+	for _, st := range userStatuses {
+		byName["user/"+st.Name] = st
+	}
+	for _, st := range projStatuses {
+		byName["project/"+st.Name] = st
+	}
+
+	report.Skills = make([]doctorSkill, 0, len(projStatuses))
+	for _, projSt := range projStatuses {
+		ds := doctorSkill{
+			Name:            projSt.Name,
+			EmbeddedHash:    projSt.Embedded.Hash,
+			EmbeddedVersion: projSt.Embedded.Version,
 		}
-		ds.EmbeddedHash = st.Embedded.Hash
-		ds.EmbeddedVersion = st.Embedded.Version
+		ds.Project = scopeToDoctor(projSt)
+		if userSt := byName["user/"+projSt.Name]; userSt != nil {
+			ds.User = scopeToDoctor(userSt)
+		}
 		report.Skills = append(report.Skills, ds)
 	}
 	return nil
+}
+
+func scopeToDoctor(st *skill.Status) *doctorSkillScope {
+	out := &doctorSkillScope{
+		Path:  st.Path,
+		State: string(st.State),
+	}
+	if st.Installed != nil {
+		out.InstalledHash = st.Installed.Hash
+		out.InstalledVersion = st.Installed.Version
+	}
+	return out
 }

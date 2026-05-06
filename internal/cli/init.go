@@ -73,6 +73,7 @@ type initGitignore struct {
 
 type initSkillStat struct {
 	Name  string `json:"name"`            // bundled skill name (e.g. "pql", "clean-house")
+	Scope string `json:"scope,omitempty"` // "user" | "project" — resolved scope for this install
 	Mode  string `json:"mode"`            // "yes" | "no" | "prompt-declined" | "prompt-accepted" | "prompt-skipped-no-tty" | "preserved"
 	State string `json:"state"`           // post-action state per internal/skill
 	Path  string `json:"path,omitempty"`  // install directory
@@ -595,21 +596,38 @@ func ensureGitHookShim(dir, hookName string) {
 	_ = os.WriteFile(shimPath, []byte(shim), 0o750) //nolint:gosec // G306: hook must be executable
 }
 
+// resolveInitSkillsRoot is init's variant of resolveSkillsRoot. Init
+// already knows the project dir, so it doesn't need vault discovery.
+// Returns user-scope when any bundled skill is already installed
+// there; otherwise project-scope.
+func resolveInitSkillsRoot(projectDir string) (root, scope string) {
+	if uRoot, err := userSkillsRoot(); err == nil && hasAnyInstalled(uRoot) {
+		return uRoot, scopeUser
+	}
+	return filepath.Join(projectDir, skillsRelPath), scopeProject
+}
+
 // initSkillStep handles the --with-skill flag for every bundled skill.
-// Returns one stat per skill in Bundled order. mode==prompt is TTY-
-// aware: prompt if stdin is a terminal, otherwise behave as mode==no
-// (silent skip).
+// Returns one stat per skill in Bundled order. Resolves scope the same
+// way 'pql skill install' does: user-scope wins if anything's already
+// installed there, otherwise falls back to project-scope. mode==prompt
+// is TTY-aware: prompt if stdin is a terminal, otherwise behave as
+// mode==no (silent skip).
 func initSkillStep(dir, withFlag string, in io.Reader, prompt io.Writer) ([]initSkillStat, error) {
-	root := filepath.Join(dir, skillsRelPath)
+	root, scope := resolveInitSkillsRoot(dir)
 	statuses, err := skill.InspectAll(root)
 	if err != nil {
 		return nil, err
+	}
+	for _, st := range statuses {
+		st.Scope = scope
 	}
 
 	out := make([]initSkillStat, 0, len(statuses))
 	for _, st := range statuses {
 		stat := initSkillStat{
 			Name:  st.Name,
+			Scope: scope,
 			Mode:  withFlag,
 			State: string(st.State),
 			Path:  st.Path,
