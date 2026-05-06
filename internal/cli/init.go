@@ -371,17 +371,21 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 
 const pqlHookMarker = "# --- pql plan export ---"
 
-const pqlPreCommitHook = `# --- pql plan export ---
-# Auto-installed by pql init. Exports planning state so it's
-# committed alongside code changes. Safe no-op if pql is absent.
-if command -v pql >/dev/null 2>&1; then
-    pql plan export 2>/dev/null
-    if [ -f .pql/pql-plan.json ]; then
-        git add .pql/pql-plan.json
-    fi
-fi
+// renderPreCommitHook bakes the absolute pql binary path into the
+// pre-commit hook. PATH is unreliable in git's hook shell (witnessed
+// the bare `pql` form silently no-op when ~/.local/bin wasn't on
+// hook-shell PATH), so we resolve the binary at install time and write
+// it in. If the binary later moves, re-run `pql init` to refresh.
+func renderPreCommitHook(pqlPath string) string {
+	return `# --- pql plan export ---
+# Auto-installed by pql init. Exports planning state and stages the
+# snapshot so it lands in the same commit as the change that produced
+# it. The absolute pql path is baked in at install time — re-run
+# 'pql init' if the binary moves.
+` + shellQuote(pqlPath) + ` plan export --stage 2>/dev/null || true
 # --- end pql ---
 `
+}
 
 func ensurePlanExportHook(dir string) initHookStat {
 	gitDir := filepath.Join(dir, ".git")
@@ -398,6 +402,8 @@ func ensurePlanExportHook(dir string) initHookStat {
 		return stat
 	}
 
+	body := renderPreCommitHook(resolvePqlPath())
+
 	existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: known hook path
 	if err == nil {
 		stat.Existed = true
@@ -406,7 +412,7 @@ func ensurePlanExportHook(dir string) initHookStat {
 		}
 		// Prepend our block to existing hook content.
 		var buf bytes.Buffer
-		buf.WriteString(pqlPreCommitHook)
+		buf.WriteString(body)
 		buf.WriteByte('\n')
 		buf.Write(existing)
 		if err := os.WriteFile(hookPath, buf.Bytes(), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
@@ -417,7 +423,7 @@ func ensurePlanExportHook(dir string) initHookStat {
 		return stat
 	}
 
-	content := "#!/bin/sh\n" + pqlPreCommitHook
+	content := "#!/bin/sh\n" + body
 	if err := os.WriteFile(hookPath, []byte(content), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
 		stat.Skipped = "write: " + err.Error()
 		return stat
@@ -430,27 +436,52 @@ func ensurePlanExportHook(dir string) initHookStat {
 
 const pqlPostMergeMarker = "# --- pql plan import ---"
 
-const pqlPostMergeHook = `# --- pql plan import ---
+// renderPostMergeHook bakes the absolute pql binary path in for the
+// same reason renderPreCommitHook does — git's hook PATH isn't the
+// user's interactive PATH.
+func renderPostMergeHook(pqlPath string) string {
+	q := shellQuote(pqlPath)
+	return `# --- pql plan import ---
 # Auto-installed by pql init. Imports planning state when the
 # snapshot file changes on pull/merge. Skips if local planning
 # state has uncommitted changes to avoid data loss.
-# Safe no-op if pql is absent.
-if command -v pql >/dev/null 2>&1; then
-    changed=$(git diff-tree -r --name-only ORIG_HEAD HEAD -- .pql/pql-plan.json 2>/dev/null)
-    if [ -n "$changed" ]; then
-        tmpfile=$(mktemp)
-        pql plan export --to "$tmpfile" 2>/dev/null
-        if git show ORIG_HEAD:.pql/pql-plan.json 2>/dev/null | diff -q - "$tmpfile" >/dev/null 2>&1; then
-            pql plan import 2>/dev/null
-        else
-            echo "pql: skipping plan import — local planning state has uncommitted changes" >&2
-            echo "pql: run 'pql plan export' then merge manually, then 'pql plan import'" >&2
-        fi
-        rm -f "$tmpfile"
+changed=$(git diff-tree -r --name-only ORIG_HEAD HEAD -- .pql/pql-plan.json 2>/dev/null)
+if [ -n "$changed" ]; then
+    tmpfile=$(mktemp)
+    ` + q + ` plan export --to "$tmpfile" 2>/dev/null
+    if git show ORIG_HEAD:.pql/pql-plan.json 2>/dev/null | diff -q - "$tmpfile" >/dev/null 2>&1; then
+        ` + q + ` plan import 2>/dev/null
+    else
+        echo "pql: skipping plan import — local planning state has uncommitted changes" >&2
+        echo "pql: run 'pql plan export' then merge manually, then 'pql plan import'" >&2
     fi
+    rm -f "$tmpfile"
 fi
 # --- end pql ---
 `
+}
+
+// shellQuote single-quotes a path for safe inclusion in a /bin/sh
+// script. Single quotes inside the path are escaped via the standard
+// `'\''` sequence.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// resolvePqlPath returns the absolute path of the running pql binary
+// for use in generated hook scripts. Falls back to the bare name "pql"
+// if resolution fails — the hook then relies on PATH (the prior
+// behaviour).
+func resolvePqlPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "pql"
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		return resolved
+	}
+	return exe
+}
 
 func ensurePlanImportHook(dir string) initHookStat {
 	gitDir := filepath.Join(dir, ".git")
@@ -467,6 +498,8 @@ func ensurePlanImportHook(dir string) initHookStat {
 		return stat
 	}
 
+	body := renderPostMergeHook(resolvePqlPath())
+
 	existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: known hook path
 	if err == nil {
 		stat.Existed = true
@@ -474,7 +507,7 @@ func ensurePlanImportHook(dir string) initHookStat {
 			return stat
 		}
 		var buf bytes.Buffer
-		buf.WriteString(pqlPostMergeHook)
+		buf.WriteString(body)
 		buf.WriteByte('\n')
 		buf.Write(existing)
 		if err := os.WriteFile(hookPath, buf.Bytes(), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
@@ -485,7 +518,7 @@ func ensurePlanImportHook(dir string) initHookStat {
 		return stat
 	}
 
-	content := "#!/bin/sh\n" + pqlPostMergeHook
+	content := "#!/bin/sh\n" + body
 	if err := os.WriteFile(hookPath, []byte(content), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
 		stat.Skipped = "write: " + err.Error()
 		return stat

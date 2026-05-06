@@ -11,6 +11,25 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.7] - 2026-05-06
+
+### Added
+
+- `pql plan export --stage` runs `git add` on the exported file after
+  writing. Idempotent across untracked / tracked / unchanged states.
+
+### Changed
+
+- The pre-commit and post-merge hooks installed by `pql init` now bake
+  the absolute path of the pql binary into the script (resolved from
+  `os.Executable()` at install time). Git's hook shell does not
+  inherit the user's interactive PATH, so the prior `command -v pql`
+  guard could silently no-op. Re-run `pql init` after moving the
+  binary.
+- The pre-commit hook calls `pql plan export --stage` instead of
+  shelling around bare export with a separate `git add`. One verb,
+  one place to maintain.
+
 ## [1.4.6] - 2026-05-06
 
 ### Fixed

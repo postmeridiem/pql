@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/spf13/cobra"
 
@@ -316,6 +317,7 @@ func collectDecisionRefs(t *repo.Ticket, ancestors []repo.Ticket) []string {
 
 func newPlanExportCmd() *cobra.Command {
 	var outFile string
+	var stage bool
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "Export planning state to a JSON file for version control",
@@ -325,10 +327,11 @@ to git — pql.db itself stays gitignored.
 
   pql plan export                         # writes .pql/pql-plan.json
   pql plan export --to planning.json      # custom filename
+  pql plan export --stage                 # also git-add the file
 
-Automatically wired by pql init: a pre-commit hook at .pql/hooks/pre-commit
-runs plan export and stages the file if it changed. Manual export is also
-fine — run it before committing when planning state changed.`,
+--stage runs ` + "`git add <outFile>`" + ` after the write; idempotent across
+untracked / tracked / unchanged states. Used by the pre-commit hook
+installed by pql init.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -357,11 +360,31 @@ fine — run it before committing when planning state changed.`,
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "exported to %s\n", outFile)
+
+			if stage {
+				if err := stageSnapshot(ctx, outFile); err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&outFile, "to", defaultSnapshotFile, "output file path")
+	cmd.Flags().BoolVar(&stage, "stage", false, "git-add the exported file after writing")
 	return cmd
+}
+
+// stageSnapshot runs `git add <path>` so the exported snapshot lands in
+// the next commit. `git add` is idempotent across untracked, tracked,
+// and unchanged states, so callers (notably the pre-commit hook) don't
+// need to inspect the file's git state before calling.
+func stageSnapshot(ctx context.Context, path string) error {
+	cmd := exec.CommandContext(ctx, "git", "add", "--", path)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git add %s: %v: %s", path, err, out)
+	}
+	return nil
 }
 
 // --- import ---
