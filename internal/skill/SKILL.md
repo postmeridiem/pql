@@ -8,8 +8,9 @@ description: >
   (2) planning — decision records, tickets, project status — use when the
   user asks about decisions, tickets, work items, or project planning
   ("sync decisions", "create a ticket", "what's the plan status", "show
-  D-5", "board"). Requires `pql` on PATH. JSON on stdout; exit 2 = zero
-  matches (not an error).
+  D-5", "board", "refine tickets", "tickets without descriptions").
+  Requires `pql` on PATH. JSON on stdout; exit 2 = zero matches (not an
+  error).
 ---
 
 # pql — vault queries + project planning
@@ -111,6 +112,9 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | `pql ticket team <id> <team>` | Set team |
 | `pql ticket label <id> add\|rm <label>` | Manage labels |
 | `pql ticket board [--team T]` | Kanban board view |
+| `pql ticket refine list` | Tickets with empty descriptions, status-priority-sorted |
+| `pql ticket refine next [--skip N]` | Head of the unrefined queue with full show-tree + remaining count |
+| `pql ticket refine write <id> <json\|--file\|--stdin>` | Patch writable fields (title, description, priority, type) |
 
 Ticket types: initiative, epic, story, task, bug.
 Valid statuses: backlog, ready, in_progress, review, done, cancelled.
@@ -146,6 +150,7 @@ On a fresh clone, `pql plan import` restores from the snapshot.
 - **Create ticket** → `pql ticket new task "implement X" --decision D-5`
 - **Batch close** → `pql ticket status T-1,T-2,T-3 done`
 - **Full context** → `pql ticket show T-5 --with-context --pretty`
+- **Refine next ticket** → `pql ticket refine next --pretty`, then `pql ticket refine write T-N '{"description":"..."}'`
 - **What's next?** → `pql plan whatsnext --pretty`
 - **Review queue** → `pql plan review --pretty`
 - **Coverage gaps** → `pql decisions coverage`

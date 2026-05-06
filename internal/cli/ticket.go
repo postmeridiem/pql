@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -11,6 +13,49 @@ import (
 	"github.com/postmeridiem/pql/internal/diag"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
+
+// ticketShowTree is the full join-tree shape used by `ticket show`,
+// `ticket refine next`, and `ticket refine write`. Fields mirror the
+// flag-gated joins on `ticket show`: ancestors+decisions for context,
+// blockers, and direct children.
+type ticketShowTree struct {
+	repo.Ticket
+	Ancestors []repo.Ticket        `json:"ancestors,omitempty"`
+	Decisions []repo.Decision      `json:"decisions,omitempty"`
+	Blockers  []repo.BlockerInfo   `json:"blockers,omitempty"`
+	Children  []repo.TicketSummary `json:"children,omitempty"`
+}
+
+// buildShowTree assembles the ticket show-tree from the requested joins.
+// Callers that want the whole tree (refinement flows) pass all three
+// flags true.
+func buildShowTree(ctx context.Context, db *sql.DB, t *repo.Ticket, withContext, withBlockers, withChildren bool) (*ticketShowTree, error) {
+	out := &ticketShowTree{Ticket: *t}
+	if withContext {
+		enriched, err := enrichTicket(ctx, db, t)
+		if err != nil {
+			return nil, err
+		}
+		out.Ancestors = enriched.Ancestors
+		out.Children = enriched.Children
+		out.Decisions = enriched.Decisions
+	}
+	if withBlockers {
+		blockers, err := repo.BlockersOf(ctx, db, t.ID)
+		if err != nil {
+			return nil, err
+		}
+		out.Blockers = blockers
+	}
+	if withChildren {
+		children, err := repo.ChildrenOf(ctx, db, t.ID)
+		if err != nil {
+			return nil, err
+		}
+		out.Children = children
+	}
+	return out, nil
+}
 
 // parseIDs splits a comma-separated ID argument into one or more IDs.
 // A single ID passes through unchanged; commas signal a batch:
@@ -48,6 +93,7 @@ func newTicketCmd() *cobra.Command {
 	cmd.AddCommand(newTicketTeamCmd())
 	cmd.AddCommand(newTicketLabelCmd())
 	cmd.AddCommand(newTicketBoardCmd())
+	cmd.AddCommand(newTicketRefineCmd())
 	return cmd
 }
 
@@ -191,35 +237,9 @@ func newTicketShowCmd() *cobra.Command {
 				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", args[0])}
 			}
 
-			type showResult struct {
-				repo.Ticket
-				Ancestors []repo.Ticket      `json:"ancestors,omitempty"`
-				Decisions []repo.Decision     `json:"decisions,omitempty"`
-				Blockers  []repo.BlockerInfo  `json:"blockers,omitempty"`
-				Children  []repo.TicketSummary `json:"children,omitempty"`
-			}
-			out := showResult{Ticket: *tk}
-
-			if withContext {
-				enriched, err := enrichTicket(ctx, pdb.SQL(), tk)
-				if err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
-				out.Ancestors = enriched.Ancestors
-				out.Children = enriched.Children
-				out.Decisions = enriched.Decisions
-			}
-			if withBlockers {
-				out.Blockers, err = repo.BlockersOf(ctx, pdb.SQL(), args[0])
-				if err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
-			}
-			if withChildren {
-				out.Children, err = repo.ChildrenOf(ctx, pdb.SQL(), args[0])
-				if err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
+			out, err := buildShowTree(ctx, pdb.SQL(), tk, withContext, withBlockers, withChildren)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -227,7 +247,7 @@ func newTicketShowCmd() *cobra.Command {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(&out, rOpts); err != nil {
+			if _, err := render.One(out, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			return nil

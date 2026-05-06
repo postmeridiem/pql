@@ -11,6 +11,17 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.5] - 2026-05-06
+
+### Added
+
+- `pql ticket refine list` / `next [--skip N]` / `write <id> <json|--file|--stdin>` —
+  surfaces tickets with empty descriptions and lets a writer patch
+  `title`, `description`, `priority`, or `type` via JSON. `refine next`
+  returns the same join-tree as `ticket show --with-context
+  --with-blockers --with-children`, plus a `refinement` envelope with
+  remaining/skipped counts.
+
 ## [1.4.0] - 2026-04-23
 
 ### Added

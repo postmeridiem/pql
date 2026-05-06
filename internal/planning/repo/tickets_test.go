@@ -224,6 +224,148 @@ func TestAncestors(t *testing.T) {
 	}
 }
 
+func TestListTickets_Unrefined(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+
+	desc := "has a description"
+	CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "described", Description: desc})
+	CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "empty"})
+	idWS, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "whitespace", Description: "   "})
+	idDone, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "done-empty"})
+	if err := SetStatus(ctx, db, idDone, "done", ""); err != nil {
+		t.Fatalf("setstatus done: %v", err)
+	}
+	idCancelled, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "cancelled-empty"})
+	if err := SetStatus(ctx, db, idCancelled, "cancelled", ""); err != nil {
+		t.Fatalf("setstatus cancelled: %v", err)
+	}
+
+	tks, err := ListTickets(ctx, db, TicketFilter{Unrefined: true})
+	if err != nil {
+		t.Fatalf("list unrefined: %v", err)
+	}
+	titles := make([]string, len(tks))
+	for i, tk := range tks {
+		titles[i] = tk.Title
+	}
+	if len(tks) != 2 {
+		t.Fatalf("unrefined count = %d (%v), want 2 (empty, whitespace)", len(tks), titles)
+	}
+	// Whitespace-described row should appear.
+	foundWS := false
+	for _, tk := range tks {
+		if tk.ID == idWS {
+			foundWS = true
+		}
+	}
+	if !foundWS {
+		t.Errorf("whitespace-only description not surfaced as unrefined")
+	}
+}
+
+func TestListTickets_UnrefinedOrdering(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+
+	// Create five tickets with empty descriptions in different statuses.
+	idBacklog, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "a"})
+	idReady, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "b"})
+	if err := SetStatus(ctx, db, idReady, "ready", ""); err != nil {
+		t.Fatal(err)
+	}
+	idInProgress, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "c"})
+	if err := SetStatus(ctx, db, idInProgress, "ready", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetStatus(ctx, db, idInProgress, "in_progress", ""); err != nil {
+		t.Fatal(err)
+	}
+	idReview, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "d"})
+	if err := SetStatus(ctx, db, idReview, "ready", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetStatus(ctx, db, idReview, "in_progress", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetStatus(ctx, db, idReview, "review", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	tks, _ := ListTickets(ctx, db, TicketFilter{Unrefined: true})
+	if len(tks) != 4 {
+		t.Fatalf("got %d, want 4", len(tks))
+	}
+	wantOrder := []string{idInProgress, idReview, idReady, idBacklog}
+	for i, want := range wantOrder {
+		if tks[i].ID != want {
+			gotIDs := make([]string, len(tks))
+			for j, tk := range tks {
+				gotIDs[j] = tk.ID
+			}
+			t.Fatalf("position %d: got %s, want %s (full order %v, want %v)", i, tks[i].ID, want, gotIDs, wantOrder)
+		}
+	}
+}
+
+func TestUpdateTicket(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+
+	id, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "before"})
+
+	desc := "new description"
+	title := "after"
+	pri := "high"
+	if err := UpdateTicket(ctx, db, id, UpdateTicketFields{
+		Title:       &title,
+		Description: &desc,
+		Priority:    &pri,
+	}, "tester"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	tk, _ := GetTicket(ctx, db, id)
+	if tk.Title != "after" || tk.Priority != "high" || tk.Description == nil || *tk.Description != desc {
+		t.Errorf("post-update ticket = %+v", tk)
+	}
+
+	// History row per changed field.
+	var n int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM ticket_history WHERE ticket_id = ? AND changed_by = 'tester'`,
+		id).Scan(&n); err != nil {
+		t.Fatalf("count history: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("history rows = %d, want 3", n)
+	}
+}
+
+func TestUpdateTicket_Validation(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	id, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "x"})
+
+	bad := "loud"
+	if err := UpdateTicket(ctx, db, id, UpdateTicketFields{Priority: &bad}, ""); err == nil {
+		t.Error("expected error for invalid priority")
+	}
+	badType := "essay"
+	if err := UpdateTicket(ctx, db, id, UpdateTicketFields{Type: &badType}, ""); err == nil {
+		t.Error("expected error for invalid type")
+	}
+	empty := "  "
+	if err := UpdateTicket(ctx, db, id, UpdateTicketFields{Title: &empty}, ""); err == nil {
+		t.Error("expected error for empty title")
+	}
+	if err := UpdateTicket(ctx, db, "T-999", UpdateTicketFields{Title: ptr("x")}, ""); err == nil {
+		t.Error("expected error updating missing ticket")
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
 func TestNextTicketID_Increments(t *testing.T) {
 	ctx := context.Background()
 	db := setupDB(t)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
+	"strings"
 )
 
 var validStatuses = map[string]bool{
@@ -105,6 +107,9 @@ type TicketFilter struct {
 	DecisionRef string
 	Label       string
 	ParentID    string
+	// Unrefined, when true, restricts to tickets with an empty
+	// description (NULL or whitespace) and excludes done/cancelled.
+	Unrefined bool
 }
 
 // ListTickets returns tickets matching the filter.
@@ -137,7 +142,21 @@ func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, err
 		query += " AND id IN (SELECT ticket_id FROM ticket_labels WHERE label = ?)"
 		params = append(params, f.Label)
 	}
-	query += " ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)"
+	if f.Unrefined {
+		query += " AND (description IS NULL OR TRIM(description) = '')"
+		query += " AND status NOT IN ('done', 'cancelled')"
+		query += ` ORDER BY
+			CASE status
+				WHEN 'in_progress' THEN 0
+				WHEN 'review' THEN 1
+				WHEN 'ready' THEN 2
+				WHEN 'backlog' THEN 3
+				ELSE 4
+			END,
+			CAST(SUBSTR(id, 3) AS INTEGER)`
+	} else {
+		query += " ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)"
+	}
 
 	rows, err := db.QueryContext(ctx, query, params...)
 	if err != nil {
@@ -440,6 +459,113 @@ func Ancestors(ctx context.Context, db *sql.DB, t *Ticket) ([]Ticket, error) {
 		current = parent
 	}
 	return result, nil
+}
+
+// UpdateTicketFields names the optional fields a refine-style multi-field
+// update can touch. Status, parent, assignee, team, and labels have
+// dedicated verbs and are intentionally excluded.
+type UpdateTicketFields struct {
+	Title       *string `json:"title,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Priority    *string `json:"priority,omitempty"`
+	Type        *string `json:"type,omitempty"`
+}
+
+// UpdateTicket applies the non-nil fields to the ticket and records one
+// history row per changed field. Empty fields map is a no-op.
+func UpdateTicket(ctx context.Context, db *sql.DB, id string, f UpdateTicketFields, changedBy string) error {
+	if f.Title != nil && strings.TrimSpace(*f.Title) == "" {
+		return fmt.Errorf("repo: title cannot be empty")
+	}
+	if f.Type != nil && !validTypes[*f.Type] {
+		return fmt.Errorf("repo: invalid type %q", *f.Type)
+	}
+	if f.Priority != nil && !validPriorities[*f.Priority] {
+		return fmt.Errorf("repo: invalid priority %q", *f.Priority)
+	}
+
+	t, err := GetTicket(ctx, db, id)
+	if err != nil {
+		return err
+	}
+	if t == nil {
+		return fmt.Errorf("repo: ticket %s not found", id)
+	}
+
+	type change struct {
+		field   string
+		old     string
+		new     string
+		colExpr string
+		colArg  any
+	}
+	var changes []change
+	if f.Title != nil && *f.Title != t.Title {
+		changes = append(changes, change{
+			field: "title", old: t.Title, new: *f.Title,
+			colExpr: "title = ?", colArg: *f.Title,
+		})
+	}
+	if f.Description != nil {
+		oldDesc := ""
+		if t.Description != nil {
+			oldDesc = *t.Description
+		}
+		if *f.Description != oldDesc {
+			changes = append(changes, change{
+				field: "description", old: oldDesc, new: *f.Description,
+				colExpr: "description = ?", colArg: nullIfEmpty(*f.Description),
+			})
+		}
+	}
+	if f.Priority != nil && *f.Priority != t.Priority {
+		changes = append(changes, change{
+			field: "priority", old: t.Priority, new: *f.Priority,
+			colExpr: "priority = ?", colArg: *f.Priority,
+		})
+	}
+	if f.Type != nil && *f.Type != t.Type {
+		changes = append(changes, change{
+			field: "type", old: t.Type, new: *f.Type,
+			colExpr: "type = ?", colArg: *f.Type,
+		})
+	}
+	if len(changes) == 0 {
+		return nil
+	}
+
+	sort.Slice(changes, func(i, j int) bool { return changes[i].field < changes[j].field })
+
+	setParts := make([]string, 0, len(changes)+1)
+	args := make([]any, 0, len(changes)+1)
+	for _, c := range changes {
+		setParts = append(setParts, c.colExpr)
+		args = append(args, c.colArg)
+	}
+	setParts = append(setParts, "updated_at = datetime('now')")
+	args = append(args, id)
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("repo: begin update: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt := fmt.Sprintf("UPDATE tickets SET %s WHERE id = ?", strings.Join(setParts, ", "))
+	if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
+		return fmt.Errorf("repo: update ticket: %w", err)
+	}
+
+	for _, c := range changes {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by)
+			VALUES (?, ?, ?, ?, ?)
+		`, id, c.field, nullIfEmpty(c.old), nullIfEmpty(c.new), nullIfEmpty(changedBy)); err != nil {
+			return fmt.Errorf("repo: record update history: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 func scanTickets(rows *sql.Rows) ([]Ticket, error) {
