@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-04-23T10:15:52Z",
+  "exported_at": "2026-05-06T10:12:56Z",
   "decisions": [
     {
       "id": "D-1",
@@ -9,16 +9,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
-    },
-    {
-      "id": "Q-1",
-      "type": "question",
-      "domain": "questions",
-      "title": "Markdown mirror for tickets",
-      "status": "open",
-      "file_path": "decisions/questions.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-2",
@@ -28,16 +19,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
-    },
-    {
-      "id": "Q-2",
-      "type": "question",
-      "domain": "questions",
-      "title": "FTS for ticket/decision search",
-      "status": "open",
-      "file_path": "decisions/questions.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-3",
@@ -47,16 +29,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
-    },
-    {
-      "id": "Q-3",
-      "type": "question",
-      "domain": "questions",
-      "title": "Multi-user planning DB",
-      "status": "open",
-      "file_path": "decisions/questions.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-4",
@@ -66,16 +39,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
-    },
-    {
-      "id": "Q-4",
-      "type": "question",
-      "domain": "questions",
-      "title": "Validator strictness",
-      "status": "open",
-      "file_path": "decisions/questions.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-5",
@@ -85,16 +49,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
-    },
-    {
-      "id": "Q-5",
-      "type": "question",
-      "domain": "questions",
-      "title": "Body access in the DSL",
-      "status": "open",
-      "file_path": "decisions/questions.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-6",
@@ -104,16 +59,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
-    },
-    {
-      "id": "Q-6",
-      "type": "question",
-      "domain": "questions",
-      "title": "Outlink target normalization",
-      "status": "open",
-      "file_path": "decisions/questions.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-7",
@@ -123,16 +69,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
-    },
-    {
-      "id": "Q-7",
-      "type": "question",
-      "domain": "questions",
-      "title": "Code-aware extractor",
-      "status": "open",
-      "file_path": "decisions/questions.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-8",
@@ -142,16 +79,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
-    },
-    {
-      "id": "Q-8",
-      "type": "question",
-      "domain": "questions",
-      "title": "Occasional pql.db backups into git",
-      "status": "resolved",
-      "file_path": "decisions/questions.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-9",
@@ -161,7 +89,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-10",
@@ -171,7 +99,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-11",
@@ -181,7 +109,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-12",
@@ -191,7 +119,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
     },
     {
       "id": "D-13",
@@ -201,7 +129,98 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-04-23 09:53:37"
+      "synced_at": "2026-05-06 10:12:13"
+    },
+    {
+      "id": "D-14",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "No status transition enforcement in pql",
+      "status": "active",
+      "date": "2026-04-24",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-27 16:49:28"
+    },
+    {
+      "id": "Q-1",
+      "type": "question",
+      "domain": "questions",
+      "title": "Markdown mirror for tickets",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-05-06 10:12:13"
+    },
+    {
+      "id": "Q-2",
+      "type": "question",
+      "domain": "questions",
+      "title": "FTS for ticket/decision search",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-05-06 10:12:13"
+    },
+    {
+      "id": "Q-3",
+      "type": "question",
+      "domain": "questions",
+      "title": "Multi-user planning DB",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-05-06 10:12:13"
+    },
+    {
+      "id": "Q-4",
+      "type": "question",
+      "domain": "questions",
+      "title": "Validator strictness",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-05-06 10:12:13"
+    },
+    {
+      "id": "Q-5",
+      "type": "question",
+      "domain": "questions",
+      "title": "Body access in the DSL",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-05-06 10:12:13"
+    },
+    {
+      "id": "Q-6",
+      "type": "question",
+      "domain": "questions",
+      "title": "Outlink target normalization",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-05-06 10:12:13"
+    },
+    {
+      "id": "Q-7",
+      "type": "question",
+      "domain": "questions",
+      "title": "Code-aware extractor",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-05-06 10:12:13"
+    },
+    {
+      "id": "Q-8",
+      "type": "question",
+      "domain": "questions",
+      "title": "Occasional pql.db backups into git",
+      "status": "resolved",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-05-06 10:12:13"
+    },
+    {
+      "id": "Q-9",
+      "type": "question",
+      "domain": "questions",
+      "title": "Multi-user ticket ID distribution",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-04-27 16:49:28"
     }
   ],
   "decision_refs": [
@@ -230,8 +249,63 @@
       "note": "**Status:** Resolved → [D-13](architecture.md#d-13-plan-export-and-plan-import)"
     }
   ],
-  "tickets": null,
+  "tickets": [
+    {
+      "id": "T-1",
+      "type": "story",
+      "title": "unify show-tree rendering across ticket and decision surfaces",
+      "description": "Audit which surfaces build a ticket/decision join-tree (ancestors, decisions, blockers, children) and route them all through buildShowTree (introduced in v1.4.5 in internal/cli/ticket.go). Currently used by ticket show, ticket refine next, ticket refine write. Plan whatsnext / plan review use the older whatNextResult shape; decisions show may have a parallel pattern. Goal: one canonical helper, identical JSON output where the data overlaps, single place to tweak rendering.",
+      "status": "ready",
+      "priority": "medium",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 10:07:05",
+      "updated_at": "2026-05-06 10:07:09"
+    },
+    {
+      "id": "T-2",
+      "type": "task",
+      "parent_id": "T-1",
+      "title": "route plan whatsnext and plan review through buildShowTree",
+      "description": "Replace whatNextResult in internal/cli/plan.go with the ticketShowTree shape (or refactor whatNextResult to embed it). enrichTicket already returns the same ancestors/children/decisions data — collapse the two so plan whatsnext, plan review, ticket show, and ticket refine emit identical join-tree JSON for the same ticket. Keep the Message field for the no-actionable-tickets case.",
+      "status": "ready",
+      "priority": "medium",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 10:07:05",
+      "updated_at": "2026-05-06 10:07:09"
+    },
+    {
+      "id": "T-3",
+      "type": "task",
+      "parent_id": "T-1",
+      "title": "align decisions show with the join-tree helper pattern",
+      "description": "Audit internal/cli/decisions.go (decisions show with --with-refs / --with-tickets) for a parallel ad-hoc tree shape. If found, factor into a buildDecisionTree helper analogous to buildShowTree so decision rendering stays consistent across decisions show, decisions read, and any future surface (e.g. plan status drilldowns).",
+      "status": "ready",
+      "priority": "medium",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 10:07:05",
+      "updated_at": "2026-05-06 10:07:09"
+    },
+    {
+      "id": "T-4",
+      "type": "bug",
+      "title": "pre-commit hook misses bootstrap snapshot when pql-plan.json is untracked",
+      "description": "internal/cli/init.go:374 pqlPreCommitHook gates 'git add' on 'git diff --quiet -- .pql/pql-plan.json'. For an untracked file, git diff returns 0 (no diff) so the negation is false and the file is never staged. Result: the first commit after 'pql init' silently fails to commit the planning snapshot. Reproducer: fresh repo, pql init, pql ticket new ..., git commit -m '...' — pql-plan.json stays untracked. Fix: also stage when the file exists but is untracked, e.g. test 'git ls-files --error-unmatch ... 2\u003e/dev/null' or unconditionally 'git add -f .pql/pql-plan.json' if the file exists. Update both the embedded hook script and any tests asserting hook behaviour.",
+      "status": "done",
+      "priority": "high",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 10:11:03",
+      "updated_at": "2026-05-06 10:12:26"
+    }
+  ],
   "ticket_deps": null,
   "ticket_labels": null,
-  "history": null
+  "history": [
+    {
+      "ticket_id": "T-4",
+      "field": "status",
+      "old_value": "in_progress",
+      "new_value": "done",
+      "changed_at": "2026-05-06 10:12:26"
+    }
+  ]
 }
