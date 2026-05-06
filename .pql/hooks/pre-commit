@@ -4,7 +4,7 @@
 # committed alongside code changes. Safe no-op if pql is absent.
 if command -v pql >/dev/null 2>&1; then
     pql plan export 2>/dev/null
-    if ! git diff --quiet -- .pql/pql-plan.json 2>/dev/null; then
+    if [ -f .pql/pql-plan.json ]; then
         git add .pql/pql-plan.json
     fi
 fi

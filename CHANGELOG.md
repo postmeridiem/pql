@@ -11,6 +11,15 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.6] - 2026-05-06
+
+### Fixed
+
+- `pql init`'s pre-commit hook now stages `.pql/pql-plan.json` even on
+  the first commit after install. The previous gate (`git diff
+  --quiet`) treated untracked files as unchanged and silently skipped
+  the bootstrap snapshot.
+
 ## [1.4.5] - 2026-05-06
 
 ### Added
