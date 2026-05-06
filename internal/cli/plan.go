@@ -308,7 +308,7 @@ installed by pql init.`,
 // and unchanged states, so callers (notably the pre-commit hook) don't
 // need to inspect the file's git state before calling.
 func stageSnapshot(ctx context.Context, path string) error {
-	cmd := exec.CommandContext(ctx, "git", "add", "--", path)
+	cmd := exec.CommandContext(ctx, "git", "add", "--", path) //nolint:gosec // G204: path is the resolved snapshot output path; -- separator prevents flag injection
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git add %s: %v: %s", path, err, out)

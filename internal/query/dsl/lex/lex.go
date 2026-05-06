@@ -139,6 +139,11 @@ func (k Kind) String() string {
 	return fmt.Sprintf("kind(%d)", int(k))
 }
 
+// keywords maps DSL keyword text to its token kind. Strings are
+// intentionally inline — they are the DSL surface, not a duplication
+// to factor out.
+//
+//nolint:goconst // DSL keyword tokens
 var keywords = map[string]Kind{
 	"SELECT":   SELECT,
 	"DISTINCT": DISTINCT,

@@ -71,10 +71,14 @@ type initGitignore struct {
 	Entry    string `json:"entry,omitempty"`
 }
 
+// modePreserved is the Mode value emitted when an install was kept
+// as-is (skill is current, modified, or unknown — no overwrite).
+const modePreserved = "preserved"
+
 type initSkillStat struct {
 	Name  string `json:"name"`            // bundled skill name (e.g. "pql", "clean-house")
 	Scope string `json:"scope,omitempty"` // "user" | "project" — resolved scope for this install
-	Mode  string `json:"mode"`            // "yes" | "no" | "prompt-declined" | "prompt-accepted" | "prompt-skipped-no-tty" | "preserved"
+	Mode  string `json:"mode"`            // "yes" | "no" | "prompt-declined" | "prompt-accepted" | "prompt-skipped-no-tty" | modePreserved
 	State string `json:"state"`           // post-action state per internal/skill
 	Path  string `json:"path,omitempty"`  // install directory
 	Hash  string `json:"hash,omitempty"`  // bundle hash (when present)
@@ -481,7 +485,7 @@ func shellQuote(s string) string {
 // git config are resolved against the repo root, matching how git
 // itself interprets them.
 func resolveHooksPath(dir string) string {
-	cmd := exec.Command("git", "-C", dir, "config", "--get", "core.hooksPath")
+	cmd := exec.Command("git", "-C", dir, "config", "--get", "core.hooksPath") //nolint:gosec // G204: dir is the resolved repo root, args are constants
 	out, err := cmd.Output()
 	if err == nil {
 		if p := strings.TrimSpace(string(out)); p != "" {
@@ -652,7 +656,7 @@ func initSkillStep(dir, withFlag string, in io.Reader, prompt io.Writer) ([]init
 		// not silently overwrite hand-edits.
 		for i, st := range statuses {
 			if st.State == skill.StateModified || st.State == skill.StateUnknown {
-				out[i].Mode = "preserved"
+				out[i].Mode = modePreserved
 				out[i].Note = "skill is " + string(st.State) + "; preserve user content. Use `pql skill install --force` to overwrite."
 				continue
 			}
@@ -691,10 +695,10 @@ func initSkillStep(dir, withFlag string, in io.Reader, prompt io.Writer) ([]init
 			for i, st := range statuses {
 				switch st.State {
 				case skill.StateCurrent:
-					out[i].Mode = "preserved"
+					out[i].Mode = modePreserved
 					out[i].Note = "skill is already current; no action needed"
 				case skill.StateModified, skill.StateUnknown:
-					out[i].Mode = "preserved"
+					out[i].Mode = modePreserved
 					out[i].Note = "skill is " + string(st.State) + "; preserve user content. Use `pql skill install --force` to overwrite."
 				}
 			}
@@ -717,10 +721,10 @@ func initSkillStep(dir, withFlag string, in io.Reader, prompt io.Writer) ([]init
 		for i, st := range statuses {
 			switch st.State {
 			case skill.StateCurrent:
-				out[i].Mode = "preserved"
+				out[i].Mode = modePreserved
 				out[i].Note = "already current"
 			case skill.StateModified, skill.StateUnknown:
-				out[i].Mode = "preserved"
+				out[i].Mode = modePreserved
 				out[i].Note = "skill is " + string(st.State) + "; preserve user content. Use `pql skill install --force` to overwrite."
 			case skill.StateMissing, skill.StateStale:
 				s := skill.ByName(st.Name)

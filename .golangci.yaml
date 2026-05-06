@@ -59,11 +59,18 @@ linters:
     gosec:
       excludes:
         - G115           # int conversion overflow — too noisy for SQLite ints
+    goconst:
+      # 5 keeps "domain word repeated across 4 cobra Use fields" out of
+      # the noise (cobra subcommand names like "list" / "status"
+      # /"new" inevitably collide). A real duplication still shows up.
+      min-occurrences: 5
   exclusions:
     rules:
-      # Tests can do things production code can't.
+      # Tests can do things production code can't. staticcheck's
+      # SA5011 trips on the `if x == nil { t.Fatal }; use x` pattern
+      # since it doesn't model t.Fatal as terminal — fine for tests.
       - path: _test\.go
-        linters: [errcheck, gosec, goconst]
+        linters: [errcheck, gosec, goconst, staticcheck]
       # cmd/ entrypoint is allowed to log and exit.
       - path: cmd/
         linters: [gocritic]

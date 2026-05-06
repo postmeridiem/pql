@@ -8,16 +8,24 @@ import (
 	"strings"
 )
 
+// Validator maps. Strings are intentionally inline — these are the
+// canonical schema enum values, repeated across tests and SQL CHECK
+// constraints. Hiding them behind constants would obscure the
+// schema's surface area more than it would dedupe.
+//
+//nolint:goconst // schema enum values
 var validStatuses = map[string]bool{
 	"backlog": true, "ready": true, "in_progress": true,
 	"review": true, "done": true, "cancelled": true,
 }
 
+//nolint:goconst // schema enum values
 var validTypes = map[string]bool{
 	"initiative": true, "epic": true, "story": true,
 	"task": true, "bug": true,
 }
 
+//nolint:goconst // schema enum values
 var validPriorities = map[string]bool{
 	"critical": true, "high": true, "medium": true, "low": true,
 }
@@ -551,7 +559,7 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, f UpdateTicketFiel
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	stmt := fmt.Sprintf("UPDATE tickets SET %s WHERE id = ?", strings.Join(setParts, ", "))
+	stmt := fmt.Sprintf("UPDATE tickets SET %s WHERE id = ?", strings.Join(setParts, ", ")) //nolint:gosec // G201: setParts items are constructed from a closed-set whitelist of column names + literal "= ?", values bind via ExecContext
 	if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
 		return fmt.Errorf("repo: update ticket: %w", err)
 	}

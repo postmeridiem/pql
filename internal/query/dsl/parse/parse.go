@@ -262,7 +262,7 @@ func (p *parser) parseAnd() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &Binary{P: Pos{Line: t.Line, Col: t.Col}, Op: "AND", L: left, R: right}
+		left = &Binary{P: Pos{Line: t.Line, Col: t.Col}, Op: "AND", L: left, R: right} //nolint:goconst // DSL operator literal
 	}
 	return left, nil
 }

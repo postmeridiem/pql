@@ -120,13 +120,22 @@ func parseText(text, domain, filePath string) []Record {
 	return records
 }
 
+// Decision/question record status values, in their canonical form.
+// Repeated by inferStatus across record-type branches.
+const (
+	statusActive     = "active"
+	statusOpen       = "open"
+	statusResolved   = "resolved"
+	statusSuperseded = "superseded"
+)
+
 func inferStatus(recType string, body []string) string {
 	if recType == "rejected" {
-		return "active"
+		return statusActive
 	}
 	for _, line := range body {
 		if supersededRe.MatchString(line) {
-			return "superseded"
+			return statusSuperseded
 		}
 	}
 	if recType == "question" {
@@ -137,16 +146,16 @@ func inferStatus(recType string, body []string) string {
 			}
 			s := strings.ToLower(strings.TrimSpace(m[1]))
 			if strings.Contains(s, "partial") || strings.Contains(s, "remaining") {
-				return "open"
+				return statusOpen
 			}
 			if strings.HasPrefix(s, "resolved") {
-				return "resolved"
+				return statusResolved
 			}
-			return "open"
+			return statusOpen
 		}
-		return "open"
+		return statusOpen
 	}
-	return "active"
+	return statusActive
 }
 
 func extractDate(body []string) string {

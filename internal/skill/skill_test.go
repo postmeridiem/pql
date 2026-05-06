@@ -140,7 +140,7 @@ func TestInspect_ModifiedWhenReferenceEdited(t *testing.T) {
 	if _, err := s.Install(root, false); err != nil {
 		t.Fatalf("Install: %v", err)
 	}
-	refPath := filepath.Join(s.installDir(root), "references/rules.md")
+	refPath := filepath.Join(s.installDir(root), "references", "rules.md")
 	if err := os.WriteFile(refPath, []byte("rewritten rules\n"), 0o644); err != nil {
 		t.Fatalf("hand-edit reference: %v", err)
 	}

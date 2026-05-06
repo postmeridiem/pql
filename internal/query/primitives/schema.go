@@ -64,7 +64,7 @@ func Schema(ctx context.Context, db *sql.DB, opts SchemaOpts) ([]SchemaEntry, er
 	switch opts.Sort {
 	case "", "key":
 		sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	case "count":
+	case "count": //nolint:goconst // sort-mode literal in user-facing API
 		sort.Slice(out, func(i, j int) bool {
 			if out[i].Count != out[j].Count {
 				return out[i].Count > out[j].Count

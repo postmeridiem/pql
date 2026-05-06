@@ -125,6 +125,9 @@ func (s *Skill) Hash() string { return hashBundle(s.files) }
 // State is the install-location's status relative to this binary.
 type State string
 
+// Drift states. The five-way split lets the CLI tell the user exactly
+// what's wrong (missing/stale/modified/unknown) instead of a binary
+// installed-or-not flag.
 const (
 	StateMissing  State = "missing"  // no SKILL.md at the target
 	StateCurrent  State = "current"  // matches the binary's embedded skill
@@ -368,11 +371,6 @@ func (e *ErrRefusedOverwrite) Error() string {
 		e.Name, e.State, e.Reason)
 }
 
-// hashBytes produces the "sha256:<hex>" form used on disk.
-func hashBytes(b []byte) string {
-	h := sha256.Sum256(b)
-	return "sha256:" + hex.EncodeToString(h[:])
-}
 
 // hashBundle hashes the bundle as a deterministic concatenation of
 // sorted "path\x00content\x00" pairs. Stable across Go versions; not

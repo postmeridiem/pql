@@ -38,7 +38,7 @@ func Tags(ctx context.Context, db *sql.DB, opts TagsOpts) ([]TagCount, error) {
 	switch opts.Sort {
 	case "", "tag":
 		query.WriteString(` ORDER BY tag`)
-	case "count":
+	case "count": //nolint:goconst // sort-mode literal in user-facing API
 		query.WriteString(` ORDER BY c DESC, tag`)
 	default:
 		return nil, fmt.Errorf("primitives.Tags: invalid sort %q (want tag|count)", opts.Sort)
