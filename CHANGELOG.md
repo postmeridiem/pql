@@ -11,6 +11,33 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.12] - 2026-05-06
+
+### Added
+
+- The clean-house skill now ships in the binary alongside the pql
+  skill. `pql skill install` (and `pql init`'s skill step) install
+  both — pql's skill at `.claude/skills/pql/`, clean-house at
+  `.claude/skills/clean-house/` with its `references/rules.md`
+  bundled in.
+- `pql skill` package surface gains `Bundled`, `ByName`, `InspectAll`,
+  `InstallAll`, `UninstallAll`, plus per-skill `(*Skill).Inspect/Install/Uninstall`.
+  Hash is now per-bundle (sha256 over sorted `path\x00content`
+  pairs) so editing a reference file marks the skill modified, not
+  just edits to SKILL.md.
+
+### Changed
+
+- **Breaking JSON output:** `pql skill status`, `pql skill install`,
+  and `pql skill uninstall` now emit a JSON array of skill statuses
+  (one per bundled skill), not a single object. `pql doctor`'s
+  `skill` field is now `skills` and is also an array. Each status
+  carries a `name` field. Consumers parsing the singular form need
+  to update.
+- `pql init`'s output `skill` field is now `skills` (array). The
+  interactive prompt covers all bundled skills together — one
+  question, one decision — instead of per-skill prompts.
+
 ## [1.4.11] - 2026-05-06
 
 ### Added

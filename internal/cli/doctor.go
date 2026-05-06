@@ -25,7 +25,7 @@ type doctorReport struct {
 	Config  doctorConfig      `json:"config"`
 	DB      doctorDB          `json:"db"`
 	Index   *doctorIndex      `json:"index"` // nil when DB doesn't exist
-	Skill   doctorSkill       `json:"skill"`
+	Skills  []doctorSkill     `json:"skills"`
 	Version version.BuildInfo `json:"version"`
 }
 
@@ -65,8 +65,9 @@ type doctorIndex struct {
 }
 
 // doctorSkill mirrors skill.Status but flattens it for the doctor
-// report. Project = the install at <vault>/.claude/skills/pql/.
+// report. Project = the install at <vault>/.claude/skills/<name>/.
 type doctorSkill struct {
+	Name    string `json:"name"`
 	Project struct {
 		Path             string `json:"path"`
 		State            string `json:"state"`
@@ -206,21 +207,26 @@ func readMeta(ctx context.Context, db *sql.DB, key string) string {
 	return v
 }
 
-// populateSkillState fills report.Skill by inspecting the project-level
-// install at <vault>/.claude/skills/pql/. Read-only — no install offer
-// here; that's `pql init`'s and `pql skill install`'s job.
+// populateSkillState fills report.Skills by inspecting every bundled
+// skill at <vault>/.claude/skills/<name>/. Read-only — no install
+// offer here; that's `pql init`'s and `pql skill install`'s job.
 func populateSkillState(vaultPath string, report *doctorReport) error {
-	st, err := skill.Inspect(filepath.Join(vaultPath, skillRelPath))
+	statuses, err := skill.InspectAll(filepath.Join(vaultPath, skillsRelPath))
 	if err != nil {
 		return err
 	}
-	report.Skill.Project.Path = st.Path
-	report.Skill.Project.State = string(st.State)
-	if st.Installed != nil {
-		report.Skill.Project.InstalledHash = st.Installed.Hash
-		report.Skill.Project.InstalledVersion = st.Installed.Version
+	report.Skills = make([]doctorSkill, 0, len(statuses))
+	for _, st := range statuses {
+		ds := doctorSkill{Name: st.Name}
+		ds.Project.Path = st.Path
+		ds.Project.State = string(st.State)
+		if st.Installed != nil {
+			ds.Project.InstalledHash = st.Installed.Hash
+			ds.Project.InstalledVersion = st.Installed.Version
+		}
+		ds.EmbeddedHash = st.Embedded.Hash
+		ds.EmbeddedVersion = st.Embedded.Version
+		report.Skills = append(report.Skills, ds)
 	}
-	report.Skill.EmbeddedHash = st.Embedded.Hash
-	report.Skill.EmbeddedVersion = st.Embedded.Version
 	return nil
 }

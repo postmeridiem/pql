@@ -30,7 +30,7 @@ type initResult struct {
 	Directory       string           `json:"directory"`
 	Config          initConfigStat   `json:"config"`
 	Gitignore       initGitignore    `json:"gitignore"`
-	Skill           initSkillStat    `json:"skill"`
+	Skills          []initSkillStat  `json:"skills"`
 	Permissions     initPermissions  `json:"permissions"`
 	PlanImport      initPlanImport   `json:"plan_import"`
 	Hook            initHookStat     `json:"hook"`
@@ -72,10 +72,11 @@ type initGitignore struct {
 }
 
 type initSkillStat struct {
+	Name  string `json:"name"`            // bundled skill name (e.g. "pql", "clean-house")
 	Mode  string `json:"mode"`            // "yes" | "no" | "prompt-declined" | "prompt-accepted" | "prompt-skipped-no-tty" | "preserved"
 	State string `json:"state"`           // post-action state per internal/skill
-	Path  string `json:"path,omitempty"`  // SKILL.md path
-	Hash  string `json:"hash,omitempty"`  // SHA-256 of installed content (when present)
+	Path  string `json:"path,omitempty"`  // install directory
+	Hash  string `json:"hash,omitempty"`  // bundle hash (when present)
 	Note  string `json:"note,omitempty"`  // human-readable explanation
 }
 
@@ -166,7 +167,7 @@ drift.`,
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
-			skillStat, err := initSkillStep(dir, withSkill, cmd.InOrStdin(), cmd.OutOrStderr())
+			skillStats, err := initSkillStep(dir, withSkill, cmd.InOrStdin(), cmd.OutOrStderr())
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
@@ -184,7 +185,7 @@ drift.`,
 				Directory:     dir,
 				Config:        cfgStat,
 				Gitignore:     giStat,
-				Skill:         skillStat,
+				Skills:        skillStats,
 				Permissions:   permStat,
 				PlanImport:    planStat,
 				Hook:          hookStat,
@@ -594,89 +595,130 @@ func ensureGitHookShim(dir, hookName string) {
 	_ = os.WriteFile(shimPath, []byte(shim), 0o750) //nolint:gosec // G306: hook must be executable
 }
 
-// initSkillStep handles the --with-skill flag. Returns a stat describing
-// what happened. mode==prompt is TTY-aware: prompt if stdin is a
-// terminal, otherwise behave as mode==no (silent skip).
-func initSkillStep(dir, withFlag string, in io.Reader, prompt io.Writer) (initSkillStat, error) {
-	skillDir := filepath.Join(dir, skillRelPath)
-	current, err := skill.Inspect(skillDir)
+// initSkillStep handles the --with-skill flag for every bundled skill.
+// Returns one stat per skill in Bundled order. mode==prompt is TTY-
+// aware: prompt if stdin is a terminal, otherwise behave as mode==no
+// (silent skip).
+func initSkillStep(dir, withFlag string, in io.Reader, prompt io.Writer) ([]initSkillStat, error) {
+	root := filepath.Join(dir, skillsRelPath)
+	statuses, err := skill.InspectAll(root)
 	if err != nil {
-		return initSkillStat{}, err
+		return nil, err
 	}
 
-	stat := initSkillStat{
-		Mode:  withFlag,
-		State: string(current.State),
-		Path:  current.Path,
-	}
-	if current.OnDisk != nil {
-		stat.Hash = current.OnDisk.Hash
+	out := make([]initSkillStat, 0, len(statuses))
+	for _, st := range statuses {
+		stat := initSkillStat{
+			Name:  st.Name,
+			Mode:  withFlag,
+			State: string(st.State),
+			Path:  st.Path,
+		}
+		if st.OnDisk != nil {
+			stat.Hash = st.OnDisk.Hash
+		}
+		out = append(out, stat)
 	}
 
 	switch withFlag {
 	case "no":
-		stat.Note = "--with-skill=no; skill install untouched"
-		return stat, nil
+		for i := range out {
+			out[i].Note = "--with-skill=no; skill install untouched"
+		}
+		return out, nil
 
 	case "yes":
-		// Force=true so stale + modified are both updated. The user said
-		// "yes" explicitly; respect that.
-		updated, err := skill.Install(skillDir, true)
-		if err != nil {
-			return stat, err
+		// Force per-skill except for Modified/Unknown — those still
+		// require an explicit `pql skill install --force`. Yes here
+		// means "install missing/stale and refresh current"; we do
+		// not silently overwrite hand-edits.
+		for i, st := range statuses {
+			if st.State == skill.StateModified || st.State == skill.StateUnknown {
+				out[i].Mode = "preserved"
+				out[i].Note = "skill is " + string(st.State) + "; preserve user content. Use `pql skill install --force` to overwrite."
+				continue
+			}
+			s := skill.ByName(st.Name)
+			updated, err := s.Install(root, false)
+			if err != nil {
+				return out, err
+			}
+			out[i].State = string(updated.State)
+			out[i].Hash = updated.OnDisk.Hash
+			out[i].Note = "installed (--with-skill=yes)"
 		}
-		stat.State = string(updated.State)
-		stat.Hash = updated.OnDisk.Hash
-		stat.Note = "installed (--with-skill=yes)"
-		return stat, nil
+		return out, nil
 
 	case "prompt":
-		// Skip silently if not a TTY — a no-prompt environment shouldn't
-		// hang waiting for input.
 		if !isTerminal(in) {
-			stat.Mode = "prompt-skipped-no-tty"
-			stat.Note = "stdin is not a TTY; --with-skill=prompt deferred"
-			return stat, nil
+			for i := range out {
+				out[i].Mode = "prompt-skipped-no-tty"
+				out[i].Note = "stdin is not a TTY; --with-skill=prompt deferred"
+			}
+			return out, nil
 		}
-		// Decide what to ask based on current state.
-		var question string
-		var defaultYes bool
-		switch current.State {
-		case skill.StateMissing:
-			question = "Install the pql Claude Code skill at " + skillDir + "?"
-			defaultYes = true
-		case skill.StateStale:
-			question = "Skill on disk is older than the binary's. Update it at " + skillDir + "?"
-			defaultYes = true
-		case skill.StateCurrent:
-			stat.Mode = "preserved"
-			stat.Note = "skill is already current; no action needed"
-			return stat, nil
-		case skill.StateModified, skill.StateUnknown:
-			stat.Mode = "preserved"
-			stat.Note = "skill is " + string(current.State) + "; preserve user content. Use `pql skill install --force` to overwrite."
-			return stat, nil
+
+		// Aggregate prompt: count skills that need work. If none,
+		// say so once and exit. Otherwise, one prompt covers the
+		// suite — per-skill prompts are noisy and the answer is
+		// usually the same.
+		var pending []string
+		for _, st := range statuses {
+			switch st.State {
+			case skill.StateMissing, skill.StateStale:
+				pending = append(pending, st.Name)
+			}
 		}
-		yes, err := promptYesNo(in, prompt, question, defaultYes)
+		if len(pending) == 0 {
+			for i, st := range statuses {
+				switch st.State {
+				case skill.StateCurrent:
+					out[i].Mode = "preserved"
+					out[i].Note = "skill is already current; no action needed"
+				case skill.StateModified, skill.StateUnknown:
+					out[i].Mode = "preserved"
+					out[i].Note = "skill is " + string(st.State) + "; preserve user content. Use `pql skill install --force` to overwrite."
+				}
+			}
+			return out, nil
+		}
+
+		question := fmt.Sprintf("Install/update %d pql skill(s) at %s? (%s)",
+			len(pending), root, strings.Join(pending, ", "))
+		yes, err := promptYesNo(in, prompt, question, true)
 		if err != nil {
-			return stat, err
+			return out, err
 		}
 		if !yes {
-			stat.Mode = "prompt-declined"
-			stat.Note = "user declined skill install"
-			return stat, nil
+			for i := range out {
+				out[i].Mode = "prompt-declined"
+				out[i].Note = "user declined skill install"
+			}
+			return out, nil
 		}
-		updated, err := skill.Install(skillDir, current.State == skill.StateStale)
-		if err != nil {
-			return stat, err
+		for i, st := range statuses {
+			switch st.State {
+			case skill.StateCurrent:
+				out[i].Mode = "preserved"
+				out[i].Note = "already current"
+			case skill.StateModified, skill.StateUnknown:
+				out[i].Mode = "preserved"
+				out[i].Note = "skill is " + string(st.State) + "; preserve user content. Use `pql skill install --force` to overwrite."
+			case skill.StateMissing, skill.StateStale:
+				s := skill.ByName(st.Name)
+				updated, err := s.Install(root, st.State == skill.StateStale)
+				if err != nil {
+					return out, err
+				}
+				out[i].Mode = "prompt-accepted"
+				out[i].State = string(updated.State)
+				out[i].Hash = updated.OnDisk.Hash
+			}
 		}
-		stat.Mode = "prompt-accepted"
-		stat.State = string(updated.State)
-		stat.Hash = updated.OnDisk.Hash
-		return stat, nil
+		return out, nil
 
 	default:
-		return stat, fmt.Errorf("--with-skill: invalid value %q (want yes|no|prompt)", withFlag)
+		return out, fmt.Errorf("--with-skill: invalid value %q (want yes|no|prompt)", withFlag)
 	}
 }
 
