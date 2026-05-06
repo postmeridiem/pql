@@ -50,3 +50,9 @@ Thumbs.db
 
 # Claude Code user-specific settings
 .claude/settings.local.json
+
+# pql shims planted by `pql init` into git's hooks dir. The shim is
+# per-clone state (it bridges git's hooks dir to .pql/hooks/), so we
+# track .pql/hooks/* (the actual scripts) and ignore the shim.
+.githooks/pre-commit
+.githooks/post-merge

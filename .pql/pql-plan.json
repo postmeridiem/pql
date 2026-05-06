@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-05-06T12:07:50Z",
+  "exported_at": "2026-05-06T12:21:19Z",
   "decisions": [
     {
       "id": "D-1",
@@ -9,7 +9,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-2",
@@ -19,7 +19,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-3",
@@ -29,7 +29,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-4",
@@ -39,7 +39,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-5",
@@ -49,7 +49,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-6",
@@ -59,7 +59,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-7",
@@ -69,7 +69,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-8",
@@ -79,7 +79,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-9",
@@ -89,7 +89,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-10",
@@ -99,7 +99,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-11",
@@ -109,7 +109,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-12",
@@ -119,7 +119,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-13",
@@ -129,7 +129,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "D-14",
@@ -139,7 +139,7 @@
       "status": "active",
       "date": "2026-04-24",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "Q-1",
@@ -148,7 +148,7 @@
       "title": "Markdown mirror for tickets",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "Q-2",
@@ -157,7 +157,7 @@
       "title": "FTS for ticket/decision search",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "Q-3",
@@ -166,7 +166,7 @@
       "title": "Multi-user planning DB",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "Q-4",
@@ -175,7 +175,7 @@
       "title": "Validator strictness",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "Q-5",
@@ -184,7 +184,7 @@
       "title": "Body access in the DSL",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "Q-6",
@@ -193,7 +193,7 @@
       "title": "Outlink target normalization",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "Q-7",
@@ -202,7 +202,7 @@
       "title": "Code-aware extractor",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "Q-8",
@@ -211,7 +211,7 @@
       "title": "Occasional pql.db backups into git",
       "status": "resolved",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     },
     {
       "id": "Q-9",
@@ -220,7 +220,7 @@
       "title": "Multi-user ticket ID distribution",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 10:17:59"
+      "synced_at": "2026-05-06 12:21:04"
     }
   ],
   "decision_refs": [
@@ -259,7 +259,7 @@
       "priority": "medium",
       "assigned_to": "claude",
       "created_at": "2026-05-06 10:07:05",
-      "updated_at": "2026-05-06 10:17:59"
+      "updated_at": "2026-05-06 12:21:04"
     },
     {
       "id": "T-2",
@@ -271,7 +271,7 @@
       "priority": "medium",
       "assigned_to": "claude",
       "created_at": "2026-05-06 10:07:05",
-      "updated_at": "2026-05-06 12:07:11"
+      "updated_at": "2026-05-06 12:21:04"
     },
     {
       "id": "T-3",
@@ -283,7 +283,7 @@
       "priority": "medium",
       "assigned_to": "claude",
       "created_at": "2026-05-06 10:07:05",
-      "updated_at": "2026-05-06 10:17:59"
+      "updated_at": "2026-05-06 12:21:04"
     },
     {
       "id": "T-4",
@@ -294,7 +294,7 @@
       "priority": "high",
       "assigned_to": "claude",
       "created_at": "2026-05-06 10:11:03",
-      "updated_at": "2026-05-06 10:17:59"
+      "updated_at": "2026-05-06 12:21:04"
     },
     {
       "id": "T-5",
@@ -305,7 +305,18 @@
       "priority": "high",
       "assigned_to": "claude",
       "created_at": "2026-05-06 10:14:20",
-      "updated_at": "2026-05-06 10:18:02"
+      "updated_at": "2026-05-06 12:21:04"
+    },
+    {
+      "id": "T-6",
+      "type": "bug",
+      "title": "pql init writes hooks to .git/hooks/ even when core.hooksPath is redirected",
+      "description": "When git's core.hooksPath config points at a custom directory (this repo uses '.githooks/' for its pre-push gate), git ignores .git/hooks/ entirely — so the pql shim ensureGitHookShim writes there is never invoked, and the .pql/hooks/{pre-commit,post-merge} scripts never fire from git commit / git pull. Witnessed locally: the show-tree unification commit (T-2) didn't auto-stage .pql/pql-plan.json even though pql plan export --stage works correctly when run by hand.\n\nReproducer: 'git config core.hooksPath .githooks' in any pql-init'd repo. Commits stop carrying the snapshot.\n\nFix: ensureGitHookShim in internal/cli/init.go should resolve the effective hooks path. Two strategies:\n  1. Read 'git config --get core.hooksPath' (or the equivalent env var GIT_HOOKS_PATH) and write the shim there. If the directory doesn't exist or isn't writable, surface a clear note in the init JSON output rather than silently planting a dead shim.\n  2. Append to an existing pre-commit/post-merge shim in that directory rather than overwriting (so the project's own hook keeps working alongside pql's).\n\nTest: assert ensurePlanExportHook with a pre-set core.hooksPath writes into the redirected dir, not .git/hooks/.",
+      "status": "done",
+      "priority": "high",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 12:08:36",
+      "updated_at": "2026-05-06 12:21:19"
     }
   ],
   "ticket_deps": null,
@@ -338,6 +349,13 @@
       "old_value": "in_progress",
       "new_value": "done",
       "changed_at": "2026-05-06 12:07:11"
+    },
+    {
+      "ticket_id": "T-6",
+      "field": "status",
+      "old_value": "done",
+      "new_value": "done",
+      "changed_at": "2026-05-06 12:21:19"
     }
   ]
 }

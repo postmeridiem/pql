@@ -259,3 +259,77 @@ func TestPlanExportStage_StagesUntrackedSnapshot(t *testing.T) {
 		t.Fatalf("stageSnapshot tracked: %v", err)
 	}
 }
+
+func TestResolveHooksPath_DefaultsToGitHooksDir(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	got := resolveHooksPath(dir)
+	want := filepath.Join(dir, ".git", "hooks")
+	if got != want {
+		t.Errorf("resolveHooksPath = %q, want %q", got, want)
+	}
+}
+
+func TestResolveHooksPath_HonorsCoreHooksPathRelative(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", dir, "config", "core.hooksPath", ".githooks").CombinedOutput(); err != nil {
+		t.Fatalf("git config: %v: %s", err, out)
+	}
+	got := resolveHooksPath(dir)
+	want := filepath.Join(dir, ".githooks")
+	if got != want {
+		t.Errorf("resolveHooksPath = %q, want %q", got, want)
+	}
+}
+
+func TestResolveHooksPath_HonorsCoreHooksPathAbsolute(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	hooksDir := filepath.Join(t.TempDir(), "abs-hooks")
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", dir, "config", "core.hooksPath", hooksDir).CombinedOutput(); err != nil {
+		t.Fatalf("git config: %v: %s", err, out)
+	}
+	if got := resolveHooksPath(dir); got != hooksDir {
+		t.Errorf("resolveHooksPath = %q, want %q", got, hooksDir)
+	}
+}
+
+func TestEnsureGitHookShim_WritesToRedirectedHooksPath(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", dir, "config", "core.hooksPath", ".githooks").CombinedOutput(); err != nil {
+		t.Fatalf("git config: %v: %s", err, out)
+	}
+
+	ensureGitHookShim(dir, "pre-commit")
+
+	want := filepath.Join(dir, ".githooks", "pre-commit")
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("shim missing at redirected path: %v", err)
+	}
+	stale := filepath.Join(dir, ".git", "hooks", "pre-commit")
+	if _, err := os.Stat(stale); err == nil {
+		t.Errorf("shim should not have been written to .git/hooks/ when core.hooksPath is set")
+	}
+}

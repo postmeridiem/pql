@@ -11,6 +11,17 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.9] - 2026-05-06
+
+### Fixed
+
+- `pql init` now honors `core.hooksPath` when planting the pre-commit
+  / post-merge shim. Repos that redirect git's hook directory (often
+  to a tracked `.githooks/`) used to get a dead shim under
+  `.git/hooks/` that git would never invoke; the export-on-commit
+  flow silently no-op'd as a result. Re-run `pql init` after the
+  upgrade to plant the shim in the right place.
+
 ## [1.4.8] - 2026-05-06
 
 ### Changed

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -404,6 +405,11 @@ func ensurePlanExportHook(dir string) initHookStat {
 
 	body := renderPreCommitHook(resolvePqlPath())
 
+	// Always (re-)plant the shim so existing installs pick up changes
+	// to where git actually looks for hooks (e.g. core.hooksPath set
+	// after the initial install). The shim itself is idempotent.
+	defer ensureGitHookShim(dir, "pre-commit")
+
 	existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: known hook path
 	if err == nil {
 		stat.Existed = true
@@ -429,8 +435,6 @@ func ensurePlanExportHook(dir string) initHookStat {
 		return stat
 	}
 	stat.Installed = true
-
-	ensureGitHookShim(dir, "pre-commit")
 	return stat
 }
 
@@ -468,6 +472,26 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// resolveHooksPath returns the directory git uses for hooks in the
+// repo at dir. Honors core.hooksPath when set (often pointing at a
+// tracked directory like .githooks/ that the project shares across
+// clones); falls back to .git/hooks/ otherwise. Relative values from
+// git config are resolved against the repo root, matching how git
+// itself interprets them.
+func resolveHooksPath(dir string) string {
+	cmd := exec.Command("git", "-C", dir, "config", "--get", "core.hooksPath")
+	out, err := cmd.Output()
+	if err == nil {
+		if p := strings.TrimSpace(string(out)); p != "" {
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(dir, p)
+			}
+			return p
+		}
+	}
+	return filepath.Join(dir, ".git", "hooks")
+}
+
 // resolvePqlPath returns the absolute path of the running pql binary
 // for use in generated hook scripts. Falls back to the bare name "pql"
 // if resolution fails — the hook then relies on PATH (the prior
@@ -500,6 +524,9 @@ func ensurePlanImportHook(dir string) initHookStat {
 
 	body := renderPostMergeHook(resolvePqlPath())
 
+	// See ensurePlanExportHook — always (re-)plant the shim.
+	defer ensureGitHookShim(dir, "post-merge")
+
 	existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: known hook path
 	if err == nil {
 		stat.Existed = true
@@ -524,15 +551,15 @@ func ensurePlanImportHook(dir string) initHookStat {
 		return stat
 	}
 	stat.Installed = true
-
-	ensureGitHookShim(dir, "post-merge")
 	return stat
 }
 
 func ensureGitHookShim(dir, hookName string) {
-	shimPath := filepath.Join(dir, ".git", "hooks", hookName)
+	shimPath := filepath.Join(resolveHooksPath(dir), hookName)
 	marker := "# pql: source .pql/hooks/" + hookName
-	sourceLine := `. "$(git rev-parse --show-toplevel)/.pql/hooks/` + hookName + `"`
+	// Guard with -f so a clone that hasn't run pql init yet doesn't
+	// break commits/merges with a missing-source error.
+	sourceLine := `_pql_hook="$(git rev-parse --show-toplevel)/.pql/hooks/` + hookName + `"; [ -f "$_pql_hook" ] && . "$_pql_hook"`
 
 	existing, err := os.ReadFile(shimPath) //nolint:gosec // G304: known git hook path
 	if err == nil {
