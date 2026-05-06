@@ -11,6 +11,17 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.15] - 2026-05-06
+
+### Changed
+
+- The clean-house skill no longer carries its own version. It
+  ships embedded in the pql binary, so its version is the pql
+  version. Catalog and procedure churn are tracked here (and in
+  `git log internal/skill/clean-house/`) instead of in a parallel
+  changelog inside `references/rules.md`. SKILL.md's output
+  template drops the `v1.1` label.
+
 ## [1.4.14] - 2026-05-06
 
 ### Changed

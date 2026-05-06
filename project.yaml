@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.4.14
-status: v1.4.14 — clean-house v1.1: rules.md detection fixes + SKILL.md procedure tightening.
+version: 1.4.15
+status: v1.4.15 — clean-house version inherits from pql; drop standalone version labels.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

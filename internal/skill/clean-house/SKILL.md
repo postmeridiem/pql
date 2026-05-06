@@ -202,8 +202,8 @@ and exit without mutating files.
 At the end, emit a summary block:
 
 ```
-clean-house v1.1 — sweep complete
-─────────────────────────────────
+clean-house — sweep complete
+────────────────────────────
 Files scanned:        11
 Records parsed:       62 D, 23 Q, 11 R
 Conventions:          heading_level=3 backlink="Resolved → "
@@ -222,13 +222,8 @@ honest about what changed. The skill does not commit on its own.
 
 ## Versioning
 
-This is v1.1 of the integrated form (Claude as runtime). v1.1
-sharpens the procedure with a convention probe step, a global
-"stop asking" semantic, an explicit "show diff first" loop, and
-merges the skip ledger with run history into a single
-`.clean-house-state.md` so promotion-candidate computation has
-real data to read. The rule catalog and the question phrasings
-will churn; keep this file and `references/rules.md` versioned
-together. The changelog for the skill itself lives at the top of
-`references/rules.md` so rule changes are visible without
-re-reading SKILL.md.
+clean-house ships embedded in the pql binary; its version is the
+pql version (`pql --version`). To see what changed and when, read
+`CHANGELOG.md` or `git log internal/skill/clean-house/` in the pql
+repo. Keep this file and `references/rules.md` consistent with
+each other when iterating — they're the contract.

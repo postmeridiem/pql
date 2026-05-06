@@ -1,22 +1,11 @@
 # clean-house rule catalog
 
 The rules clean-house runs and the reasoning behind each. New rules
-land here as their own entry; deletions stay below in the changelog so
-the trail of which rules used to fire (and why they were retired) is
-recoverable.
-
-## Rule changelog
-
-- **v1.1** — RULE-ANCHOR-DRIFT detection rewritten to use file-level
-  slug indexes (anchor-only links resolve against the source file's
-  full heading set, not a single record's body headings). RULE-DEAD-
-  FILE-REFERENCE detection tightened: placeholder tokens skipped,
-  paths resolved relative to the source file, basename fallback
-  before flagging. Each rule now declares a `Finding ID:` so the
-  skip ledger can recognize the same finding across runs.
-- **v1.0** — Initial catalog. Eight starter rules: four mechanical,
-  four judgment. Detection sections name the pql verb or file
-  primitive each rule depends on.
+land here as their own entry. Catalog churn — additions, refinements,
+retirements — is tracked in pql's `CHANGELOG.md` and `git log
+internal/skill/clean-house/`. When a rule is retired, leave a
+**Retired** stub (ID + one-line reason + retirement commit) so the
+trail of "we used to check X" is recoverable from this file alone.
 
 ## Reading a rule
 
