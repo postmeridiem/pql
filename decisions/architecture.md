@@ -59,7 +59,7 @@ Core design constraints for pql.
 - **Decision:** Tickets live in pql.db only. No automatic markdown mirror. `pql ticket export` is the half-step toward a mirror when the merge-conflict story is solved.
 - **Rationale:** Shipping tickets without the mirror lets us deliver the feature now. The markdown mirror (auto-writing `tickets/T-NNN.md` on mutation) requires solving concurrent-edit conflicts, which is a separate problem.
 - **Cost:** Tickets are invisible to git until explicitly exported. Acceptable for single-user workflows.
-- **Raised by:** Planning locked decision. See [Q-1](#q-1-markdown-mirror-for-tickets).
+- **Raised by:** Planning locked decision. See [Q-1](questions.md#q-1-markdown-mirror-for-tickets).
 
 ### D-9: One combined skill, not separate query/plan skills
 - **Date:** 2026-04-22

@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-05-06T13:42:51Z",
+  "exported_at": "2026-05-06T14:39:45Z",
   "decisions": [
     {
       "id": "D-1",
@@ -9,7 +9,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-2",
@@ -19,7 +19,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-3",
@@ -29,7 +29,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-4",
@@ -39,7 +39,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-5",
@@ -49,7 +49,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-6",
@@ -59,7 +59,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-7",
@@ -69,7 +69,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-8",
@@ -79,7 +79,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-9",
@@ -89,7 +89,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-10",
@@ -99,7 +99,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-11",
@@ -109,7 +109,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-12",
@@ -119,7 +119,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-13",
@@ -129,7 +129,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "D-14",
@@ -139,7 +139,7 @@
       "status": "active",
       "date": "2026-04-24",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "Q-1",
@@ -148,7 +148,7 @@
       "title": "Markdown mirror for tickets",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "Q-2",
@@ -157,7 +157,7 @@
       "title": "FTS for ticket/decision search",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "Q-3",
@@ -166,7 +166,7 @@
       "title": "Multi-user planning DB",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "Q-4",
@@ -175,7 +175,7 @@
       "title": "Validator strictness",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "Q-5",
@@ -184,7 +184,7 @@
       "title": "Body access in the DSL",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "Q-6",
@@ -193,7 +193,7 @@
       "title": "Outlink target normalization",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "Q-7",
@@ -202,7 +202,7 @@
       "title": "Code-aware extractor",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "Q-8",
@@ -211,7 +211,7 @@
       "title": "Occasional pql.db backups into git",
       "status": "resolved",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     },
     {
       "id": "Q-9",
@@ -220,15 +220,27 @@
       "title": "Multi-user ticket ID distribution",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 12:21:04"
+      "synced_at": "2026-05-06 13:44:36"
     }
   ],
   "decision_refs": [
+    {
+      "source_id": "D-10",
+      "target_id": "D-14",
+      "ref_type": "references",
+      "note": "**Status:** Superseded by [D-14](#d-14-no-status-transition-enforcement-in-pql)"
+    },
     {
       "source_id": "D-13",
       "target_id": "Q-8",
       "ref_type": "references",
       "note": "**Raised by:** Resolved [Q-8](questions.md#q-8-occasional-pqldb-backups-into-git)."
+    },
+    {
+      "source_id": "D-14",
+      "target_id": "D-10",
+      "ref_type": "supersedes",
+      "note": "**Supersedes:** [D-10](#d-10-state-machine-for-ticket-status-transitions)"
     },
     {
       "source_id": "D-6",
@@ -247,6 +259,12 @@
       "target_id": "D-13",
       "ref_type": "references",
       "note": "**Status:** Resolved → [D-13](architecture.md#d-13-plan-export-and-plan-import)"
+    },
+    {
+      "source_id": "Q-9",
+      "target_id": "Q-3",
+      "ref_type": "references",
+      "note": "**Context:** Two agents or contributors independently creating T-5 is a data integrity problem no merge strategy can fix. Leading candidate: namespaced temporary IDs (e.g. `T~jeroen-1`) that a cent..."
     }
   ],
   "tickets": [
@@ -375,6 +393,39 @@
       "assigned_to": "claude",
       "created_at": "2026-05-06 13:36:08",
       "updated_at": "2026-05-06 13:42:40"
+    },
+    {
+      "id": "T-12",
+      "type": "task",
+      "title": "Track conditions for D-1 revisit",
+      "description": "D-1 commits to no vector retrieval but documents two AND-conditions for revisiting: (a) a specific class of agent task is shown, with examples, to fail on structured retrieval and succeed on semantic; AND (b) a pure-Go embedded vector store reaches tier-one quality. Either alone is insufficient. This ticket exists to surface the revisit gate in plan whatsnext / plan board so the trigger doesn't get forgotten if/when the conditions arrive. No work to do until both fire — the ticket stays in backlog as a sentinel.",
+      "status": "backlog",
+      "priority": "low",
+      "decision_ref": "D-1",
+      "created_at": "2026-05-06 14:00:50",
+      "updated_at": "2026-05-06 14:00:50"
+    },
+    {
+      "id": "T-13",
+      "type": "task",
+      "title": "tighten clean-house rules.md (catalog fixes)",
+      "description": "Three changes to internal/skill/clean-house/references/rules.md, surfaced by the first end-to-end clean-house run:\\n\\n1. RULE-ANCHOR-DRIFT detection rewrite. Current logic checks anchor links against the referenced record's body headings (from pql decisions read), but anchor-only links resolve against the file's full heading set — including record-level '### D-N: …' headings stripped from the body. Replace detection with: read the source body's *file* (decisions/\u003cfile\u003e), extract every ATX heading, build a file-level slug index, check anchor-only links against that. Cross-file anchors (path.md#slug) check the path's slug index.\\n\\n2. RULE-DEAD-FILE-REFERENCE filtering. Detection produced 6/6 false positives this run: placeholder tokens (tickets/T-NNN.md, sessions/.../brief.md), package-relative refs (repo/tickets.go for the real internal/planning/repo/tickets.go), sibling-relative refs (questions.md from a body in decisions/, resolved against repo root). Add to detection: skip tokens containing 'T-NNN', '...', '\u003c', '\u003e'; resolve relative paths against the source file's directory before os.Stat; fallback to basename-match across the repo (find -name) before flagging.\\n\\n3. Per-rule Finding ID format. Each rule entry needs a 'Finding ID:' field so the skip ledger can re-recognize the same finding across runs (precondition for the 3-strikes promote-prompt logic). Examples: RULE-ANCHOR-DRIFT → '\u003csource-record\u003e:\u003ctarget-slug\u003e'; RULE-SUNSET-WITHOUT-TICKET → '\u003crecord-id\u003e:\u003cphrase-hash-8\u003e'; RULE-FILE-OVER-THRESHOLD → '\u003cfile-path\u003e'.",
+      "status": "done",
+      "priority": "high",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 14:35:25",
+      "updated_at": "2026-05-06 14:36:54"
+    },
+    {
+      "id": "T-14",
+      "type": "task",
+      "title": "tighten clean-house SKILL.md (procedure + state)",
+      "description": "Five changes to internal/skill/clean-house/SKILL.md, surfaced by the first end-to-end clean-house run:\\n\\n1. Add step 1.5 'Probe conventions'. Read decisions/.clean-house.yaml if present; otherwise infer from the project: heading depth (## vs ###), backlink phrasing (Resolves: vs other), staleness threshold (default 60). Rules.md entries should consume these probed values instead of hardcoding. Also documents the .clean-house.yaml shape so projects can pin conventions explicitly.\\n\\n2. In step 4 'Walk decisions/', filter records whose file_path begins with 'legacy/'. The 'What this skill does NOT do' bullet promises this but the procedure doesn't enforce it.\\n\\n3. In step 6, define 'stop asking' globally: exits all remaining prompts in the run (mechanical batches and judgment findings alike); everything pending lands in the skip ledger as deferred; summary still emitted.\\n\\n4. In step 7, define the 'show diff first' loop: print unified diff of the staged edits, then re-prompt with the same options minus 'show diff first' so the user can't loop forever.\\n\\n5. Define the promotion-candidate history file. Output template promises 'RULE-X (5/7 runs)' but no storage is named. Either repurpose the skip ledger with per-run section headers (timestamped, plus 'fired' / 'skipped' counts per rule) or add a sibling .clean-house-history.md. Pick one; document the shape.",
+      "status": "done",
+      "priority": "high",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 14:35:25",
+      "updated_at": "2026-05-06 14:39:25"
     }
   ],
   "ticket_deps": null,
@@ -535,6 +586,46 @@
       "old_value": "in_progress",
       "new_value": "done",
       "changed_at": "2026-05-06 13:42:40"
+    },
+    {
+      "ticket_id": "T-13",
+      "field": "assigned_to",
+      "new_value": "claude",
+      "changed_at": "2026-05-06 14:35:25"
+    },
+    {
+      "ticket_id": "T-13",
+      "field": "status",
+      "old_value": "backlog",
+      "new_value": "in_progress",
+      "changed_at": "2026-05-06 14:35:25"
+    },
+    {
+      "ticket_id": "T-14",
+      "field": "assigned_to",
+      "new_value": "claude",
+      "changed_at": "2026-05-06 14:35:25"
+    },
+    {
+      "ticket_id": "T-13",
+      "field": "status",
+      "old_value": "in_progress",
+      "new_value": "done",
+      "changed_at": "2026-05-06 14:36:54"
+    },
+    {
+      "ticket_id": "T-14",
+      "field": "status",
+      "old_value": "backlog",
+      "new_value": "in_progress",
+      "changed_at": "2026-05-06 14:36:54"
+    },
+    {
+      "ticket_id": "T-14",
+      "field": "status",
+      "old_value": "in_progress",
+      "new_value": "done",
+      "changed_at": "2026-05-06 14:39:25"
     }
   ]
 }
