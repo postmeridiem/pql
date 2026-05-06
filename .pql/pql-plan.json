@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-05-06T12:26:28Z",
+  "exported_at": "2026-05-06T13:02:16Z",
   "decisions": [
     {
       "id": "D-1",
@@ -317,6 +317,53 @@
       "assigned_to": "claude",
       "created_at": "2026-05-06 12:08:36",
       "updated_at": "2026-05-06 12:21:19"
+    },
+    {
+      "id": "T-7",
+      "type": "story",
+      "title": "ship clean-house skill v1.0 as pql sub-skill",
+      "description": "Add a clean-house skill to the pql installer that runs documentation-discipline passes over a DQR (Decisions / Questions / Rejected) markdown system. Claude is the runtime (no external script); the skill walks decisions/, runs the rule catalog, batches findings via AskUserQuestion, and applies fixes via pql queries + Edit. Pql remains a dumb data layer — gets new queries only when the skill names one.",
+      "status": "backlog",
+      "priority": "medium",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 12:38:49",
+      "updated_at": "2026-05-06 12:38:49"
+    },
+    {
+      "id": "T-8",
+      "type": "task",
+      "parent_id": "T-7",
+      "title": "draft clean-house SKILL.md + references/rules.md",
+      "description": "Create internal/skill/clean-house/{SKILL.md,references/rules.md}. SKILL.md is the v1.0 integrated form (Claude as runtime; no Python stopgap framing). references/rules.md contains 6-8 starter rules with explicit Detection sections that name the pql query / file primitive each needs — that detection list reveals the pql gaps for follow-up tickets.",
+      "status": "done",
+      "priority": "medium",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 12:38:49",
+      "updated_at": "2026-05-06 12:42:06"
+    },
+    {
+      "id": "T-9",
+      "type": "task",
+      "parent_id": "T-7",
+      "title": "expose decision body heading anchors on pql decisions read",
+      "description": "Add a 'headings: [{level, text, slug}]' array to the JSON returned by 'pql decisions read \u003cid\u003e'. The slug must follow the same convention used by markdown anchor links in the source (typically lowercase-hyphen — match the project's existing slugger; check whether one already lives in internal/index/parser/markdown for headings used elsewhere). Required for clean-house RULE-ANCHOR-DRIFT detection — without it, the skill cannot resolve cross-reference link targets to existing headings without re-parsing the body.",
+      "status": "done",
+      "priority": "high",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 12:42:06",
+      "updated_at": "2026-05-06 13:01:55"
+    },
+    {
+      "id": "T-10",
+      "type": "task",
+      "parent_id": "T-7",
+      "title": "extend skill installer to ship clean-house as sub-skill",
+      "description": "Refactor internal/skill/ so the installer can ship multiple skills. Today it embeds one SKILL.md from internal/skill/SKILL.md and writes to .claude/skills/pql/SKILL.md. Need to also embed internal/skill/clean-house/{SKILL.md,references/rules.md} and write to .claude/skills/clean-house/. The install lockfile (.pql-install.json) extends to track both skills' state. Updates: pql skill install, pql skill status, pql doctor, pql init's --with-skill flag (if relevant). Tests: skill install creates both directories; --force refreshes both; status correctly reports each independently.",
+      "status": "backlog",
+      "priority": "medium",
+      "assigned_to": "claude",
+      "created_at": "2026-05-06 12:42:06",
+      "updated_at": "2026-05-06 12:42:06"
     }
   ],
   "ticket_deps": null,
@@ -377,6 +424,58 @@
       "old_value": "in_progress",
       "new_value": "done",
       "changed_at": "2026-05-06 12:26:16"
+    },
+    {
+      "ticket_id": "T-7",
+      "field": "assigned_to",
+      "new_value": "claude",
+      "changed_at": "2026-05-06 12:38:49"
+    },
+    {
+      "ticket_id": "T-8",
+      "field": "assigned_to",
+      "new_value": "claude",
+      "changed_at": "2026-05-06 12:38:49"
+    },
+    {
+      "ticket_id": "T-8",
+      "field": "status",
+      "old_value": "backlog",
+      "new_value": "in_progress",
+      "changed_at": "2026-05-06 12:38:49"
+    },
+    {
+      "ticket_id": "T-10",
+      "field": "assigned_to",
+      "new_value": "claude",
+      "changed_at": "2026-05-06 12:42:06"
+    },
+    {
+      "ticket_id": "T-8",
+      "field": "status",
+      "old_value": "in_progress",
+      "new_value": "done",
+      "changed_at": "2026-05-06 12:42:06"
+    },
+    {
+      "ticket_id": "T-9",
+      "field": "assigned_to",
+      "new_value": "claude",
+      "changed_at": "2026-05-06 12:42:06"
+    },
+    {
+      "ticket_id": "T-9",
+      "field": "status",
+      "old_value": "backlog",
+      "new_value": "in_progress",
+      "changed_at": "2026-05-06 12:58:31"
+    },
+    {
+      "ticket_id": "T-9",
+      "field": "status",
+      "old_value": "in_progress",
+      "new_value": "done",
+      "changed_at": "2026-05-06 13:01:55"
     }
   ]
 }
