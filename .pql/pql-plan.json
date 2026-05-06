@@ -1,0 +1,237 @@
+{
+  "exported_at": "2026-04-23T10:15:52Z",
+  "decisions": [
+    {
+      "id": "D-1",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "No vector retrieval",
+      "status": "active",
+      "date": "2026-04-19",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "Q-1",
+      "type": "question",
+      "domain": "questions",
+      "title": "Markdown mirror for tickets",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-2",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Intent-level surface for agents, primitives as escape hatch",
+      "status": "active",
+      "date": "2026-04-19",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "Q-2",
+      "type": "question",
+      "domain": "questions",
+      "title": "FTS for ticket/decision search",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-3",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Two SQLite stores — index.db (cache) and pql.db (state)",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "Q-3",
+      "type": "question",
+      "domain": "questions",
+      "title": "Multi-user planning DB",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-4",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Consumer-agnostic core",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "Q-4",
+      "type": "question",
+      "domain": "questions",
+      "title": "Validator strictness",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-5",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "CLI-first, not MCP",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "Q-5",
+      "type": "question",
+      "domain": "questions",
+      "title": "Body access in the DSL",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-6",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "In-house migration runner, not golang-migrate or goose",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "Q-6",
+      "type": "question",
+      "domain": "questions",
+      "title": "Outlink target normalization",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-7",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Text IDs as primary keys",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "Q-7",
+      "type": "question",
+      "domain": "questions",
+      "title": "Code-aware extractor",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-8",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Ticket source of truth is SQLite, not markdown",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "Q-8",
+      "type": "question",
+      "domain": "questions",
+      "title": "Occasional pql.db backups into git",
+      "status": "resolved",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-9",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "One combined skill, not separate query/plan skills",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-10",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "State machine for ticket status transitions",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-11",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Max-normalization per signal before weighting",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-12",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Clean version strings — just the number",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    },
+    {
+      "id": "D-13",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "plan export and plan import for versioned planning snapshots",
+      "status": "active",
+      "date": "2026-04-22",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-04-23 09:53:37"
+    }
+  ],
+  "decision_refs": [
+    {
+      "source_id": "D-13",
+      "target_id": "Q-8",
+      "ref_type": "references",
+      "note": "**Raised by:** Resolved [Q-8](questions.md#q-8-occasional-pqldb-backups-into-git)."
+    },
+    {
+      "source_id": "D-6",
+      "target_id": "Q-3",
+      "ref_type": "references",
+      "note": "**Raised by:** Resolved P-Q-3 during planning implementation."
+    },
+    {
+      "source_id": "D-8",
+      "target_id": "Q-1",
+      "ref_type": "references",
+      "note": "**Raised by:** Planning locked decision. See [Q-1](#q-1-markdown-mirror-for-tickets)."
+    },
+    {
+      "source_id": "Q-8",
+      "target_id": "D-13",
+      "ref_type": "references",
+      "note": "**Status:** Resolved → [D-13](architecture.md#d-13-plan-export-and-plan-import)"
+    }
+  ],
+  "tickets": null,
+  "ticket_deps": null,
+  "ticket_labels": null,
+  "history": null
+}
