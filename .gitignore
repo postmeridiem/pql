@@ -19,8 +19,11 @@ coverage.*
 
 # pql's own per-vault state. The project itself isn't a vault, but if
 # anyone runs pql against the repo root (testing, dogfooding), .pql/
-# lands here. Mirror what `pql init` writes to consumers' .gitignore.
-/.pql/
+# lands here. Mirror what `pql init` writes to consumers' .gitignore:
+# ignore everything except the planning snapshot and the in-tree hooks.
+.pql/*
+!.pql/pql-plan.json
+!.pql/hooks/
 
 # SQLite index files should never land here, but defensive
 *.sqlite
