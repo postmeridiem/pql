@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -226,6 +227,42 @@ func newDecisionsListCmd() *cobra.Command {
 
 // --- show ---
 
+// decisionShowTree is the canonical join-tree shape for decision-
+// centric surfaces. Mirrors ticketShowTree: embedded *repo.Decision
+// promotes the record's fields to the top level, with optional refs
+// and tickets siblings. New decision-anchored verbs should render
+// through buildDecisionTree so the JSON shape stays uniform.
+type decisionShowTree struct {
+	*repo.Decision
+	Refs    []repo.DecisionRef   `json:"refs,omitempty"`
+	Tickets []repo.TicketSummary `json:"tickets,omitempty"`
+}
+
+// buildDecisionTree assembles the decision show-tree from the
+// requested joins. A nil decision returns an empty tree — callers
+// should treat that as "not found" upstream.
+func buildDecisionTree(ctx context.Context, db *sql.DB, d *repo.Decision, withRefs, withTickets bool) (*decisionShowTree, error) {
+	if d == nil {
+		return &decisionShowTree{}, nil
+	}
+	out := &decisionShowTree{Decision: d}
+	if withRefs {
+		refs, err := repo.RefsOf(ctx, db, d.ID)
+		if err != nil {
+			return nil, err
+		}
+		out.Refs = refs
+	}
+	if withTickets {
+		tks, err := repo.TicketsForDecision(ctx, db, d.ID)
+		if err != nil {
+			return nil, err
+		}
+		out.Tickets = tks
+	}
+	return out, nil
+}
+
 func newDecisionsShowCmd() *cobra.Command {
 	var withTickets, withRefs bool
 	cmd := &cobra.Command{
@@ -253,24 +290,9 @@ func newDecisionsShowCmd() *cobra.Command {
 				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("decision %s not found", args[0])}
 			}
 
-			type showResult struct {
-				repo.Decision
-				Refs    []repo.DecisionRef   `json:"refs,omitempty"`
-				Tickets []repo.TicketSummary  `json:"tickets,omitempty"`
-			}
-			out := showResult{Decision: *d}
-
-			if withRefs {
-				out.Refs, err = repo.RefsOf(ctx, pdb.SQL(), args[0])
-				if err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
-			}
-			if withTickets {
-				out.Tickets, err = repo.TicketsForDecision(ctx, pdb.SQL(), args[0])
-				if err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
+			out, err := buildDecisionTree(ctx, pdb.SQL(), d, withRefs, withTickets)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -278,7 +300,7 @@ func newDecisionsShowCmd() *cobra.Command {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(&out, rOpts); err != nil {
+			if _, err := render.One(out, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			return nil

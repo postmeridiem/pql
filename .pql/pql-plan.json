@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-05-06T12:21:19Z",
+  "exported_at": "2026-05-06T12:26:28Z",
   "decisions": [
     {
       "id": "D-1",
@@ -255,11 +255,11 @@
       "type": "story",
       "title": "unify show-tree rendering across ticket and decision surfaces",
       "description": "Audit which surfaces build a ticket/decision join-tree (ancestors, decisions, blockers, children) and route them all through buildShowTree (introduced in v1.4.5 in internal/cli/ticket.go). Currently used by ticket show, ticket refine next, ticket refine write. Plan whatsnext / plan review use the older whatNextResult shape; decisions show may have a parallel pattern. Goal: one canonical helper, identical JSON output where the data overlaps, single place to tweak rendering.",
-      "status": "ready",
+      "status": "done",
       "priority": "medium",
       "assigned_to": "claude",
       "created_at": "2026-05-06 10:07:05",
-      "updated_at": "2026-05-06 12:21:04"
+      "updated_at": "2026-05-06 12:26:16"
     },
     {
       "id": "T-2",
@@ -279,11 +279,11 @@
       "parent_id": "T-1",
       "title": "align decisions show with the join-tree helper pattern",
       "description": "Audit internal/cli/decisions.go (decisions show with --with-refs / --with-tickets) for a parallel ad-hoc tree shape. If found, factor into a buildDecisionTree helper analogous to buildShowTree so decision rendering stays consistent across decisions show, decisions read, and any future surface (e.g. plan status drilldowns).",
-      "status": "ready",
+      "status": "done",
       "priority": "medium",
       "assigned_to": "claude",
       "created_at": "2026-05-06 10:07:05",
-      "updated_at": "2026-05-06 12:21:04"
+      "updated_at": "2026-05-06 12:26:16"
     },
     {
       "id": "T-4",
@@ -356,6 +356,27 @@
       "old_value": "done",
       "new_value": "done",
       "changed_at": "2026-05-06 12:21:19"
+    },
+    {
+      "ticket_id": "T-3",
+      "field": "status",
+      "old_value": "ready",
+      "new_value": "in_progress",
+      "changed_at": "2026-05-06 12:21:54"
+    },
+    {
+      "ticket_id": "T-1",
+      "field": "status",
+      "old_value": "ready",
+      "new_value": "done",
+      "changed_at": "2026-05-06 12:26:16"
+    },
+    {
+      "ticket_id": "T-3",
+      "field": "status",
+      "old_value": "in_progress",
+      "new_value": "done",
+      "changed_at": "2026-05-06 12:26:16"
     }
   ]
 }
