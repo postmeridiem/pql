@@ -52,39 +52,101 @@ stay here where false positives don't slow anyone down.
    Do not proceed.
 
 2. **Load the rule catalog.** Read `references/rules.md`. Each rule
-   names its detection and its fix.
+   names its detection, fix, and finding-id format.
 
-3. **Sync the index.** Run `pql decisions sync` so the DB reflects the
-   markdown.
+3. **Probe conventions.** Read `decisions/.clean-house.yaml` if it
+   exists; otherwise infer from the project. Conventions to resolve:
+   - `heading_level`: 2 or 3 — the depth records use (`## D-N` vs
+     `### D-N`). Probe by sampling the first 3 records' file
+     locations and looking for the first matching ATX heading.
+   - `backlink_phrasing`: the project's Q→D backlink phrase (default
+     `Resolved → D-N`; some projects use `Resolved as D-N` or
+     `→ D-N`).
+   - `file_threshold`: default 350 (RULE-FILE-OVER-THRESHOLD).
+   - `stale_open_q_days`: default 60 (RULE-STALE-OPEN-Q).
 
-4. **Walk decisions/.** Use `pql decisions list` (no filter) to
-   enumerate records, plus `pql decisions read <id>` per record when a
-   rule needs the body. For file-level rules (size, sort), read the
-   markdown files directly.
+   Pass the resolved conventions into each rule's detection. Cache
+   the probe result for the run.
 
-5. **Run each rule's detection.** Collect findings. Tag each with its
-   rule ID, category (`mechanical` | `judgment`), and the record(s) /
-   file(s) involved.
+   `decisions/.clean-house.yaml` shape (all keys optional):
+   ```yaml
+   heading_level: 3
+   backlink_phrasing: "Resolved → "
+   file_threshold: 500
+   stale_open_q_days: 90
+   exclude_paths: ["legacy/", "drafts/"]
+   ```
 
-6. **Group findings by rule** and prompt:
+4. **Sync the index.** Run `pql decisions sync` so the DB reflects
+   the markdown.
+
+5. **Walk decisions/.** Use `pql decisions list` to enumerate
+   records, plus `pql decisions read <id>` per record when a rule
+   needs the body. For file-level rules (size, sort), read the
+   markdown files directly. **Filter out** any record whose
+   `file_path` begins with `legacy/` (or any prefix in
+   `exclude_paths` from the probe).
+
+6. **Run each rule's detection.** Collect findings. Tag each with
+   its rule ID, finding ID (per the rule's format), category
+   (`mechanical` | `judgment`), and the record(s)/file(s) involved.
+
+7. **Group findings by rule** and prompt. Honor any "skipped 3+
+   times" findings from the skip ledger by escalating their prompt
+   ("skipped 3x — promote to manual decision, downgrade to
+   summary-only, or keep asking?"):
+
    - **Mechanical rules** — one prompt per rule, batched. Show the
      count and offer: apply all / show diff first / skip this rule /
-     stop asking.
+     **stop asking** (global — see below).
    - **Judgment rules** — one prompt per finding. Options match the
-     actual choice space documented in that rule's `Fix` section.
+     rule's `Fix` section, plus the same global **stop asking**.
 
-7. **Apply approvals.** For mechanical rules use `Edit` to mutate the
-   markdown directly. For judgment rules, follow the option the user
-   picked (file a ticket via `pql ticket new`, mark superseded by
-   editing the record, etc.).
+   **"Stop asking" semantics (global).** When the user picks "stop
+   asking" on any prompt, immediately halt all further prompts in
+   the run — mechanical batches not yet asked AND remaining
+   judgment findings. Move all unprompted findings to the skip
+   ledger marked `deferred-stop-asking`. Skip to step 9.
 
-8. **Update the skip ledger** at `decisions/.clean-house-skip-ledger.md`
-   (gitignored). Append `<rule-id> <finding-id> <ISO-date>` for each
-   skipped finding. If a finding has been skipped 3+ runs in a row,
-   escalate the next prompt: "skipped 3x — promote to manual decision,
-   downgrade to summary-only, or keep asking?"
+   **"Show diff first" loop.** When the user picks "show diff
+   first" on a mechanical batch, emit a unified diff of the staged
+   edits (one block per file), then re-prompt the same question
+   with the same options minus "show diff first" — preventing
+   infinite loops while still letting the user inspect before
+   committing.
 
-9. **Emit the summary** (see Output below).
+8. **Apply approvals.** For mechanical rules use `Edit` to mutate
+   the markdown directly. For judgment rules, follow the option the
+   user picked (file a ticket via `pql ticket new`, mark superseded
+   by editing the record, etc.).
+
+9. **Update the skip ledger and history.** Both files live at
+   `decisions/.clean-house-state.md`, gitignored. The file uses
+   per-run section headers so it doubles as run history:
+
+   ```markdown
+   # clean-house run history
+
+   ## 2026-05-06T13:42Z
+   fired: RULE-ANCHOR-DRIFT(1) RULE-SUNSET-WITHOUT-TICKET(1)
+   applied: RULE-ANCHOR-DRIFT(1) RULE-SUNSET-WITHOUT-TICKET(1)
+   skipped:
+     - RULE-ANCHOR-DRIFT D-8:#q-1-markdown-mirror-for-tickets
+
+   ## 2026-05-04T11:10Z
+   fired: ...
+   ```
+
+   Each section starts with a UTC ISO-8601 timestamp. `fired`
+   counts findings detected; `applied` counts findings the user
+   acted on; `skipped` lists `<rule-id> <finding-id>` pairs.
+
+   **Promotion-candidate computation.** Scan the most recent N=7
+   sections (or all sections if fewer). A rule is a promotion
+   candidate if it `fired` in ≥ 5 of those sections. Surface the
+   candidates in the summary; do not auto-promote.
+
+10. **Emit the summary** (see Output below).
 
 ## Question phrasing
 
@@ -140,23 +202,33 @@ and exit without mutating files.
 At the end, emit a summary block:
 
 ```
-clean-house v1.0 — sweep complete
+clean-house v1.1 — sweep complete
 ─────────────────────────────────
 Files scanned:        11
 Records parsed:       62 D, 23 Q, 11 R
+Conventions:          heading_level=3 backlink="Resolved → "
 Mechanical fixes:     14 applied, 0 deferred
-Judgment findings:    3 acted on, 2 deferred (in skip ledger)
+Judgment findings:    3 acted on, 2 deferred (in state file)
 Promotion candidates: RULE-ANCHOR-DRIFT (5/7 runs)
 Touched files:        decisions/architecture.md, decisions/questions.md
 ```
+
+If this is the first run (no prior history) or there are fewer
+than 5 prior runs, `Promotion candidates:` reports
+`(none — N/7 runs of history)` instead of decorative empty content.
 
 The summary names the touched files so the next commit message can be
 honest about what changed. The skill does not commit on its own.
 
 ## Versioning
 
-This is v1.0 of the integrated form (Claude as runtime). The rule
-catalog and the question phrasings will churn; keep this file and
-`references/rules.md` versioned together. The changelog for the skill
-itself lives at the top of `references/rules.md` so rule changes are
-visible without re-reading SKILL.md.
+This is v1.1 of the integrated form (Claude as runtime). v1.1
+sharpens the procedure with a convention probe step, a global
+"stop asking" semantic, an explicit "show diff first" loop, and
+merges the skip ledger with run history into a single
+`.clean-house-state.md` so promotion-candidate computation has
+real data to read. The rule catalog and the question phrasings
+will churn; keep this file and `references/rules.md` versioned
+together. The changelog for the skill itself lives at the top of
+`references/rules.md` so rule changes are visible without
+re-reading SKILL.md.

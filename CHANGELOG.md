@@ -11,6 +11,32 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.14] - 2026-05-06
+
+### Changed
+
+- clean-house skill bumped to v1.1, surfacing fixes from the first
+  end-to-end run on this repo:
+  - `references/rules.md`: RULE-ANCHOR-DRIFT detection rewritten to
+    use file-level slug indexes (anchor-only links resolve against
+    the source file's full heading set, not a single record's body
+    headings — the previous logic produced false positives because
+    record-level `### D-N: …` headings live as siblings in the
+    file). RULE-DEAD-FILE-REFERENCE detection tightened with
+    placeholder filtering, source-relative resolution, and a
+    basename-fallback before flagging — the previous regex
+    produced 6/6 false positives. Each rule now declares a
+    `Finding ID:` so the state file can recognize the same
+    finding across runs.
+  - `SKILL.md`: new step 3 "Probe conventions" reads
+    `decisions/.clean-house.yaml` (or infers heading depth /
+    backlink phrasing); step 5 explicitly filters
+    `legacy/`-prefixed records; step 7 defines "stop asking" as
+    a global halt and "show diff first" as a re-prompt loop;
+    step 9 merges the skip ledger with run history into a single
+    `decisions/.clean-house-state.md` so promotion-candidate
+    computation has real data to compute against.
+
 ## [1.4.13] - 2026-05-06
 
 ### Changed

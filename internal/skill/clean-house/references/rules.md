@@ -7,6 +7,13 @@ recoverable.
 
 ## Rule changelog
 
+- **v1.1** — RULE-ANCHOR-DRIFT detection rewritten to use file-level
+  slug indexes (anchor-only links resolve against the source file's
+  full heading set, not a single record's body headings). RULE-DEAD-
+  FILE-REFERENCE detection tightened: placeholder tokens skipped,
+  paths resolved relative to the source file, basename fallback
+  before flagging. Each rule now declares a `Finding ID:` so the
+  skip ledger can recognize the same finding across runs.
 - **v1.0** — Initial catalog. Eight starter rules: four mechanical,
   four judgment. Detection sections name the pql verb or file
   primitive each rule depends on.
@@ -20,6 +27,12 @@ Each entry below has:
   what's being checked.
 - **Category** — `mechanical` or `judgment`. Drives whether findings
   batch into one prompt or each get their own.
+- **Finding ID** — Format string for the per-finding stable
+  identifier. Skip-ledger entries are written as `<rule-id>
+  <finding-id> <ISO-date>`; subsequent runs use the same format to
+  recognize "same finding skipped 3 runs in a row" and escalate.
+  Use only stable inputs (record IDs, file paths, slug strings, body
+  hashes) — never line numbers or timestamps.
 - **Detection** — Concrete steps to find violations. Names the
   pql command or file primitive used.
 - **Fix** — Mechanical: deterministic action. Judgment: the prompt
@@ -34,16 +47,43 @@ Each entry below has:
 
 **Category:** mechanical
 
+**Finding ID:** `<source-record>:<link-target>` (e.g.
+`D-8:#q-1-markdown-mirror-for-tickets` or
+`D-8:questions.md#q-1`).
+
 **Detection:**
 
-For each decision record, fetch its body and headings via
-`pql decisions read <id>`. The response includes a `headings` array
-with `{level, text, slug}` for every heading in the body. Within the
-body, find inline markdown links of the shape `[text](#anchor-slug)`
-or `[D-N](#anchor-slug)`. For each link target, check whether the
-slug exists in the headings array of the referenced record (the
-record matching `D-N` if the link is cross-record, or the same record
-for intra-record anchors). Flag each link whose target slug is absent.
+Anchor-only markdown links (`[text](#slug)`) resolve against the
+**source file's full heading set**, not the body of a single record
+— record-level headings (`### D-N: …`) live as siblings in the
+file and are valid link targets. The previous detection (which used
+`pql decisions read`'s body-only `headings` array) missed these
+and produced false positives.
+
+Per source body:
+
+1. Open the source body's file (`<vault>/<file_path>` from
+   `pql decisions list`) and extract every ATX heading. Build a
+   slug index for the file using the GFM convention (lowercase,
+   hyphenate spaces, drop punctuation, disambiguate duplicates with
+   `-1`/`-2`). Cache per file — every record in that file uses the
+   same index.
+2. For each `[text](target)` link in the body:
+   - Anchor-only (`#slug`): check `slug` against the **source file's**
+     index. Missing → flag.
+   - Cross-file (`path.md#slug`): resolve `path.md` relative to the
+     source file's directory; check `slug` against that file's
+     index. Missing file or missing slug → flag.
+
+**Fix:**
+
+If the slug exists in a sibling file's index (same directory) and
+the link is anchor-only, rewrite to `path.md#slug` (the canonical
+cross-file form). If the slug exists in the source file's index
+with edit-distance ≤ 2 from the link target, rewrite to the
+matched slug. Otherwise downgrade to judgment ("no auto-fix; the
+heading was removed, not renamed") with options: drop the link /
+point elsewhere / mark as intentionally dangling.
 
 **Fix:**
 
@@ -67,6 +107,9 @@ a reader following a dead link and losing trust in the index.
 ## RULE-MISSING-Q-BACKLINK
 
 **Category:** mechanical
+
+**Finding ID:** `<d-id>:<q-id>` (e.g. `D-7:Q-2`). Order is always
+D-first regardless of which side is missing the backlink.
 
 **Detection:**
 
@@ -105,6 +148,10 @@ in the other direction.
 
 **Category:** mechanical
 
+**Finding ID:** `<file-path>` (e.g. `decisions/architecture.md`).
+The whole file is one finding — sort applies to the file as a
+unit.
+
 **Detection:**
 
 For each `decisions/*.md` file, read it directly (no pql) and find
@@ -141,6 +188,8 @@ subsequent read.
 
 **Category:** mechanical
 
+**Finding ID:** `<file-path>` (one finding per file).
+
 **Detection:**
 
 For each `decisions/*.md` file (and any other markdown the skill
@@ -167,6 +216,10 @@ without forcing per-editor enforcement on every contributor.
 ## RULE-SUNSET-WITHOUT-TICKET
 
 **Category:** judgment
+
+**Finding ID:** `<record-id>:<phrase-hash-8>` where phrase-hash-8 is
+the first 8 hex chars of `sha256(<matched-phrase>)`. Lets the
+ledger distinguish two sunset phrases in the same record.
 
 **Detection:**
 
@@ -213,6 +266,9 @@ the right scope is for the resulting T.
 
 **Category:** judgment
 
+**Finding ID:** `<file-path>` (one finding per file; threshold
+choice is judgment, not a per-line problem).
+
 **Detection:**
 
 For each `decisions/*.md` file, count lines (via `wc -l` or
@@ -248,6 +304,9 @@ decide.
 
 **Category:** judgment
 
+**Finding ID:** `<record-id>:<path-token>` (path token as written
+in the body, not resolved).
+
 **Detection:**
 
 For each D record body (via `pql decisions read <id>`), grep for
@@ -257,9 +316,28 @@ path-shaped tokens. Default regex:
 \b([\w./-]+\.(md|go|py|sql|yaml|yml|toml))\b
 ```
 
-For each match, check whether the path exists in the repo (via
-`os.Stat` from a `Bash` call: `[ -e <path> ]`). Flag any reference
-to a non-existent path.
+The first detection pass produced 6/6 false positives in
+real-world use; the regex is necessary but not sufficient. For
+each match, apply the filters below in order — if any matches,
+**skip without flagging**:
+
+1. **Placeholder filter.** Token contains `T-NNN`, `D-NNN`,
+   `Q-NNN`, `R-NNN`, `...`, `<`, `>`, or `*` — it's a pattern,
+   not a real path.
+2. **Source-relative resolution.** Resolve the token against the
+   source file's directory (`<vault>/<file_path>`'s dir). If
+   `[ -e <resolved> ]`, the reference is live.
+3. **Repo-relative resolution.** If `[ -e <token> ]` from the
+   repo root, the reference is live.
+4. **Basename-fallback.** Run `find <repo-root> -name <basename>`
+   (where basename is the last path component). If exactly one
+   match exists, treat the reference as live and emit a low-
+   priority "consider rewriting to the absolute path" note (not a
+   judgment finding). If multiple matches exist, do not flag —
+   the token is too ambiguous.
+
+Only after all four filters miss does the reference qualify as
+truly dead and warrant a judgment prompt.
 
 **Fix (prompt options):**
 
@@ -285,6 +363,9 @@ make.
 ## RULE-STALE-OPEN-Q
 
 **Category:** judgment
+
+**Finding ID:** `<q-id>` (one finding per Q-record; staleness
+threshold is global per run, so a Q is either stale or not).
 
 **Detection:**
 
