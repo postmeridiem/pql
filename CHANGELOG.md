@@ -11,6 +11,17 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.11] - 2026-05-06
+
+### Added
+
+- `pql decisions read` JSON output now includes a `headings` array
+  with `{level, text, slug}` for each ATX-style heading in the
+  decision's body. Slugs follow the GitHub-flavored markdown anchor
+  convention (lowercase-hyphen, underscores preserved, duplicates
+  disambiguated with -1/-2/...). Foundation for anchor-resolution
+  tools — e.g. the upcoming clean-house skill's RULE-ANCHOR-DRIFT.
+
 ## [1.4.10] - 2026-05-06
 
 ### Changed

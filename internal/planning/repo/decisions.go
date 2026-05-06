@@ -185,12 +185,17 @@ func GetDecision(ctx context.Context, db *sql.DB, id string) (*Decision, error) 
 // DecisionDetail is a Decision with its full markdown body.
 type DecisionDetail struct {
 	Decision
-	Body string `json:"body"`
+	Body     string            `json:"body"`
+	Headings []parser.Heading  `json:"headings,omitempty"`
 }
 
-// ReadDecision returns a decision with its full markdown body extracted
-// from the source file. The body is the raw text between the record's
-// heading and the next heading (or end of section).
+// ReadDecision returns a decision with its full markdown body
+// extracted from the source file plus the body's heading anchors.
+// Body is the raw text between the record's heading and the next
+// heading (or end of section); Headings lists the inner headings
+// with their anchor slugs so anchor-resolution tools (clean-house's
+// RULE-ANCHOR-DRIFT) can verify cross-reference link targets without
+// re-parsing the body.
 func ReadDecision(ctx context.Context, db *sql.DB, vaultPath, id string) (*DecisionDetail, error) {
 	d, err := GetDecision(ctx, db, id)
 	if err != nil {
@@ -209,7 +214,11 @@ func ReadDecision(ctx context.Context, db *sql.DB, vaultPath, id string) (*Decis
 	if rec != nil {
 		body = rec.Body
 	}
-	return &DecisionDetail{Decision: *d, Body: body}, nil
+	return &DecisionDetail{
+		Decision: *d,
+		Body:     body,
+		Headings: parser.ExtractHeadings(body),
+	}, nil
 }
 
 // DecisionRef is a row from the decision_refs table.
