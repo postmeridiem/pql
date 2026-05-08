@@ -5,6 +5,6 @@
 # markdown-sourced half stays in step with whatever the merge
 # brought in. Both ops are idempotent — a no-op merge is a no-op
 # hook (D-8, D-16).
-'/var/mnt/data/projects/pql/bin/pql' plan import 2>/dev/null || true
-'/var/mnt/data/projects/pql/bin/pql' decisions sync 2>/dev/null || true
+'/var/home/jeroenschweitzer/.local/bin/pql' plan import 2>/dev/null || true
+'/var/home/jeroenschweitzer/.local/bin/pql' decisions sync 2>/dev/null || true
 # --- end pql ---
