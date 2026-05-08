@@ -11,6 +11,21 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.24] - 2026-05-08
+
+### Added
+
+- `pql init` now runs `pql decisions sync` automatically as a
+  separate step so a fresh clone lands with both halves of the
+  schema populated — the changelog-replicated tables via the
+  existing autoImportPlan path, and the markdown-sourced decisions
+  + decision_refs tables via the new step. No more "init then run
+  decisions sync separately" follow-up. Skipped silently when the
+  vault has no `decisions/` directory (tickets-only setups).
+- `decisions_sync` field added to the init JSON result so callers
+  can see how many records / refs landed and whether the parser
+  flagged any broken cross-references.
+
 ## [1.4.23] - 2026-05-08
 
 ### Changed

@@ -30,18 +30,29 @@ import (
 // initResult is the JSON shape `pql init` emits on stdout. Each sub-stat
 // describes one of the project-state fixers init runs through.
 type initResult struct {
-	Directory         string           `json:"directory"`
-	Config            initConfigStat   `json:"config"`
-	Gitignore         initGitignore    `json:"gitignore"`
-	Skills            []initSkillStat  `json:"skills"`
-	Permissions       initPermissions  `json:"permissions"`
-	PlanImport        initPlanImport   `json:"plan_import"`
-	Changelog         initChangelogStat `json:"changelog"`
-	GitAttributes     initGitAttribute `json:"gitattributes"`
-	Hook              initHookStat     `json:"hook"`
-	PostMergeHook     initHookStat     `json:"post_merge_hook"`
-	PostCheckoutHook  initHookStat     `json:"post_checkout_hook"`
-	PostRewriteHook   initHookStat     `json:"post_rewrite_hook"`
+	Directory         string             `json:"directory"`
+	Config            initConfigStat     `json:"config"`
+	Gitignore         initGitignore      `json:"gitignore"`
+	Skills            []initSkillStat    `json:"skills"`
+	Permissions       initPermissions    `json:"permissions"`
+	PlanImport        initPlanImport     `json:"plan_import"`
+	DecisionsSync     initDecisionsSync  `json:"decisions_sync"`
+	Changelog         initChangelogStat  `json:"changelog"`
+	GitAttributes     initGitAttribute   `json:"gitattributes"`
+	Hook              initHookStat       `json:"hook"`
+	PostMergeHook     initHookStat       `json:"post_merge_hook"`
+	PostCheckoutHook  initHookStat       `json:"post_checkout_hook"`
+	PostRewriteHook   initHookStat       `json:"post_rewrite_hook"`
+}
+
+// initDecisionsSync mirrors repo.SyncResult for the init JSON
+// surface, plus a Skipped reason when the decisions/ directory is
+// absent or sync can't be run.
+type initDecisionsSync struct {
+	Synced  int    `json:"synced"`
+	Refs    int    `json:"refs"`
+	Broken  int    `json:"broken"`
+	Skipped string `json:"skipped,omitempty"`
 }
 
 type initChangelogStat struct {
@@ -199,6 +210,7 @@ drift.`,
 
 			permStat := ensurePqlPermissions(dir)
 			planStat := autoImportPlan(cmd.Context(), dir)
+			decisionsStat := ensureDecisionsSynced(cmd.Context(), dir)
 			changelogStat := ensureChangelogDirs(dir)
 			gitAttrStat := ensureGitAttributes(dir)
 			hookStat := ensurePlanExportHook(dir)
@@ -217,6 +229,7 @@ drift.`,
 				Skills:           skillStats,
 				Permissions:      permStat,
 				PlanImport:       planStat,
+				DecisionsSync:    decisionsStat,
 				Changelog:        changelogStat,
 				GitAttributes:    gitAttrStat,
 				Hook:             hookStat,
@@ -1066,6 +1079,43 @@ func ensureGitAttributes(dir string) initGitAttribute {
 	}
 	stat.Appended = true
 	return stat
+}
+
+// ensureDecisionsSynced parses decisions/*.md and upserts every
+// record into pql.db's decisions + decision_refs tables. Without
+// this step pql init leaves the markdown-sourced half of the schema
+// (D-8) empty until the user runs `pql decisions sync` themselves.
+//
+// Skipped silently when the repo has no decisions/ directory — not
+// every pql vault carries decisions; tickets-only setups are valid.
+func ensureDecisionsSynced(ctx context.Context, dir string) initDecisionsSync {
+	decisionsDir := filepath.Join(dir, "decisions")
+	info, err := os.Stat(decisionsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return initDecisionsSync{Skipped: "no decisions/ directory"}
+		}
+		return initDecisionsSync{Skipped: "stat decisions/: " + err.Error()}
+	}
+	if !info.IsDir() {
+		return initDecisionsSync{Skipped: "decisions/ is not a directory"}
+	}
+
+	pdb, err := planning.Open(ctx, dir)
+	if err != nil {
+		return initDecisionsSync{Skipped: "open pql.db: " + err.Error()}
+	}
+	defer func() { _ = pdb.Close() }()
+
+	res, err := repo.SyncDecisions(ctx, pdb.SQL(), decisionsDir, dir)
+	if err != nil {
+		return initDecisionsSync{Skipped: "sync: " + err.Error()}
+	}
+	return initDecisionsSync{
+		Synced: res.Synced,
+		Refs:   res.Refs,
+		Broken: res.Broken,
+	}
 }
 
 // autoImportPlan populates pql.db from whatever bootstrap artefact
