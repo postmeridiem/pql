@@ -92,6 +92,7 @@ Core design constraints for pql.
 
 ### D-13: plan export and plan import for versioned planning snapshots
 - **Date:** 2026-04-22
+- **Status:** Superseded by [D-15](#d-15-replication-via-per-table-monthly-sql-changelog-files)
 - **Decision:** `pql plan export` writes all planning state (decisions + tickets + refs + deps + labels + history) to a single JSON file at the vault root (default `pql-plan.json`). `pql plan import` restores from that file into pql.db. The artifact is committed to git; pql.db stays gitignored.
 - **Rationale:** Planning state is valuable enough to version but SQLite files don't belong in git. A JSON export is diffable, portable, and merge-friendly. The trigger is the user's choice — pre-push hook, sprint skill, manual — pql provides the verbs, not the policy.
 - **Cost:** Two representations of the same data (pql.db + export file) can drift. The export is a snapshot, not a live mirror. Users who want the export current must run `pql plan export` before committing.
@@ -104,3 +105,40 @@ Core design constraints for pql.
 - **Rationale:** pql is a local tool — the caller is better positioned to enforce workflow-specific transitions. Hardcoding a state machine in the core blocks legitimate use cases (e.g. an agent that moves backlog→done after batch processing). The audit log records every transition regardless.
 - **Cost:** Nothing prevents nonsensical transitions at the pql level. Callers that need guardrails must implement them.
 - **Raised by:** User feedback during planning usage.
+
+### D-15: Replication via per-table monthly SQL changelog files
+- **Date:** 2026-05-08
+- **Supersedes:** [D-13](#d-13-plan-export-and-plan-import-for-versioned-planning-snapshots)
+- **Decision:** Planning state is replicated through a committed directory `.pql/changelog/<table>/`, containing two file shapes that share a naming convention so lexicographic sort gives the correct replay order:
+  - `0000-schema.sql`, `0001-schema-<slug>.sql`, … — schema files. The initial `0000-schema.sql` (CREATE TABLE IF NOT EXISTS) is installed by `pql init`. Later migrations land as additional numbered schema files committed when they're authored, so schema evolution travels in the changelog alongside data.
+  - `<YYYY-MM>.sql` — append-only data files, one per month of activity, containing SQL upserts sorted within the file by `(updated_at, hash)`.
+  Replay reads files in lexicographic order: zero-prefixed schema files first, then year-prefixed data files chronologically. `pql.db` is a derived cache, rebuilt from the changelog.
+- **Rationale:** A single mutable JSON snapshot (D-13) produces guaranteed merge conflicts because git's text merger can't distinguish rows when the file changes wholesale. Per-table monthly SQL files cooperate with git's line-based merger: distinct `updated_at` values land at distinct line positions, so concurrent commits auto-merge as line additions. Per-table partitioning keeps each file strictly append-only — cross-table sort would re-segment files mid-update. Monthly buckets keep individual files bounded. Schema files in the same directory make the changelog self-describing (any SQLite tool can replay it without pql installed) and let schema migrations propagate through the same git-merge mechanism as data — the in-house migration runner (D-6) generates and tracks these files instead of carrying SQL inline in Go.
+- **Cost:** On-disk format is SQLite-flavored; cross-store portability is reduced. Decisions still source from markdown, not changelog (preserves D-8). Long-lived projects accumulate monthly files; a future rollup pass may be needed at scale (deferred). Existing `pql-plan.json` artifacts must be migrated on first export against an upgraded repo.
+- **Raised by:** Multi-machine merge conflict on `pql-plan.json` during clide T-91/T-92/T-93 work — see archived design at `pql-plan-replication.md` (retired in favour of these records).
+
+### D-16: Inline LWW guards plus content hash plus canonical row columns
+- **Date:** 2026-05-08
+- **Decision:** Every planning row carries `created_at`, `updated_at`, and `hash` columns. `hash = H(canonical(row except hash))` — deterministic across replicas, set at write-finalisation, immutable per write. Every SQL upsert line emitted to the changelog includes an inline last-write-wins guard: `WHERE excluded.updated_at > target.updated_at OR (excluded.updated_at = target.updated_at AND excluded.hash > target.hash)`. Canonicalisation rules — column order, value formatting, NULL representation — are version-stamped (`canonical_version`) so changes are detectable.
+- **Rationale:** Inline guards make every emitted line idempotent and order-free under replay — a line can be replayed any number of times against any starting state and converge to the same result. This collapses the conflict surface to git itself: any divergence between replicas resolves at the row level via the SQL guard, regardless of how the changelog files got merged. Hash earns its keep three ways: content integrity (corruption detection), sort tiebreaker for same-`updated_at` rows (deterministic across replicas), and LWW tiebreaker at the millisecond-collision boundary (unbiased — no replica systematically wins).
+- **Cost:** Every table grows three columns. Canonicalisation discipline becomes load-bearing — drift across replicas (different value formatting, schema mismatches, library upgrades) breaks hash equality and replay convergence. Wall-clock skew between machines can flip LWW outcomes within the skew window; accepted as a known limitation since sub-millisecond collisions are inherently human-ambiguous and require communication, not replication, to resolve.
+- **Raised by:** Replication design — the property that "every line is self-protecting" is what makes the changelog robust under concurrent edits.
+
+### D-17: Soft deletes via deleted_at column
+- **Date:** 2026-05-08
+- **Decision:** Deletions in planning tables are soft. Every table has a `deleted_at` column; deleting a row sets it to a timestamp. Read queries filter `WHERE deleted_at IS NULL` by default. The "stub" row remains in the database and the changelog so other replicas know the deletion is intentional rather than missing.
+- **Rationale:** Without stubs, a replica that hasn't seen the deletion would recreate the row on replay (no row → INSERT). Lotus Notes solved this in 1989 with deletion stubs; the same primitive applies to git-backed replication. Hard deletes can't be expressed in an upsert-only changelog without breaking the "every line is idempotent" invariant, which D-16 depends on.
+- **Cost:** Every table grows a `deleted_at` column; every read query needs the filter. Stubs accumulate indefinitely without a purge mechanism — long-running projects need a periodic GC pass. Purge mechanism, retention threshold, and how to ensure replicas converge on purge decisions are deferred to [Q-10](questions.md#q-10-soft-delete-stub-retention-and-purge).
+- **Raised by:** Replication design — emerged from the need to express deletion in the changelog without breaking idempotent replay.
+
+### D-18: Git lifecycle hook architecture for replication
+- **Date:** 2026-05-08
+- **Decision:** `pql init` installs four git hooks plus a `.gitattributes` rule covering the replication lifecycle:
+  - `pre-commit` → `pql plan export` (silent, fast). Materialises dirty `pql.db` rows into changelog files and stages them.
+  - `post-merge` → `pql plan import` (silent if quick). Replays incoming changelog lines into `pql.db` via inline-guarded upserts.
+  - `post-checkout` (branch switch only, `$3 == 1`) → `pql plan rebuild` with a visible `echo "rebuilding pql database..."`. Drops planning tables and replays the changelog from scratch.
+  - `post-rewrite` (rebase, amend) → `pql plan rebuild`, also visible.
+  - `.gitattributes` adds `merge=union` for `.pql/changelog/*.sql` as belt-and-braces for same-line conflicts.
+- **Rationale:** Hooks below the client layer catch all git operations — IDE pulls, raw CLI, GUI tools — without requiring a `pql sync` wrapper command (rejected for scope drift into git porcelain). post-checkout and post-rewrite need full rebuild because LWW-guarded replay can only INSERT/UPDATE; a row that exists on the previous branch but not the new one would linger in `pql.db` after a checkout if only an incremental import ran. Synchronous visible rebuild matches user mental model: people expect cleanup after these operations and prefer a clear cause-and-effect message over hidden lazy execution that surfaces as random slowness on a later command.
+- **Cost:** Four hooks instead of one in the install footprint. Users who disable hooks (`--no-verify`, unset `core.hooksPath`) lose the guarantees and operate on stale or divergent state — accepted, same posture as the existing pre-push lint gate. Branch switches incur a synchronous rebuild (bounded by changelog size, but visible in `git checkout` latency).
+- **Raised by:** Replication design — settled after iteration through `pql sync` (rejected for scope drift), lazy-on-read (rejected for hidden slowness on hot paths like clide's once-per-minute polling), and flag-then-defer rebuild (rejected for hidden process / unexpected slowness).

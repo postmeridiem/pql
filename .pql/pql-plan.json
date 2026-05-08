@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-05-06T15:13:07Z",
+  "exported_at": "2026-05-08T07:57:59Z",
   "decisions": [
     {
       "id": "D-1",
@@ -9,7 +9,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-2",
@@ -19,7 +19,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-3",
@@ -29,7 +29,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-4",
@@ -39,7 +39,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-5",
@@ -49,7 +49,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-6",
@@ -59,7 +59,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-7",
@@ -69,7 +69,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-8",
@@ -79,7 +79,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-9",
@@ -89,7 +89,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-10",
@@ -99,7 +99,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-11",
@@ -109,7 +109,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-12",
@@ -119,7 +119,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-13",
@@ -129,7 +129,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "D-14",
@@ -139,7 +139,47 @@
       "status": "active",
       "date": "2026-04-24",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
+    },
+    {
+      "id": "D-15",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Replication via per-table monthly SQL changelog files",
+      "status": "active",
+      "date": "2026-05-08",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-05-08 07:54:50"
+    },
+    {
+      "id": "D-16",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Inline LWW guards plus content hash plus canonical row columns",
+      "status": "active",
+      "date": "2026-05-08",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-05-08 07:54:50"
+    },
+    {
+      "id": "D-17",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Soft deletes via deleted_at column",
+      "status": "active",
+      "date": "2026-05-08",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-05-08 07:54:50"
+    },
+    {
+      "id": "D-18",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "Git lifecycle hook architecture for replication",
+      "status": "active",
+      "date": "2026-05-08",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "Q-1",
@@ -148,7 +188,7 @@
       "title": "Markdown mirror for tickets",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "Q-2",
@@ -157,7 +197,7 @@
       "title": "FTS for ticket/decision search",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "Q-3",
@@ -166,7 +206,7 @@
       "title": "Multi-user planning DB",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "Q-4",
@@ -175,7 +215,7 @@
       "title": "Validator strictness",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "Q-5",
@@ -184,7 +224,7 @@
       "title": "Body access in the DSL",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "Q-6",
@@ -193,7 +233,7 @@
       "title": "Outlink target normalization",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "Q-7",
@@ -202,7 +242,7 @@
       "title": "Code-aware extractor",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "Q-8",
@@ -211,7 +251,7 @@
       "title": "Occasional pql.db backups into git",
       "status": "resolved",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
     },
     {
       "id": "Q-9",
@@ -220,7 +260,16 @@
       "title": "Multi-user ticket ID distribution",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-06 13:44:36"
+      "synced_at": "2026-05-08 07:54:50"
+    },
+    {
+      "id": "Q-10",
+      "type": "question",
+      "domain": "questions",
+      "title": "Soft-delete stub retention and purge",
+      "status": "open",
+      "file_path": "decisions/questions.md",
+      "synced_at": "2026-05-08 07:54:50"
     }
   ],
   "decision_refs": [
@@ -229,6 +278,12 @@
       "target_id": "D-14",
       "ref_type": "references",
       "note": "**Status:** Superseded by [D-14](#d-14-no-status-transition-enforcement-in-pql)"
+    },
+    {
+      "source_id": "D-13",
+      "target_id": "D-15",
+      "ref_type": "references",
+      "note": "**Status:** Superseded by [D-15](#d-15-replication-via-per-table-monthly-sql-changelog-files)"
     },
     {
       "source_id": "D-13",
@@ -243,6 +298,42 @@
       "note": "**Supersedes:** [D-10](#d-10-state-machine-for-ticket-status-transitions)"
     },
     {
+      "source_id": "D-15",
+      "target_id": "D-13",
+      "ref_type": "references",
+      "note": "**Rationale:** A single mutable JSON snapshot (D-13) produces guaranteed merge conflicts because git's text merger can't distinguish rows when the file changes wholesale. Per-table monthly SQL file..."
+    },
+    {
+      "source_id": "D-15",
+      "target_id": "D-13",
+      "ref_type": "supersedes",
+      "note": "**Supersedes:** [D-13](#d-13-plan-export-and-plan-import-for-versioned-planning-snapshots)"
+    },
+    {
+      "source_id": "D-15",
+      "target_id": "D-6",
+      "ref_type": "references",
+      "note": "**Rationale:** A single mutable JSON snapshot (D-13) produces guaranteed merge conflicts because git's text merger can't distinguish rows when the file changes wholesale. Per-table monthly SQL file..."
+    },
+    {
+      "source_id": "D-15",
+      "target_id": "D-8",
+      "ref_type": "references",
+      "note": "**Cost:** On-disk format is SQLite-flavored; cross-store portability is reduced. Decisions still source from markdown, not changelog (preserves D-8). Long-lived projects accumulate monthly files; a..."
+    },
+    {
+      "source_id": "D-17",
+      "target_id": "D-16",
+      "ref_type": "references",
+      "note": "**Rationale:** Without stubs, a replica that hasn't seen the deletion would recreate the row on replay (no row → INSERT). Lotus Notes solved this in 1989 with deletion stubs; the same primitive a..."
+    },
+    {
+      "source_id": "D-17",
+      "target_id": "Q-10",
+      "ref_type": "references",
+      "note": "**Cost:** Every table grows a `deleted_at` column; every read query needs the filter. Stubs accumulate indefinitely without a purge mechanism — long-running projects need a periodic GC pass. Purg..."
+    },
+    {
       "source_id": "D-6",
       "target_id": "Q-3",
       "ref_type": "references",
@@ -252,7 +343,7 @@
       "source_id": "D-8",
       "target_id": "Q-1",
       "ref_type": "references",
-      "note": "**Raised by:** Planning locked decision. See [Q-1](#q-1-markdown-mirror-for-tickets)."
+      "note": "**Raised by:** Planning locked decision. See [Q-1](questions.md#q-1-markdown-mirror-for-tickets)."
     },
     {
       "source_id": "Q-8",
@@ -262,9 +353,21 @@
     },
     {
       "source_id": "Q-9",
+      "target_id": "D-15",
+      "ref_type": "references",
+      "note": "**Context:** Two agents or contributors independently creating T-5 is a data integrity problem no merge strategy can fix — orthogonal to replication (D-15 through D-18) which solves how state is ..."
+    },
+    {
+      "source_id": "Q-9",
+      "target_id": "D-18",
+      "ref_type": "references",
+      "note": "**Context:** Two agents or contributors independently creating T-5 is a data integrity problem no merge strategy can fix — orthogonal to replication (D-15 through D-18) which solves how state is ..."
+    },
+    {
+      "source_id": "Q-9",
       "target_id": "Q-3",
       "ref_type": "references",
-      "note": "**Context:** Two agents or contributors independently creating T-5 is a data integrity problem no merge strategy can fix. Leading candidate: namespaced temporary IDs (e.g. `T~jeroen-1`) that a cent..."
+      "note": "The trade-off is *where* friction lives: daily UX (reservations), display ambiguity (replica-namespaced), occasional renames (drift), infrastructure (CI master), or per-clone config (local master)...."
     }
   ],
   "tickets": [
@@ -436,6 +539,125 @@
       "priority": "low",
       "created_at": "2026-05-06 15:04:02",
       "updated_at": "2026-05-06 15:04:02"
+    },
+    {
+      "id": "T-16",
+      "type": "story",
+      "title": "implement changelog-based replication for planning state",
+      "description": "Umbrella story for the changelog-based replication design captured in D-15 (changelog layout), D-16 (inline LWW guards + hashing), D-17 (soft deletes), and D-18 (hook architecture). Replaces the single mutable pql-plan.json snapshot (D-13, superseded) with .pql/changelog/\u003ctable\u003e/ directories of per-month SQL upsert files plus per-table schema files. Children cover the discrete implementation slices: schema/columns, soft deletes, export rewrite, import rewrite, rebuild, init updates, legacy migration, schema-migration generation, and the clide integration test scenario. The original design doc at pql-plan-replication.md is retired in favour of these records — delete or archive once children land.",
+      "status": "backlog",
+      "priority": "high",
+      "decision_ref": "D-15",
+      "created_at": "2026-05-08 07:46:15",
+      "updated_at": "2026-05-08 07:46:15"
+    },
+    {
+      "id": "T-17",
+      "type": "task",
+      "parent_id": "T-16",
+      "title": "add canonical row columns and content hash to all planning tables",
+      "description": "Forward migration on every planning table to add three columns: created_at (timestamp, set on INSERT), updated_at (timestamp, set on every write — used as the LWW key and the changelog month-bucketing key), and hash (TEXT, set to H(canonical(row except hash))). Plus a canonical_version column or schema-level marker so canonicalisation rule changes are detectable.\n\nImplement canonical row serialisation in internal/planning/ — a fixed column-order projection with strict value formatting (NULL sentinel, integer vs float distinction, timestamp ISO format). Compute hash at write-finalisation in repo helpers (internal/planning/repo/*.go) on every INSERT/UPDATE so the column is always current.\n\nInline LWW guard for upserts is the SQL idiom: WHERE excluded.updated_at \u003e target.updated_at OR (excluded.updated_at = target.updated_at AND excluded.hash \u003e target.hash). Codify it in a helper used by both writers (D-16) and exporters (T-19).\n\nTouches: internal/planning/schema.go (forward migration), internal/planning/repo/*.go (write paths), new internal/planning/canonical.go (canonicalisation + hash function). Tests: round-trip determinism (two replicas hash identical content to identical bytes), canonical_version bump triggers re-hash, NULL/edge-value coverage.",
+      "status": "backlog",
+      "priority": "high",
+      "decision_ref": "D-16",
+      "created_at": "2026-05-08 07:46:29",
+      "updated_at": "2026-05-08 07:46:29"
+    },
+    {
+      "id": "T-18",
+      "type": "task",
+      "parent_id": "T-16",
+      "title": "implement soft deletes via deleted_at column",
+      "description": "Forward migration adding deleted_at (timestamp, NULL = live) to every planning table. Route every existing DELETE through UPDATE ... SET deleted_at = ?. Update every read query in internal/planning/repo/*.go to filter WHERE deleted_at IS NULL by default; add an --include-deleted flag where the surface needs visibility into stubs (e.g. audit, recovery).\n\nStubs persist in pql.db and the changelog so other replicas know the deletion is intentional rather than missing — without this, replay against a fresh replica would re-INSERT the row. The changelog upsert for a deletion is just a regular line where deleted_at is non-null.\n\nTouches: internal/planning/schema.go (migration), internal/planning/repo/*.go (every read query gains the filter; every delete becomes a soft-delete UPDATE), audit log entries for deletion events (recorded as today). Tests: round-trip soft delete / undelete, replay convergence (replica A deletes, replica B has never seen the row → replay creates the stub, then deletion replays into the stub).\n\nStub purge / retention is deferred to Q-10. This ticket lands the column and the read-path filter; it does not implement purge.",
+      "status": "backlog",
+      "priority": "high",
+      "decision_ref": "D-17",
+      "created_at": "2026-05-08 07:46:41",
+      "updated_at": "2026-05-08 07:46:41"
+    },
+    {
+      "id": "T-19",
+      "type": "task",
+      "parent_id": "T-16",
+      "title": "rewrite pql plan export to emit per-table monthly changelog files",
+      "description": "Replace the current JSON snapshot export (writes pql-plan.json) with the changelog format: emit SQL upsert lines into .pql/changelog/\u003ctable\u003e/\u003cYYYY-MM\u003e.sql, one file per (table, month) combination based on the row's updated_at.\n\nExport pipeline (internal/cli/plan.go + new internal/planning/changelog/):\n1. Read last_export_marker from pql.db meta table (local-only, gitignored side of state).\n2. SELECT * FROM \u003ctable\u003e WHERE updated_at \u003e last_export_marker, ordered by (updated_at, hash). Two-pass: emit rows whose updated_at falls in the previous month into \u003cprev-month\u003e.sql, then current month into \u003ccurrent-month\u003e.sql. Late-arriving rows for older months are rare but possible after clock corrections / backdated imports — handle the bucket placement by row, not by export time.\n3. Each emitted line is an INSERT ... ON CONFLICT(\u003cpk\u003e) DO UPDATE SET ... WHERE excluded.updated_at \u003e target.updated_at OR (excluded.updated_at = target.updated_at AND excluded.hash \u003e target.hash). Use the canonical-projection helper from T-17 so the SQL line is byte-stable across replicas.\n4. Append (don't rewrite — files are append-only by month).\n5. Advance last_export_marker after successful write.\n\nStage written files via git add (the existing --stage flag pattern from T-5).\n\nTouches: internal/cli/plan.go (export verb body), new internal/planning/changelog/exporter.go, internal/planning/repo/meta.go (marker storage). Tests: round-trip with T-20 import; same-millisecond rows get sorted deterministically by hash; previous-month bucket only touched when rows belong there.\n\nDecisions still source from markdown, not changelog (D-8 preserved) — exporter skips the decisions table.",
+      "status": "backlog",
+      "priority": "high",
+      "decision_ref": "D-15",
+      "created_at": "2026-05-08 07:46:54",
+      "updated_at": "2026-05-08 07:46:54"
+    },
+    {
+      "id": "T-20",
+      "type": "task",
+      "parent_id": "T-16",
+      "title": "rewrite pql plan import to replay changelog directories",
+      "description": "Replace JSON import with changelog replay. Walk .pql/changelog/\u003ctable\u003e/ directories in lexicographic file order so 0000-schema.sql and other zero-prefixed schema files run before year-prefixed data files. Replay every line that hasn't been seen since last_import_marker (tracked per-file via mtime or per-line via offset).\n\nImport pipeline (internal/cli/plan.go + internal/planning/changelog/importer.go):\n1. Read last_import_marker from pql.db meta.\n2. For each .pql/changelog/\u003ctable\u003e/ directory:\n   a. Run files in lexicographic order, tracking position.\n   b. Schema files apply via CREATE TABLE IF NOT EXISTS (idempotent).\n   c. Data files: each line is an inline-guarded upsert; replay is idempotent because the WHERE clause from T-19 prevents stale lines from overwriting newer state.\n3. Advance last_import_marker on success.\n\nIdempotency is load-bearing: the same line replayed N times converges to the same result, regardless of starting state. This is the property that lets the hooks (D-18) be cheap and the import to fire from multiple paths (post-merge, pql plan rebuild) without coordination.\n\nTouches: internal/cli/plan.go (import verb body), new internal/planning/changelog/importer.go, internal/planning/repo/meta.go. Tests: replay-twice convergence, replay-out-of-order convergence, schema_version mismatch handling (refuse and surface diagnostic), partial-replay resumption after interrupted run.",
+      "status": "backlog",
+      "priority": "high",
+      "decision_ref": "D-15",
+      "created_at": "2026-05-08 07:47:06",
+      "updated_at": "2026-05-08 07:47:06"
+    },
+    {
+      "id": "T-21",
+      "type": "task",
+      "parent_id": "T-16",
+      "title": "implement pql plan rebuild for branch-switch and rebase recovery",
+      "description": "New subcommand pql plan rebuild — drops planning tables and replays the full changelog from scratch. Used by post-checkout (branch switch) and post-rewrite (rebase) hooks because LWW-guarded incremental replay can only INSERT/UPDATE — it can't remove rows that exist on the previous branch but not the new one.\n\nRebuild pipeline (internal/cli/plan.go):\n1. DELETE FROM each planning table (or DROP and rely on schema files to recreate — simpler).\n2. Reset last_import_marker, last_export_marker.\n3. Run the import flow from T-20 against the entire changelog.\n4. Stdout: summary (tables rebuilt, rows replayed, time taken).\n5. Stderr: progress diagnostics for hook visibility.\n\nSurface as a first-class command, not just a hook callee — power users may invoke it for disaster recovery or after manual changelog edits. Document under 'Plan subcommands' in the skill.\n\nTouches: internal/cli/plan.go (new rebuild verb), reuses the importer from T-20. Tests: rebuild-from-empty, rebuild-after-branch-with-deleted-rows (must not leak previous branch state), idempotent re-rebuild.",
+      "status": "backlog",
+      "priority": "high",
+      "decision_ref": "D-18",
+      "created_at": "2026-05-08 07:47:16",
+      "updated_at": "2026-05-08 07:47:16"
+    },
+    {
+      "id": "T-22",
+      "type": "task",
+      "parent_id": "T-16",
+      "title": "update pql init to install hooks, schema files, and gitattributes for replication",
+      "description": "Extend internal/cli/init.go to wire the full replication lifecycle on a fresh clone or an upgraded repo:\n\n1. Create .pql/changelog/ and per-table subdirectories (.pql/changelog/tickets/, .pql/changelog/audit_log/, .pql/changelog/refs/, etc. — every planning table that participates in replication).\n2. Write 0000-schema.sql into each \u003ctable\u003e/ directory containing the CREATE TABLE IF NOT EXISTS statement for that table. The migration runner (D-6) generates these from its current schema knowledge — reuse rather than duplicate.\n3. Install four hooks (resolved absolute pql path, per the T-5 fix):\n   - pre-commit: pql plan export --stage (existing path; just confirm the verb still does the right thing under the new exporter).\n   - post-merge: pql plan import (silent if quick; default behaviour).\n   - post-checkout: if [ \"\" = \"1\" ]; then echo 'rebuilding pql database...'; pql plan rebuild; fi\n   - post-rewrite: echo 'rebuilding pql database after rewrite...'; pql plan rebuild\n4. Write or amend .gitattributes with the line: .pql/changelog/*.sql merge=union\n5. Stage all the above so the user's first commit lands the new layout.\n\nTouches: internal/cli/init.go (most of the work), reuses migration runner for schema generation, depends on T-19/T-20/T-21 verb behaviour. Tests: fresh-init produces all expected files; re-init is idempotent; .gitattributes append doesn't duplicate the line if it's already present.",
+      "status": "backlog",
+      "priority": "high",
+      "decision_ref": "D-18",
+      "created_at": "2026-05-08 07:47:34",
+      "updated_at": "2026-05-08 07:47:34"
+    },
+    {
+      "id": "T-23",
+      "type": "task",
+      "parent_id": "T-16",
+      "title": "migrate legacy pql-plan.json into the changelog on first export",
+      "description": "Existing repos have committed pql-plan.json artifacts (per D-13, now superseded). On first pql plan export against an upgraded repo, detect the legacy file and convert it transparently:\n\n1. Detect: .pql/changelog/ does not exist OR is empty AND pql-plan.json exists at the vault root.\n2. Run pql plan import --legacy \u003cpql-plan.json\u003e to populate pql.db from the JSON snapshot (the existing import path is the migration tool).\n3. Run pql plan export under the new format — this writes 0000-schema.sql and the initial data files into .pql/changelog/\u003ctable\u003e/.\n4. git rm pql-plan.json so the legacy artifact doesn't linger.\n5. Stage the new changelog directory, the schema files, and the deletion of pql-plan.json — all part of the same pre-commit hook invocation.\n6. Stdout: clear migration message so the user knows what happened in the next commit.\n\nThe legacy import path needs a flag (--legacy) so it doesn't conflict with the new replay-from-changelog import. After this migration commit lands, all future operations use the new format.\n\nTouches: internal/cli/plan.go (legacy detection in export, --legacy flag on import), internal/cli/init.go (probably also runs the migration when init is run on an existing legacy repo). Tests: clide vault as the target — clone, run upgraded pql, observe transparent migration commit; verify subsequent flows use the new format.",
+      "status": "backlog",
+      "priority": "high",
+      "decision_ref": "D-15",
+      "created_at": "2026-05-08 07:47:46",
+      "updated_at": "2026-05-08 07:47:46"
+    },
+    {
+      "id": "T-24",
+      "type": "task",
+      "parent_id": "T-16",
+      "title": "integrate schema migrations with numbered changelog schema files",
+      "description": "Adapt the in-house migration runner (D-6) so schema migrations land in the changelog directories as numbered files rather than (or in addition to) inline Go SQL.\n\nNaming convention: \u003cNNNN\u003e-schema-\u003cslug\u003e.sql in each .pql/changelog/\u003ctable\u003e/. Lexicographic sort puts these before \u003cYYYY-MM\u003e.sql data files automatically. Each file is idempotent (CREATE TABLE IF NOT EXISTS, ALTER TABLE ... ADD COLUMN guarded by introspection or a try-catch in pure SQLite, etc.).\n\nMigration runner changes (internal/planning/schema.go):\n- On migration: write the migration SQL to \u003cnext-N\u003e-schema-\u003cslug\u003e.sql in each affected table directory, then apply it locally via the existing transaction-wrapped runner. Update schema_migrations table.\n- On import: schema files are part of the lexicographic replay — they apply via CREATE TABLE IF NOT EXISTS / ALTER TABLE patterns and the schema_migrations table tracks what's been applied. Replicas pulling new schema files apply them on next import.\n- Include canonical_version metadata in the schema files so canonicalisation rule changes (per T-17) are visible alongside structural migrations.\n\nThis keeps D-6's runner architecture (transactional, forward-only, in-house) but moves the migration artefact into the committed changelog so it travels with data and is replayable by any SQLite tool.\n\nTouches: internal/planning/schema.go (migration emission + replay path), schema_migrations table interaction, internal/cli/init.go (T-22 generates the initial 0000-schema.sql via this same path). Tests: migration writes the file and applies it; replica pulls the file and applies via replay; conflicting concurrent migrations on different replicas converge cleanly.",
+      "status": "backlog",
+      "priority": "medium",
+      "decision_ref": "D-15",
+      "created_at": "2026-05-08 07:48:00",
+      "updated_at": "2026-05-08 07:48:00"
+    },
+    {
+      "id": "T-25",
+      "type": "task",
+      "parent_id": "T-16",
+      "title": "multi-machine integration test scenario with clide",
+      "description": "Use the clide repo (postmeridiem/clide) as the integration test bed for the new replication flow. clide has the right shape: multi-machine, multi-branch, real concurrent edits, decisions sourced from markdown, custom git hooks integrating with pql's hook chain — which is exactly what produced the original pql-plan.json merge conflict that motivated this work.\n\nTest protocol:\n1. Migration test: clone clide at HEAD (which still has pql-plan.json), run upgraded pql, observe the transparent migration from T-23 — pql-plan.json removed, .pql/changelog/ populated, audit log preserved.\n2. Concurrent-commit test: two clones, each makes a different ticket transition (one closes a bug, the other opens a feature ticket). Both push. Second push should fast-forward without conflict because per-table monthly files diverge cleanly. Pull on the now-merged main shows both transitions in the consolidated pql.db.\n3. Concurrent same-ticket test: two clones edit T-XX.status to different values. Both push. Second push pulls and consolidates; LWW resolves to the later (commit-time, hash) edit. No data loss, no manual conflict resolution.\n4. Branch-switch test: switch between branches with diverged ticket state. Confirm the post-checkout hook fires the visible rebuild and pql.db reflects only the current branch's state.\n5. Decision-divergence test: edit a decisions/*.md on one machine, transition a ticket on another, both commit + push. Decisions section reflects the markdown edit (still markdown-sourced per D-8); ticket transition lands in the consolidated state.\n\nclide accepts the rough edges from the original pql-plan.json conflict for one or two more rebase cycles in exchange for being the integration test bed. Do not patch clide with bridge remediations (no manual merge=union on the legacy file, no disabling the auto-export hook) — the friction is the signal that proves the new design is needed.\n\nTouches: no pql code changes — this is the validation pass after T-17 through T-24 land. Outcome: a write-up of observed behaviour vs expected, plus any bug tickets the test scenario surfaces.",
+      "status": "backlog",
+      "priority": "medium",
+      "decision_ref": "D-15",
+      "created_at": "2026-05-08 07:48:19",
+      "updated_at": "2026-05-08 07:48:19"
     }
   ],
   "ticket_deps": null,
