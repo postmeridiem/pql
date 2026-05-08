@@ -142,10 +142,11 @@ type DecisionFilter struct {
 	Status string
 }
 
-// ListDecisions returns decisions matching the filter.
+// ListDecisions returns decisions matching the filter. Soft-deleted
+// decisions are excluded.
 func ListDecisions(ctx context.Context, db *sql.DB, f DecisionFilter) ([]Decision, error) {
 	query := `SELECT id, type, domain, title, status, date, file_path, synced_at
-		FROM decisions WHERE 1=1`
+		FROM decisions WHERE deleted_at IS NULL`
 	var params []any
 	if f.Type != "" {
 		query += " AND type = ?"
@@ -180,11 +181,12 @@ func ListDecisions(ctx context.Context, db *sql.DB, f DecisionFilter) ([]Decisio
 }
 
 // GetDecision returns a single decision by ID, or nil if not found.
+// Soft-deleted decisions are treated as absent.
 func GetDecision(ctx context.Context, db *sql.DB, id string) (*Decision, error) {
 	var d Decision
 	err := db.QueryRowContext(ctx,
 		`SELECT id, type, domain, title, status, date, file_path, synced_at
-		 FROM decisions WHERE id = ?`, id,
+		 FROM decisions WHERE id = ? AND deleted_at IS NULL`, id,
 	).Scan(&d.ID, &d.Type, &d.Domain, &d.Title, &d.Status,
 		&d.Date, &d.FilePath, &d.SyncedAt)
 	if err == sql.ErrNoRows {
@@ -244,12 +246,12 @@ type DecisionRef struct {
 }
 
 // RefsOf returns all cross-references involving the given decision ID
-// (in either direction).
+// (in either direction). Soft-deleted refs are excluded.
 func RefsOf(ctx context.Context, db *sql.DB, id string) ([]DecisionRef, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT source_id, target_id, ref_type, COALESCE(note, '')
 		FROM decision_refs
-		WHERE source_id = ? OR target_id = ?
+		WHERE (source_id = ? OR target_id = ?) AND deleted_at IS NULL
 		ORDER BY ref_type, source_id, target_id
 	`, id, id)
 	if err != nil {
@@ -277,11 +279,14 @@ type TicketSummary struct {
 	Priority string `json:"priority"`
 }
 
-// TicketsForDecision returns tickets linked to a decision via decision_ref.
+// TicketsForDecision returns tickets linked to a decision via
+// decision_ref. Soft-deleted tickets are excluded.
 func TicketsForDecision(ctx context.Context, db *sql.DB, decisionID string) ([]TicketSummary, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, type, title, status, priority
-		FROM tickets WHERE decision_ref = ? ORDER BY SUBSTR(id, 1, 1), CAST(SUBSTR(id, 3) AS INTEGER)
+		FROM tickets
+		WHERE decision_ref = ? AND deleted_at IS NULL
+		ORDER BY SUBSTR(id, 1, 1), CAST(SUBSTR(id, 3) AS INTEGER)
 	`, decisionID)
 	if err != nil {
 		return nil, fmt.Errorf("repo: tickets for %s: %w", decisionID, err)
@@ -307,12 +312,15 @@ type CoverageGap struct {
 }
 
 // Coverage returns confirmed decisions that have no linked tickets.
+// Soft-deleted decisions are excluded; soft-deleted tickets do not
+// satisfy "linked" (so a confirmed decision whose only linked ticket
+// is soft-deleted re-appears as a coverage gap).
 func Coverage(ctx context.Context, db *sql.DB) ([]CoverageGap, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT d.id, d.domain, d.title
 		FROM decisions d
-		LEFT JOIN tickets t ON t.decision_ref = d.id
-		WHERE d.type = 'confirmed' AND t.id IS NULL
+		LEFT JOIN tickets t ON t.decision_ref = d.id AND t.deleted_at IS NULL
+		WHERE d.type = 'confirmed' AND d.deleted_at IS NULL AND t.id IS NULL
 		ORDER BY SUBSTR(d.id, 1, 1), CAST(SUBSTR(d.id, 3) AS INTEGER)
 	`)
 	if err != nil {

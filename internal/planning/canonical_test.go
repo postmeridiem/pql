@@ -103,6 +103,15 @@ func TestCanonicalBytes_FieldSeparator(t *testing.T) {
 	}
 }
 
+func TestHash_DeletedAtChangesHash(t *testing.T) {
+	ts := "2026-05-08T10:00:00Z"
+	live := Hash([]any{1, "T-1", "task", "title", (*string)(nil)})
+	stub := Hash([]any{1, "T-1", "task", "title", &ts})
+	if live == stub {
+		t.Errorf("setting deleted_at didn't change hash: %s", live)
+	}
+}
+
 func TestCanonicalValue_PanicsOnUnknownType(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {

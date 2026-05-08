@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+
+	"github.com/postmeridiem/pql/internal/planning"
 )
 
 func TestCreateAndGetTicket(t *testing.T) {
@@ -460,5 +462,56 @@ func TestUpdateTicket_RealChangeChangesHash(t *testing.T) {
 	after, _ := readHash(t, db, id)
 	if before == after {
 		t.Errorf("real change left hash unchanged: %s", before)
+	}
+}
+
+func TestSoftDelete_TicketHiddenFromReads(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	id, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "soft-del"})
+
+	// Sanity: ticket visible.
+	if tk, _ := GetTicket(ctx, db, id); tk == nil {
+		t.Fatal("ticket missing before soft delete")
+	}
+
+	// Soft-delete + rehash to keep hash current.
+	if _, err := db.ExecContext(ctx,
+		`UPDATE tickets SET deleted_at = datetime('now') WHERE id = ?`, id); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+
+	if tk, _ := GetTicket(ctx, db, id); tk != nil {
+		t.Errorf("GetTicket returned soft-deleted row: %+v", tk)
+	}
+	tickets, _ := ListTickets(ctx, db, TicketFilter{})
+	for _, tk := range tickets {
+		if tk.ID == id {
+			t.Errorf("ListTickets returned soft-deleted %s", id)
+		}
+	}
+}
+
+func TestSoftDelete_ChangesHash(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	id, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "hash-on-delete"})
+	before, _ := readHash(t, db, id)
+
+	if _, err := db.ExecContext(ctx,
+		`UPDATE tickets SET deleted_at = datetime('now') WHERE id = ?`, id); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+	if err := planning.RehashTicket(ctx, db, id); err != nil {
+		t.Fatalf("rehash after soft delete: %v", err)
+	}
+
+	// Re-read hash directly (GetTicket would filter out the deleted row).
+	var after string
+	if err := db.QueryRow(`SELECT hash FROM tickets WHERE id = ?`, id).Scan(&after); err != nil {
+		t.Fatalf("read post-delete hash: %v", err)
+	}
+	if before == after {
+		t.Errorf("soft delete didn't change hash: %s", before)
 	}
 }

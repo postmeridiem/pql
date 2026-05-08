@@ -462,17 +462,19 @@ func newTicketBlockCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			res, err := pdb.SQL().ExecContext(ctx, `
-				INSERT OR IGNORE INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
+			// Insert-or-resurrect: if a previous unblock soft-deleted
+			// the (blocker, blocked) row, this clears deleted_at and
+			// bumps updated_at so the row is live again.
+			if _, err := pdb.SQL().ExecContext(ctx, `
+				INSERT INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
 				VALUES (?, ?, datetime('now'), datetime('now'))
-			`, byID, args[0])
-			if err != nil {
+				ON CONFLICT(blocker_id, blocked_id) DO UPDATE SET
+					deleted_at = NULL, updated_at = datetime('now')
+			`, byID, args[0]); err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
 			}
-			if n, _ := res.RowsAffected(); n > 0 {
-				if err := planning.RehashTicketDep(ctx, pdb.SQL(), byID, args[0]); err != nil {
-					return &exitError{code: diag.DataErr, msg: err.Error()}
-				}
+			if err := planning.RehashTicketDep(ctx, pdb.SQL(), byID, args[0]); err != nil {
+				return &exitError{code: diag.DataErr, msg: err.Error()}
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -513,10 +515,18 @@ func newTicketUnblockCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			if _, err := pdb.SQL().ExecContext(ctx, `
-				DELETE FROM ticket_deps WHERE blocker_id = ? AND blocked_id = ?
-			`, fromID, args[0]); err != nil {
+			res, err := pdb.SQL().ExecContext(ctx, `
+				UPDATE ticket_deps
+				SET deleted_at = datetime('now'), updated_at = datetime('now')
+				WHERE blocker_id = ? AND blocked_id = ? AND deleted_at IS NULL
+			`, fromID, args[0])
+			if err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				if err := planning.RehashTicketDep(ctx, pdb.SQL(), fromID, args[0]); err != nil {
+					return &exitError{code: diag.DataErr, msg: err.Error()}
+				}
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -622,23 +632,33 @@ func newTicketLabelCmd() *cobra.Command {
 				}
 				switch action {
 				case "add":
-					res, addErr := pdb.SQL().ExecContext(ctx, `
-						INSERT OR IGNORE INTO ticket_labels (ticket_id, label, created_at, updated_at)
+					// Insert-or-resurrect: a previously rm'd label gets
+					// its deleted_at cleared so the changelog records
+					// the re-attachment as a state change.
+					if _, addErr := pdb.SQL().ExecContext(ctx, `
+						INSERT INTO ticket_labels (ticket_id, label, created_at, updated_at)
 						VALUES (?, ?, datetime('now'), datetime('now'))
-					`, id, label)
-					if addErr != nil {
+						ON CONFLICT(ticket_id, label) DO UPDATE SET
+							deleted_at = NULL, updated_at = datetime('now')
+					`, id, label); addErr != nil {
 						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, addErr)}
+					}
+					if rehashErr := planning.RehashTicketLabel(ctx, pdb.SQL(), id, label); rehashErr != nil {
+						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, rehashErr)}
+					}
+				case "rm":
+					res, rmErr := pdb.SQL().ExecContext(ctx, `
+						UPDATE ticket_labels
+						SET deleted_at = datetime('now'), updated_at = datetime('now')
+						WHERE ticket_id = ? AND label = ? AND deleted_at IS NULL
+					`, id, label)
+					if rmErr != nil {
+						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, rmErr)}
 					}
 					if n, _ := res.RowsAffected(); n > 0 {
 						if rehashErr := planning.RehashTicketLabel(ctx, pdb.SQL(), id, label); rehashErr != nil {
 							return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, rehashErr)}
 						}
-					}
-				case "rm":
-					if _, rmErr := pdb.SQL().ExecContext(ctx, `
-						DELETE FROM ticket_labels WHERE ticket_id = ? AND label = ?
-					`, id, label); rmErr != nil {
-						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, rmErr)}
 					}
 				}
 			}

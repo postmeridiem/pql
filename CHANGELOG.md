@@ -11,6 +11,28 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.17] - 2026-05-08
+
+### Changed
+
+- **Breaking for in-place upgrades.** The pql.db schema runner (D-6)
+  is retired in favour of a single CREATE-TABLE-only schema (D-19,
+  supersedes D-6). pql.db files built under earlier internal builds
+  (including v1.4.16) cannot be upgraded in place — recover via
+  `rm .pql/pql.db && pql plan import` (the existing `pql-plan.json`
+  is the source of truth). The migration runner, `schema_migrations`
+  table, and `goFunc` migration steps are removed; schema changes
+  going forward update the CREATE statements and bump
+  `CanonicalVersion`.
+- Soft deletes via `deleted_at` column on every planning table
+  (T-18, D-17). User-facing delete operations (`pql ticket unblock`,
+  `pql ticket label rm`) now soft-delete; re-attaching (`block`,
+  `label add`) resurrects the row by clearing `deleted_at`. Read
+  queries default-filter `WHERE deleted_at IS NULL`. The canonical
+  hash projection now includes `deleted_at`, so a soft-delete event
+  changes the row's hash and replays through the changelog as a
+  state change rather than as a missing row.
+
 ## [1.4.16] - 2026-05-08
 
 ### Changed

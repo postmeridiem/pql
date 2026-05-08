@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-05-08T09:19:55Z",
+  "exported_at": "2026-05-08T09:54:55Z",
   "decisions": [
     {
       "id": "D-1",
@@ -9,7 +9,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-2",
@@ -19,7 +19,7 @@
       "status": "active",
       "date": "2026-04-19",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-3",
@@ -29,7 +29,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-4",
@@ -39,7 +39,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-5",
@@ -49,7 +49,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-6",
@@ -59,7 +59,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-7",
@@ -69,7 +69,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-8",
@@ -79,7 +79,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-9",
@@ -89,7 +89,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-10",
@@ -99,7 +99,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-11",
@@ -109,7 +109,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-12",
@@ -119,7 +119,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-13",
@@ -129,7 +129,7 @@
       "status": "active",
       "date": "2026-04-22",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-14",
@@ -139,7 +139,7 @@
       "status": "active",
       "date": "2026-04-24",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-15",
@@ -149,7 +149,7 @@
       "status": "active",
       "date": "2026-05-08",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-16",
@@ -159,7 +159,7 @@
       "status": "active",
       "date": "2026-05-08",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-17",
@@ -169,7 +169,7 @@
       "status": "active",
       "date": "2026-05-08",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "D-18",
@@ -179,7 +179,17 @@
       "status": "active",
       "date": "2026-05-08",
       "file_path": "decisions/architecture.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
+    },
+    {
+      "id": "D-19",
+      "type": "confirmed",
+      "domain": "architecture",
+      "title": "No ALTER TABLE — schema lives in CREATE statements only",
+      "status": "active",
+      "date": "2026-05-08",
+      "file_path": "decisions/architecture.md",
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-1",
@@ -188,7 +198,7 @@
       "title": "Markdown mirror for tickets",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-2",
@@ -197,7 +207,7 @@
       "title": "FTS for ticket/decision search",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-3",
@@ -206,7 +216,7 @@
       "title": "Multi-user planning DB",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-4",
@@ -215,7 +225,7 @@
       "title": "Validator strictness",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-5",
@@ -224,7 +234,7 @@
       "title": "Body access in the DSL",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-6",
@@ -233,7 +243,7 @@
       "title": "Outlink target normalization",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-7",
@@ -242,7 +252,7 @@
       "title": "Code-aware extractor",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-8",
@@ -251,7 +261,7 @@
       "title": "Occasional pql.db backups into git",
       "status": "resolved",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-9",
@@ -260,7 +270,7 @@
       "title": "Multi-user ticket ID distribution",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     },
     {
       "id": "Q-10",
@@ -269,7 +279,7 @@
       "title": "Soft-delete stub retention and purge",
       "status": "open",
       "file_path": "decisions/questions.md",
-      "synced_at": "2026-05-08 07:54:50"
+      "synced_at": "2026-05-08 09:49:47"
     }
   ],
   "decision_refs": [
@@ -332,6 +342,30 @@
       "target_id": "Q-10",
       "ref_type": "references",
       "note": "**Cost:** Every table grows a `deleted_at` column; every read query needs the filter. Stubs accumulate indefinitely without a purge mechanism — long-running projects need a periodic GC pass. Purg..."
+    },
+    {
+      "source_id": "D-19",
+      "target_id": "D-15",
+      "ref_type": "references",
+      "note": "**Decision:** pql.db schema is defined entirely by `CREATE TABLE IF NOT EXISTS` statements in one place (`internal/planning/schema.go`). When the schema needs to change, edit the CREATE statements ..."
+    },
+    {
+      "source_id": "D-19",
+      "target_id": "D-3",
+      "ref_type": "references",
+      "note": "**Rationale:** pql.db is a derived cache of authoritative state living in the changelog (D-3 + D-15). Carrying a migration framework — version tracking, ALTER TABLE deltas, backfill goroutines, t..."
+    },
+    {
+      "source_id": "D-19",
+      "target_id": "D-6",
+      "ref_type": "supersedes",
+      "note": "**Supersedes:** [D-6](#d-6-in-house-migration-runner-not-golang-migrate-or-goose)"
+    },
+    {
+      "source_id": "D-6",
+      "target_id": "D-19",
+      "ref_type": "references",
+      "note": "**Status:** Superseded by [D-19](#d-19-no-alter-table--schema-lives-in-create-statements-only)"
     },
     {
       "source_id": "D-6",
@@ -570,11 +604,12 @@
       "parent_id": "T-16",
       "title": "implement soft deletes via deleted_at column",
       "description": "Forward migration adding deleted_at (timestamp, NULL = live) to every planning table. Route every existing DELETE through UPDATE ... SET deleted_at = ?. Update every read query in internal/planning/repo/*.go to filter WHERE deleted_at IS NULL by default; add an --include-deleted flag where the surface needs visibility into stubs (e.g. audit, recovery).\n\nStubs persist in pql.db and the changelog so other replicas know the deletion is intentional rather than missing — without this, replay against a fresh replica would re-INSERT the row. The changelog upsert for a deletion is just a regular line where deleted_at is non-null.\n\nTouches: internal/planning/schema.go (migration), internal/planning/repo/*.go (every read query gains the filter; every delete becomes a soft-delete UPDATE), audit log entries for deletion events (recorded as today). Tests: round-trip soft delete / undelete, replay convergence (replica A deletes, replica B has never seen the row → replay creates the stub, then deletion replays into the stub).\n\nStub purge / retention is deferred to Q-10. This ticket lands the column and the read-path filter; it does not implement purge.",
-      "status": "ready",
+      "status": "done",
       "priority": "high",
+      "assigned_to": "claude",
       "decision_ref": "D-17",
       "created_at": "2026-05-08 07:46:41",
-      "updated_at": "2026-05-08 08:10:09"
+      "updated_at": "2026-05-08 09:54:33"
     },
     {
       "id": "T-19",
@@ -900,6 +935,26 @@
       "old_value": "review",
       "new_value": "done",
       "changed_at": "2026-05-08 09:19:42"
+    },
+    {
+      "ticket_id": "T-18",
+      "field": "status",
+      "old_value": "ready",
+      "new_value": "in_progress",
+      "changed_at": "2026-05-08 09:32:52"
+    },
+    {
+      "ticket_id": "T-18",
+      "field": "assigned_to",
+      "new_value": "claude",
+      "changed_at": "2026-05-08 09:32:52"
+    },
+    {
+      "ticket_id": "T-18",
+      "field": "status",
+      "old_value": "in_progress",
+      "new_value": "done",
+      "changed_at": "2026-05-08 09:54:33"
     }
   ]
 }

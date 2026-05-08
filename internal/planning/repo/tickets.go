@@ -133,11 +133,12 @@ type TicketFilter struct {
 	Unrefined bool
 }
 
-// ListTickets returns tickets matching the filter.
+// ListTickets returns tickets matching the filter. Soft-deleted rows
+// (deleted_at IS NOT NULL) are excluded by default per D-17.
 func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, error) {
 	query := `SELECT id, type, parent_id, title, description, status, priority,
 		assigned_to, team, decision_ref, created_at, updated_at
-		FROM tickets WHERE 1=1`
+		FROM tickets WHERE deleted_at IS NULL`
 	var params []any
 	if f.Status != "" {
 		query += " AND status = ?"
@@ -160,7 +161,10 @@ func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, err
 		params = append(params, f.ParentID)
 	}
 	if f.Label != "" {
-		query += " AND id IN (SELECT ticket_id FROM ticket_labels WHERE label = ?)"
+		query += ` AND id IN (
+			SELECT ticket_id FROM ticket_labels
+			WHERE label = ? AND deleted_at IS NULL
+		)`
 		params = append(params, f.Label)
 	}
 	if f.Unrefined {
@@ -188,12 +192,13 @@ func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, err
 }
 
 // GetTicket returns a single ticket by ID, or nil if not found.
+// Soft-deleted rows (deleted_at IS NOT NULL) are treated as absent.
 func GetTicket(ctx context.Context, db *sql.DB, id string) (*Ticket, error) {
 	var t Ticket
 	err := db.QueryRowContext(ctx, `
 		SELECT id, type, parent_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at
-		FROM tickets WHERE id = ?
+		FROM tickets WHERE id = ? AND deleted_at IS NULL
 	`, id).Scan(&t.ID, &t.Type, &t.ParentID, &t.Title, &t.Description,
 		&t.Status, &t.Priority, &t.AssignedTo, &t.Team, &t.DecisionRef,
 		&t.CreatedAt, &t.UpdatedAt)
@@ -366,12 +371,15 @@ type BlockerInfo struct {
 }
 
 // BlockersOf returns tickets that block the given ticket.
+// Soft-deleted blockers and soft-deleted dep rows are excluded.
 func BlockersOf(ctx context.Context, db *sql.DB, id string) ([]BlockerInfo, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT t.id, t.title, t.status
 		FROM ticket_deps d
 		JOIN tickets t ON t.id = d.blocker_id
 		WHERE d.blocked_id = ?
+		  AND d.deleted_at IS NULL
+		  AND t.deleted_at IS NULL
 		ORDER BY CAST(SUBSTR(t.id, 3) AS INTEGER)
 	`, id)
 	if err != nil {
@@ -390,11 +398,14 @@ func BlockersOf(ctx context.Context, db *sql.DB, id string) ([]BlockerInfo, erro
 	return result, rows.Err()
 }
 
-// ChildrenOf returns direct children of a ticket.
+// ChildrenOf returns direct children of a ticket. Soft-deleted
+// children are excluded.
 func ChildrenOf(ctx context.Context, db *sql.DB, parentID string) ([]TicketSummary, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, type, title, status, priority
-		FROM tickets WHERE parent_id = ? ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)
+		FROM tickets
+		WHERE parent_id = ? AND deleted_at IS NULL
+		ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)
 	`, parentID)
 	if err != nil {
 		return nil, fmt.Errorf("repo: children of %s: %w", parentID, err)
@@ -422,7 +433,7 @@ func WhatNext(ctx context.Context, db *sql.DB) (*Ticket, error) {
 		SELECT id, type, parent_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at
 		FROM tickets
-		WHERE status IN ('in_progress', 'ready')
+		WHERE status IN ('in_progress', 'ready') AND deleted_at IS NULL
 		ORDER BY
 			CASE status WHEN 'in_progress' THEN 0 ELSE 1 END,
 			CASE priority
@@ -456,7 +467,7 @@ func NextReview(ctx context.Context, db *sql.DB) (*Ticket, error) {
 		SELECT id, type, parent_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at
 		FROM tickets
-		WHERE status = 'review'
+		WHERE status = 'review' AND deleted_at IS NULL
 		ORDER BY
 			CASE priority
 				WHEN 'critical' THEN 0

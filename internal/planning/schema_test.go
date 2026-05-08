@@ -3,6 +3,7 @@ package planning
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -27,19 +28,13 @@ func TestMigrate_Fresh(t *testing.T) {
 	}
 
 	tables := queryTables(t, db)
-	for _, want := range []string{"decisions", "tickets", "ticket_deps", "ticket_history", "ticket_labels", "decision_refs", "schema_migrations"} {
+	for _, want := range []string{
+		"decisions", "decision_refs",
+		"tickets", "ticket_deps", "ticket_history", "ticket_labels",
+	} {
 		if !tables[want] {
 			t.Errorf("missing table %q", want)
 		}
-	}
-
-	var v int
-	if err := db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&v); err != nil {
-		t.Fatalf("read version: %v", err)
-	}
-	want := len(migrations)
-	if v != want {
-		t.Errorf("version = %d, want %d", v, want)
 	}
 }
 
@@ -52,15 +47,6 @@ func TestMigrate_Idempotent(t *testing.T) {
 	}
 	if err := Migrate(ctx, db); err != nil {
 		t.Fatalf("second Migrate: %v", err)
-	}
-
-	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
-		t.Fatalf("count: %v", err)
-	}
-	want := len(migrations)
-	if count != want {
-		t.Errorf("schema_migrations rows = %d, want %d", count, want)
 	}
 }
 
@@ -83,113 +69,85 @@ func TestMigrate_ForeignKeys(t *testing.T) {
 	}
 }
 
-// TestMigrate_V2BackfillsHashes simulates a database that's already at
-// v1 with real data, then runs Migrate (which applies v2) and confirms
-// the hash + canonical_version columns are populated for the
-// pre-existing row.
-func TestMigrate_V2BackfillsHashes(t *testing.T) {
-	ctx := context.Background()
-	db := openMemory(t)
-
-	if _, err := db.ExecContext(ctx, `CREATE TABLE schema_migrations (
-		version INTEGER PRIMARY KEY,
-		applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-	)`); err != nil {
-		t.Fatalf("create schema_migrations: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, migrationV1); err != nil {
-		t.Fatalf("apply v1: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO schema_migrations (version) VALUES (1)`); err != nil {
-		t.Fatalf("record v1: %v", err)
-	}
-
-	// Populate every table that v2 ALTERs so the ALTER + backfill path
-	// is exercised against non-empty tables — this is the case that
-	// regressed against a live db (datetime('now') as ALTER ADD COLUMN
-	// default isn't allowed for populated tables).
-	if _, err := db.ExecContext(ctx, `
-		INSERT INTO tickets (id, type, title, status, priority, created_at, updated_at)
-		VALUES ('T-99', 'task', 'pre-v2 row', 'backlog', 'medium', datetime('now'), datetime('now'))
-	`); err != nil {
-		t.Fatalf("insert pre-v2 ticket: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-		INSERT INTO decisions (id, type, domain, title, file_path)
-		VALUES ('D-99', 'confirmed', 'arch', 'pre-v2 decision', 'd.md')
-	`); err != nil {
-		t.Fatalf("insert pre-v2 decision: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-		INSERT INTO decision_refs (source_id, target_id, ref_type, note)
-		VALUES ('D-99', 'D-99', 'references', NULL)
-	`); err != nil {
-		t.Fatalf("insert pre-v2 decision_ref: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-		INSERT INTO ticket_deps (blocker_id, blocked_id) VALUES ('T-99', 'T-99')
-	`); err != nil {
-		t.Fatalf("insert pre-v2 ticket_dep: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-		INSERT INTO ticket_labels (ticket_id, label) VALUES ('T-99', 'pre-v2')
-	`); err != nil {
-		t.Fatalf("insert pre-v2 ticket_label: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by)
-		VALUES ('T-99', 'status', 'backlog', 'ready', 'pre-v2')
-	`); err != nil {
-		t.Fatalf("insert pre-v2 ticket_history: %v", err)
-	}
-
-	if err := Migrate(ctx, db); err != nil {
-		t.Fatalf("Migrate v1→v2: %v", err)
-	}
-
-	var hash sql.NullString
-	var canonicalVersion sql.NullInt64
-	if err := db.QueryRowContext(ctx,
-		`SELECT hash, canonical_version FROM tickets WHERE id = 'T-99'`,
-	).Scan(&hash, &canonicalVersion); err != nil {
-		t.Fatalf("read backfilled row: %v", err)
-	}
-	if !hash.Valid || hash.String == "" {
-		t.Errorf("hash not backfilled: %+v", hash)
-	}
-	if !canonicalVersion.Valid || canonicalVersion.Int64 != int64(CanonicalVersion) {
-		t.Errorf("canonical_version = %+v, want %d", canonicalVersion, CanonicalVersion)
-	}
-}
-
-// TestMigrate_V2AddsColumnsToAllTables verifies that v2 added the
-// hash + canonical_version columns to every planning table, plus
-// created_at/updated_at to tables that lacked them.
-func TestMigrate_V2AddsColumnsToAllTables(t *testing.T) {
+// TestMigrate_FreshHasReplicationColumns confirms every planning table
+// carries the full replication column set (created_at, updated_at,
+// deleted_at, hash, canonical_version) from the first CREATE — no
+// ALTER deltas, per D-19.
+func TestMigrate_FreshHasReplicationColumns(t *testing.T) {
 	ctx := context.Background()
 	db := openMemory(t)
 	if err := Migrate(ctx, db); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	cases := []struct {
-		table   string
-		columns []string
-	}{
-		{"decisions", []string{"created_at", "updated_at", "hash", "canonical_version"}},
-		{"decision_refs", []string{"created_at", "updated_at", "hash", "canonical_version"}},
-		{"tickets", []string{"hash", "canonical_version"}},
-		{"ticket_deps", []string{"created_at", "updated_at", "hash", "canonical_version"}},
-		{"ticket_history", []string{"created_at", "updated_at", "hash", "canonical_version"}},
-		{"ticket_labels", []string{"created_at", "updated_at", "hash", "canonical_version"}},
-	}
-	for _, c := range cases {
-		got := tableColumns(t, db, c.table)
-		for _, col := range c.columns {
+	want := []string{"created_at", "updated_at", "deleted_at", "hash", "canonical_version"}
+	for _, table := range []string{
+		"decisions", "decision_refs", "tickets",
+		"ticket_deps", "ticket_history", "ticket_labels",
+	} {
+		got := tableColumns(t, db, table)
+		for _, col := range want {
 			if !got[col] {
-				t.Errorf("%s missing column %q", c.table, col)
+				t.Errorf("%s missing column %q", table, col)
 			}
 		}
+	}
+}
+
+// TestMigrate_RefusesIncompleteSchema simulates a pql.db built under
+// an older shape — the pre-T-17 schema, missing every replication
+// column — and confirms Migrate refuses to proceed with a clear
+// recovery message. Per D-19, no in-place upgrade.
+func TestMigrate_RefusesIncompleteSchema(t *testing.T) {
+	ctx := context.Background()
+	db := openMemory(t)
+	// Pre-replication schema: everything users see, but no hash,
+	// canonical_version, or deleted_at columns. CREATE TABLE IF NOT
+	// EXISTS in Migrate will be a no-op (tables exist), so verifySchema
+	// is what trips.
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE decisions (
+			id TEXT PRIMARY KEY, type TEXT NOT NULL, domain TEXT NOT NULL,
+			title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active',
+			date TEXT, file_path TEXT NOT NULL,
+			synced_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+		CREATE TABLE decision_refs (
+			source_id TEXT NOT NULL, target_id TEXT NOT NULL,
+			ref_type TEXT NOT NULL, note TEXT,
+			PRIMARY KEY (source_id, target_id, ref_type)
+		);
+		CREATE TABLE tickets (
+			id TEXT PRIMARY KEY, type TEXT NOT NULL,
+			parent_id TEXT, title TEXT NOT NULL, description TEXT,
+			status TEXT NOT NULL DEFAULT 'backlog',
+			priority TEXT DEFAULT 'medium',
+			assigned_to TEXT, team TEXT, decision_ref TEXT,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+		CREATE TABLE ticket_deps (
+			blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL,
+			PRIMARY KEY (blocker_id, blocked_id)
+		);
+		CREATE TABLE ticket_history (
+			ticket_id TEXT NOT NULL, field TEXT NOT NULL,
+			old_value TEXT, new_value TEXT, changed_by TEXT,
+			changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+		CREATE TABLE ticket_labels (
+			ticket_id TEXT NOT NULL, label TEXT NOT NULL,
+			PRIMARY KEY (ticket_id, label)
+		);
+	`); err != nil {
+		t.Fatalf("seed pre-replication schema: %v", err)
+	}
+	err := Migrate(ctx, db)
+	if err == nil {
+		t.Fatal("expected migrate to refuse incomplete schema, got nil")
+	}
+	if !strings.Contains(err.Error(), "earlier schema") {
+		t.Errorf("error message should hint at earlier schema; got %q", err)
 	}
 }
 

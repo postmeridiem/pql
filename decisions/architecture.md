@@ -42,6 +42,7 @@ Core design constraints for pql.
 
 ### D-6: In-house migration runner, not golang-migrate or goose
 - **Date:** 2026-04-22
+- **Status:** Superseded by [D-19](#d-19-no-alter-table--schema-lives-in-create-statements-only)
 - **Decision:** pql.db migrations use a ~50-line in-house runner in `internal/planning/schema.go`. A `schema_migrations` table tracks applied versions; each migration runs in a transaction.
 - **Rationale:** The migration surface is tiny (one DB, forward-only, single-user). An external dependency adds a build dep, a CLI tool, and a migration-file convention for a problem that's ~50 lines of Go. The runner uses `CREATE TABLE IF NOT EXISTS` so it's compatible with databases created by the Python stopgap.
 - **Cost:** No rollback support. If a migration is wrong, the fix is a new forward migration. Acceptable for the scale.
@@ -142,3 +143,11 @@ Core design constraints for pql.
 - **Rationale:** Hooks below the client layer catch all git operations — IDE pulls, raw CLI, GUI tools — without requiring a `pql sync` wrapper command (rejected for scope drift into git porcelain). post-checkout and post-rewrite need full rebuild because LWW-guarded replay can only INSERT/UPDATE; a row that exists on the previous branch but not the new one would linger in `pql.db` after a checkout if only an incremental import ran. Synchronous visible rebuild matches user mental model: people expect cleanup after these operations and prefer a clear cause-and-effect message over hidden lazy execution that surfaces as random slowness on a later command.
 - **Cost:** Four hooks instead of one in the install footprint. Users who disable hooks (`--no-verify`, unset `core.hooksPath`) lose the guarantees and operate on stale or divergent state — accepted, same posture as the existing pre-push lint gate. Branch switches incur a synchronous rebuild (bounded by changelog size, but visible in `git checkout` latency).
 - **Raised by:** Replication design — settled after iteration through `pql sync` (rejected for scope drift), lazy-on-read (rejected for hidden slowness on hot paths like clide's once-per-minute polling), and flag-then-defer rebuild (rejected for hidden process / unexpected slowness).
+
+### D-19: No ALTER TABLE — schema lives in CREATE statements only
+- **Date:** 2026-05-08
+- **Supersedes:** [D-6](#d-6-in-house-migration-runner-not-golang-migrate-or-goose)
+- **Decision:** pql.db schema is defined entirely by `CREATE TABLE IF NOT EXISTS` statements in one place (`internal/planning/schema.go`). When the schema needs to change, edit the CREATE statements and bump `CanonicalVersion`. Existing pql.db files are never altered in place — they are regenerated from the changelog (D-15) or from a `pql-plan.json` import. No `schema_migrations` table, no migration runner, no ALTER TABLE statements ever.
+- **Rationale:** pql.db is a derived cache of authoritative state living in the changelog (D-3 + D-15). Carrying a migration framework — version tracking, ALTER TABLE deltas, backfill goroutines, transient-state tests — to evolve a regenerable cache is unwarranted complexity. The codebase should optimise for clean installs, not for in-place upgrades. Schema changes propagate the same way data changes propagate: through the changelog, with consumers rebuilding their local cache. Open path becomes "create schema if missing, verify columns match expectations, refuse to operate if not."
+- **Cost:** Any pql.db built under an earlier schema is non-recoverable in place. Recovery is `rm .pql/pql.db && pql plan import` (or `pql plan rebuild` once T-21 lands). Migration-style ALTER TABLE deltas would have allowed in-place upgrades; this decision trades that affordance for a cleaner codebase.
+- **Raised by:** T-18 implementation review. Initial plan layered an ALTER TABLE migration v2 on top of v1 to add `deleted_at`; user pushback flagged this as unnecessary clutter for a regenerable cache.
