@@ -11,6 +11,20 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.22] - 2026-05-08
+
+### Changed
+
+- `pql init`'s autoImportPlan step now prefers `.pql/changelog/`
+  over `.pql/pql-plan.json` (T-23). Bootstrap order: changelog
+  replay if changelog files exist → legacy JSON import if they
+  don't → empty pql.db otherwise. This makes a fresh clone of an
+  upgraded repo populate pql.db from the committed changelog
+  without manual `pql plan import` invocation.
+- This repo's own `.pql/pql-plan.json` removed (now redundant — the
+  changelog files committed in v1.4.18+ carry the full state, and
+  `pql init` recovers from them via the new autoImportPlan path).
+
 ## [1.4.21] - 2026-05-08
 
 ### Added

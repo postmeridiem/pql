@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.4.21
-status: v1.4.21 — T-22 lands `pql init` updates: per-table schema fixtures + post-checkout / post-rewrite hooks + `.gitattributes merge=union`.
+version: 1.4.22
+status: v1.4.22 — T-23 makes autoImportPlan prefer the changelog over pql-plan.json; legacy snapshot still imported when changelog is absent.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

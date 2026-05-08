@@ -21,6 +21,7 @@ import (
 	"github.com/postmeridiem/pql/internal/config"
 	"github.com/postmeridiem/pql/internal/diag"
 	"github.com/postmeridiem/pql/internal/planning"
+	"github.com/postmeridiem/pql/internal/planning/changelog"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 	"github.com/postmeridiem/pql/internal/skill"
 	"github.com/postmeridiem/pql/internal/version"
@@ -1067,38 +1068,102 @@ func ensureGitAttributes(dir string) initGitAttribute {
 	return stat
 }
 
+// autoImportPlan populates pql.db from whatever bootstrap artefact
+// the repo carries. Preference order, per T-23:
+//
+//  1. .pql/changelog/ — the canonical replication format (D-15).
+//  2. .pql/pql-plan.json — pre-T-19 snapshot. Imported via the
+//     legacy repo.Import path; pql.db ends up populated, then a
+//     `pql plan export` run will produce the changelog and the
+//     legacy file can be removed manually.
+//  3. legacy root-level pql-plan.json (very early form).
+//
+// Returns an empty initPlanImport with Skipped set when nothing
+// matches, so a fresh repo with no state in any form opens cleanly.
 func autoImportPlan(ctx context.Context, dir string) initPlanImport {
+	changelogRoot := filepath.Join(dir, ".pql", "changelog")
+	if hasChangelogData(changelogRoot) {
+		return autoReplayChangelog(ctx, dir, changelogRoot)
+	}
+
 	snapPath := filepath.Join(dir, defaultSnapshotFile)
 	data, err := os.ReadFile(snapPath) //nolint:gosec // G304: known snapshot file
 	if err != nil {
-		// Fall back to legacy root-level location.
 		legacyPath := filepath.Join(dir, "pql-plan.json")
 		data, err = os.ReadFile(legacyPath) //nolint:gosec // G304: legacy snapshot file
 		if err != nil {
-			return initPlanImport{Skipped: "no " + defaultSnapshotFile + " found"}
+			return initPlanImport{Skipped: "no changelog or pql-plan.json found"}
 		}
 		snapPath = legacyPath
 	}
+	return autoImportLegacySnapshot(ctx, dir, snapPath, data)
+}
 
+// hasChangelogData reports whether the changelog directory holds at
+// least one data file (a *.sql that isn't a schema fixture). Empty
+// directories or directories with only schema files don't count —
+// they look like a freshly-init'd repo with no committed state yet.
+func hasChangelogData(root string) bool {
+	tables, err := os.ReadDir(root)
+	if err != nil {
+		return false
+	}
+	for _, t := range tables {
+		if !t.IsDir() {
+			continue
+		}
+		entries, err := os.ReadDir(filepath.Join(root, t.Name()))
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if !strings.HasSuffix(name, ".sql") {
+				continue
+			}
+			if strings.HasSuffix(name, "-schema.sql") || strings.HasSuffix(name, "schema.sql") {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func autoReplayChangelog(ctx context.Context, dir, root string) initPlanImport {
+	pdb, err := planning.Open(ctx, dir)
+	if err != nil {
+		return initPlanImport{File: root, Skipped: "open pql.db: " + err.Error()}
+	}
+	defer func() { _ = pdb.Close() }()
+
+	res, err := changelog.Import(ctx, pdb.SQL(), dir)
+	if err != nil {
+		return initPlanImport{File: root, Skipped: "changelog replay: " + err.Error()}
+	}
+	return initPlanImport{
+		File:     root,
+		Imported: true,
+		Count:    res.StatementsRun,
+	}
+}
+
+func autoImportLegacySnapshot(ctx context.Context, dir, snapPath string, data []byte) initPlanImport {
 	var snap repo.Snapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return initPlanImport{File: snapPath, Skipped: "parse error: " + err.Error()}
 	}
-
 	if len(snap.Decisions) == 0 && len(snap.Tickets) == 0 {
 		return initPlanImport{File: snapPath, Skipped: "snapshot is empty"}
 	}
-
 	pdb, err := planning.Open(ctx, dir)
 	if err != nil {
 		return initPlanImport{File: snapPath, Skipped: "open pql.db: " + err.Error()}
 	}
 	defer func() { _ = pdb.Close() }()
-
 	if err := repo.Import(ctx, pdb.SQL(), &snap); err != nil {
 		return initPlanImport{File: snapPath, Skipped: "import: " + err.Error()}
 	}
-
 	return initPlanImport{
 		File:     snapPath,
 		Imported: true,
