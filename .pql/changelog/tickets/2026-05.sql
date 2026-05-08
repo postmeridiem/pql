@@ -508,3 +508,42 @@ Test protocol:
 clide accepts the rough edges from the original pql-plan.json conflict for one or two more rebase cycles in exchange for being the integration test bed. Do not patch clide with bridge remediations (no manual merge=union on the legacy file, no disabling the auto-export hook) — the friction is the signal that proves the new design is needed.
 
 Touches: no pql code changes — this is the validation pass after T-17 through T-24 land. Outcome: a write-up of observed behaviour vs expected, plus any bug tickets the test scenario surfaces.', 'ready', 'medium', NULL, NULL, 'D-15', '2026-05-08 07:48:19', '2026-05-08 11:01:30', NULL, '6525f9e64e5aab66b9ed3fd176e7e78d', 1) ON CONFLICT(id) DO UPDATE SET type=excluded.type, parent_id=excluded.parent_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (id, type, parent_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-19', 'task', 'T-16', 'rewrite pql plan export to emit per-table monthly changelog files', 'Replace the current JSON snapshot export (writes pql-plan.json) with the changelog format: emit SQL upsert lines into .pql/changelog/<table>/<YYYY-MM>.sql, one file per (table, month) combination based on the row''s updated_at.
+
+Export pipeline (internal/cli/plan.go + new internal/planning/changelog/):
+1. Read last_export_marker from pql.db meta table (local-only, gitignored side of state).
+2. SELECT * FROM <table> WHERE updated_at > last_export_marker, ordered by (updated_at, hash). Two-pass: emit rows whose updated_at falls in the previous month into <prev-month>.sql, then current month into <current-month>.sql. Late-arriving rows for older months are rare but possible after clock corrections / backdated imports — handle the bucket placement by row, not by export time.
+3. Each emitted line is an INSERT ... ON CONFLICT(<pk>) DO UPDATE SET ... WHERE excluded.updated_at > target.updated_at OR (excluded.updated_at = target.updated_at AND excluded.hash > target.hash). Use the canonical-projection helper from T-17 so the SQL line is byte-stable across replicas.
+4. Append (don''t rewrite — files are append-only by month).
+5. Advance last_export_marker after successful write.
+
+Stage written files via git add (the existing --stage flag pattern from T-5).
+
+Touches: internal/cli/plan.go (export verb body), new internal/planning/changelog/exporter.go, internal/planning/repo/meta.go (marker storage). Tests: round-trip with T-20 import; same-millisecond rows get sorted deterministically by hash; previous-month bucket only touched when rows belong there.
+
+Decisions still source from markdown, not changelog (D-8 preserved) — exporter skips the decisions table.', 'done', 'high', NULL, NULL, 'D-15', '2026-05-08 07:46:54', '2026-05-08 17:17:21', NULL, '03f774b55da1158c6da171691a9cea71', 1) ON CONFLICT(id) DO UPDATE SET type=excluded.type, parent_id=excluded.parent_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (id, type, parent_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-21', 'task', 'T-16', 'implement pql plan rebuild for branch-switch and rebase recovery', 'New subcommand pql plan rebuild — drops planning tables and replays the full changelog from scratch. Used by post-checkout (branch switch) and post-rewrite (rebase) hooks because LWW-guarded incremental replay can only INSERT/UPDATE — it can''t remove rows that exist on the previous branch but not the new one.
+
+Rebuild pipeline (internal/cli/plan.go):
+1. DELETE FROM each planning table (or DROP and rely on schema files to recreate — simpler).
+2. Reset last_import_marker, last_export_marker.
+3. Run the import flow from T-20 against the entire changelog.
+4. Stdout: summary (tables rebuilt, rows replayed, time taken).
+5. Stderr: progress diagnostics for hook visibility.
+
+Surface as a first-class command, not just a hook callee — power users may invoke it for disaster recovery or after manual changelog edits. Document under ''Plan subcommands'' in the skill.
+
+Touches: internal/cli/plan.go (new rebuild verb), reuses the importer from T-20. Tests: rebuild-from-empty, rebuild-after-branch-with-deleted-rows (must not leak previous branch state), idempotent re-rebuild.', 'done', 'high', NULL, NULL, 'D-18', '2026-05-08 07:47:16', '2026-05-08 17:17:21', NULL, '11bc15af18594758fef585d4bbf1d9f7', 1) ON CONFLICT(id) DO UPDATE SET type=excluded.type, parent_id=excluded.parent_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (id, type, parent_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-20', 'task', 'T-16', 'rewrite pql plan import to replay changelog directories', 'Replace JSON import with changelog replay. Walk .pql/changelog/<table>/ directories in lexicographic file order so 0000-schema.sql and other zero-prefixed schema files run before year-prefixed data files. Replay every line that hasn''t been seen since last_import_marker (tracked per-file via mtime or per-line via offset).
+
+Import pipeline (internal/cli/plan.go + internal/planning/changelog/importer.go):
+1. Read last_import_marker from pql.db meta.
+2. For each .pql/changelog/<table>/ directory:
+   a. Run files in lexicographic order, tracking position.
+   b. Schema files apply via CREATE TABLE IF NOT EXISTS (idempotent).
+   c. Data files: each line is an inline-guarded upsert; replay is idempotent because the WHERE clause from T-19 prevents stale lines from overwriting newer state.
+3. Advance last_import_marker on success.
+
+Idempotency is load-bearing: the same line replayed N times converges to the same result, regardless of starting state. This is the property that lets the hooks (D-18) be cheap and the import to fire from multiple paths (post-merge, pql plan rebuild) without coordination.
+
+Touches: internal/cli/plan.go (import verb body), new internal/planning/changelog/importer.go, internal/planning/repo/meta.go. Tests: replay-twice convergence, replay-out-of-order convergence, schema_version mismatch handling (refuse and surface diagnostic), partial-replay resumption after interrupted run.', 'done', 'high', NULL, NULL, 'D-15', '2026-05-08 07:47:06', '2026-05-08 17:17:21', NULL, '512a987adf62c6bef96f62ab87eb47ed', 1) ON CONFLICT(id) DO UPDATE SET type=excluded.type, parent_id=excluded.parent_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
