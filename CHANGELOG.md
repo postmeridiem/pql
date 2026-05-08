@@ -11,6 +11,18 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.23] - 2026-05-08
+
+### Changed
+
+- T-16 implementation tree closed at the dev-repo round-trip
+  level: T-24 (schema-migration generation) folded into T-22 +
+  D-19 — the per-table `0000-schema.sql` already carries version
+  markers and the no-ALTER stance from D-19 made numbered
+  schema-NNN files unnecessary. T-25 (clide integration test
+  scenario) flagged ready for a manual validation pass against
+  the postmeridiem/clide repo.
+
 ## [1.4.22] - 2026-05-08
 
 ### Changed
