@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.4.19
-status: v1.4.19 — T-20 rewires `pql plan import` to replay changelog files; --legacy flag for the old JSON snapshot path.
+version: 1.4.20
+status: v1.4.20 — T-21 adds `pql plan rebuild` (truncate replicated tables + replay changelog); used by post-checkout / post-rewrite hooks.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

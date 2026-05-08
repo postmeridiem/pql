@@ -11,6 +11,20 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.20] - 2026-05-08
+
+### Added
+
+- `pql plan rebuild` — truncate the replicated planning tables
+  (tickets, ticket_deps, ticket_labels, ticket_history) and replay
+  every file under `.pql/changelog/` from scratch (T-21, D-18).
+  Used by the post-checkout and post-rewrite hooks to handle the
+  case incremental replay can't: rows that existed on the previous
+  branch but not the new one. Decisions and decision_refs are
+  markdown-sourced (D-8) and are intentionally left untouched —
+  follow rebuild with `pql decisions sync` if the decisions/ tree
+  changed.
+
 ## [1.4.19] - 2026-05-08
 
 ### Changed

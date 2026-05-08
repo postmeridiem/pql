@@ -32,6 +32,7 @@ func newPlanCmd() *cobra.Command {
 	cmd.AddCommand(newPlanWhatsNextCmd())
 	cmd.AddCommand(newPlanReviewCmd())
 	cmd.AddCommand(newPlanExportCmd())
+	cmd.AddCommand(newPlanRebuildCmd())
 	cmd.AddCommand(newPlanImportCmd())
 	return cmd
 }
@@ -321,6 +322,56 @@ func stageChangelog(ctx context.Context, paths []string) error {
 		return fmt.Errorf("git add changelog files: %v: %s", err, out)
 	}
 	return nil
+}
+
+// --- rebuild ---
+
+func newPlanRebuildCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rebuild",
+		Short: "Drop replicated tables and replay .pql/changelog/ from scratch",
+		Long: `Truncate the replicated planning tables (tickets, ticket_deps,
+ticket_labels, ticket_history) and replay every changelog file
+under .pql/changelog/. Used by the post-checkout and post-rewrite
+hooks (D-18) because LWW-guarded incremental replay can't remove
+rows that existed on the previous branch but not the new one.
+
+Decisions and decision_refs are NOT touched — they are
+markdown-sourced (D-8) and refreshed via ` + "`pql decisions sync`" + `.
+After a branch switch that changed decisions/*.md, follow rebuild
+with that command.
+
+  pql plan rebuild        # power-user / disaster recovery
+  # or invoked from the post-checkout / post-rewrite hooks`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			res, err := changelog.Rebuild(ctx, pdb.SQL(), cfg.Vault.Path)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
+			rOpts, err := renderOptsFromFlags(cmd)
+			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			rOpts.Out = cmd.OutOrStdout()
+			if _, err := render.One(res, rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			return nil
+		},
+	}
 }
 
 // --- import ---
