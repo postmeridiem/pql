@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 )
 
@@ -375,5 +376,89 @@ func TestNextTicketID_Increments(t *testing.T) {
 
 	if id1 != "T-1" || id2 != "T-2" {
 		t.Errorf("ids = %q, %q — want T-1, T-2", id1, id2)
+	}
+}
+
+// readHash returns the stored hash + canonical_version for tickets.id = id.
+func readHash(t *testing.T, db *sql.DB, id string) (hash string, canonicalVersion int) {
+	t.Helper()
+	if err := db.QueryRow(
+		`SELECT hash, canonical_version FROM tickets WHERE id = ?`, id,
+	).Scan(&hash, &canonicalVersion); err != nil {
+		t.Fatalf("read hash %s: %v", id, err)
+	}
+	return hash, canonicalVersion
+}
+
+func TestCreateTicket_PopulatesHash(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	id, err := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "h-test"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	h, v := readHash(t, db, id)
+	if h == "" {
+		t.Errorf("hash empty after create")
+	}
+	if v != 1 {
+		t.Errorf("canonical_version = %d, want 1", v)
+	}
+}
+
+func TestSetStatus_ChangesHash(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	id, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "h-test"})
+	before, _ := readHash(t, db, id)
+
+	if err := SetStatus(ctx, db, id, "ready", "claude"); err != nil {
+		t.Fatalf("setstatus: %v", err)
+	}
+	after, _ := readHash(t, db, id)
+	if before == after {
+		t.Errorf("hash unchanged after status change: %s", before)
+	}
+}
+
+func TestUpdateTicket_NoOpKeepsHashStable(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	id, _ := CreateTicket(ctx, db, NewTicketOpts{
+		Type: "task", Title: "h-test", Priority: "medium",
+	})
+	before, _ := readHash(t, db, id)
+
+	// Same values — UpdateTicket should detect no diff and return without
+	// touching the row, leaving the hash stable.
+	priority := "medium"
+	if err := UpdateTicket(ctx, db, id, UpdateTicketFields{
+		Priority: &priority,
+	}, "claude"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	after, _ := readHash(t, db, id)
+	if before != after {
+		t.Errorf("no-op update changed hash: %s -> %s", before, after)
+	}
+}
+
+func TestUpdateTicket_RealChangeChangesHash(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	id, _ := CreateTicket(ctx, db, NewTicketOpts{
+		Type: "task", Title: "h-test", Priority: "medium",
+	})
+	before, _ := readHash(t, db, id)
+
+	priority := "high"
+	if err := UpdateTicket(ctx, db, id, UpdateTicketFields{
+		Priority: &priority,
+	}, "claude"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	after, _ := readHash(t, db, id)
+	if before == after {
+		t.Errorf("real change left hash unchanged: %s", before)
 	}
 }

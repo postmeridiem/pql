@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/postmeridiem/pql/internal/planning"
 )
 
 // Snapshot is the portable JSON shape for plan export/import.
@@ -97,14 +99,19 @@ func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 
 	for _, d := range snap.Decisions {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO decisions (id, type, domain, title, status, date, file_path, synced_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+			INSERT INTO decisions (id, type, domain, title, status, date, file_path,
+				synced_at, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'))
 			ON CONFLICT(id) DO UPDATE SET
 				type=excluded.type, domain=excluded.domain, title=excluded.title,
 				status=excluded.status, date=excluded.date, file_path=excluded.file_path,
-				synced_at=datetime('now')
+				synced_at=datetime('now'),
+				updated_at=datetime('now')
 		`, d.ID, d.Type, d.Domain, d.Title, d.Status, d.Date, d.FilePath); err != nil {
 			return fmt.Errorf("import decision %s: %w", d.ID, err)
+		}
+		if err := planning.RehashDecision(ctx, tx, d.ID); err != nil {
+			return err
 		}
 	}
 
@@ -112,11 +119,18 @@ func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 		return fmt.Errorf("import: clear refs: %w", err)
 	}
 	for _, r := range snap.DecisionRefs {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO decision_refs (source_id, target_id, ref_type, note)
-			VALUES (?, ?, ?, ?)
-		`, r.SourceID, r.TargetID, r.RefType, r.Note); err != nil {
+		res, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO decision_refs
+				(source_id, target_id, ref_type, note, created_at, updated_at)
+			VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+		`, r.SourceID, r.TargetID, r.RefType, r.Note)
+		if err != nil {
 			return fmt.Errorf("import ref %s->%s: %w", r.SourceID, r.TargetID, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			if err := planning.RehashDecisionRef(ctx, tx, r.SourceID, r.TargetID, r.RefType); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -134,16 +148,26 @@ func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 			t.AssignedTo, t.Team, t.DecisionRef, t.CreatedAt, t.UpdatedAt); err != nil {
 			return fmt.Errorf("import ticket %s: %w", t.ID, err)
 		}
+		if err := planning.RehashTicket(ctx, tx, t.ID); err != nil {
+			return err
+		}
 	}
 
 	if _, err := tx.ExecContext(ctx, "DELETE FROM ticket_deps"); err != nil {
 		return fmt.Errorf("import: clear deps: %w", err)
 	}
 	for _, d := range snap.TicketDeps {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO ticket_deps (blocker_id, blocked_id) VALUES (?, ?)
-		`, d.BlockerID, d.BlockedID); err != nil {
+		res, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
+			VALUES (?, ?, datetime('now'), datetime('now'))
+		`, d.BlockerID, d.BlockedID)
+		if err != nil {
 			return fmt.Errorf("import dep %s->%s: %w", d.BlockerID, d.BlockedID, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			if err := planning.RehashTicketDep(ctx, tx, d.BlockerID, d.BlockedID); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -151,10 +175,17 @@ func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 		return fmt.Errorf("import: clear labels: %w", err)
 	}
 	for _, l := range snap.TicketLabels {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO ticket_labels (ticket_id, label) VALUES (?, ?)
-		`, l.TicketID, l.Label); err != nil {
+		res, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO ticket_labels (ticket_id, label, created_at, updated_at)
+			VALUES (?, ?, datetime('now'), datetime('now'))
+		`, l.TicketID, l.Label)
+		if err != nil {
 			return fmt.Errorf("import label %s/%s: %w", l.TicketID, l.Label, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			if err := planning.RehashTicketLabel(ctx, tx, l.TicketID, l.Label); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -162,11 +193,21 @@ func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 		return fmt.Errorf("import: clear history: %w", err)
 	}
 	for _, h := range snap.History {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, h.TicketID, h.Field, h.OldValue, h.NewValue, h.ChangedBy, h.ChangedAt); err != nil {
+		res, err := tx.ExecContext(ctx, `
+			INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+				changed_at, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, h.TicketID, h.Field, h.OldValue, h.NewValue, h.ChangedBy,
+			h.ChangedAt, h.ChangedAt, h.ChangedAt)
+		if err != nil {
 			return fmt.Errorf("import history: %w", err)
+		}
+		rowid, err := res.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("import history rowid: %w", err)
+		}
+		if err := planning.RehashTicketHistory(ctx, tx, rowid); err != nil {
+			return err
 		}
 	}
 

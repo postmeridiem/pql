@@ -9,10 +9,16 @@ import (
 type migration struct {
 	version int
 	sql     string
+	// goFunc, if set, runs inside the same transaction as sql, after
+	// the sql block executes. Used when a migration needs to compute
+	// values that can't be expressed in pure SQL — most notably the
+	// content hash backfill in v2 (see backfillHashesV2).
+	goFunc func(context.Context, *sql.Tx) error
 }
 
 var migrations = []migration{
-	{1, migrationV1},
+	{version: 1, sql: migrationV1},
+	{version: 2, sql: migrationV2SQL, goFunc: backfillHashesV2},
 }
 
 const migrationV1 = `
@@ -113,6 +119,12 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		if _, err := tx.ExecContext(ctx, m.sql); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("planning: apply migration v%d: %w", m.version, err)
+		}
+		if m.goFunc != nil {
+			if err := m.goFunc(ctx, tx); err != nil {
+				_ = tx.Rollback()
+				return fmt.Errorf("planning: apply migration v%d (go step): %w", m.version, err)
+			}
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO schema_migrations (version) VALUES (?)`, m.version,

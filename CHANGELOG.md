@@ -11,6 +11,20 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.16] - 2026-05-08
+
+### Changed
+
+- Planning database schema migrates to v2 on first invocation after
+  upgrade. Every planning table grows `hash` (MD5 of the canonical
+  row projection) and `canonical_version` (= 1) columns; tables
+  that lacked them also get `created_at`/`updated_at` with sensible
+  defaults. Hashes are backfilled in the same migration
+  transaction. Foundation for the upcoming changelog-based
+  replication (D-15..D-18, T-16 tree) — repo writes now keep the
+  hash column current on every INSERT/UPDATE so future export can
+  rely on it.
+
 ## [1.4.15] - 2026-05-06
 
 ### Changed

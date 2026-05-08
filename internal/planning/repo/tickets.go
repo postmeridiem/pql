@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/postmeridiem/pql/internal/planning"
 )
 
 // Validator maps. Strings are intentionally inline — these are the
@@ -76,7 +78,13 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 		return "", err
 	}
 
-	_, err = db.ExecContext(ctx, `
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("repo: begin create ticket: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO tickets (id, type, parent_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -88,9 +96,14 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 		nullIfEmpty(opts.AssignedTo),
 		nullIfEmpty(opts.Team),
 		nullIfEmpty(opts.DecisionRef),
-	)
-	if err != nil {
+	); err != nil {
 		return "", fmt.Errorf("repo: create ticket: %w", err)
+	}
+	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("repo: commit create ticket: %w", err)
 	}
 	return id, nil
 }
@@ -218,12 +231,20 @@ func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string)
 	`, newStatus, id); err != nil {
 		return fmt.Errorf("repo: update status: %w", err)
 	}
+	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+		return err
+	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by)
-		VALUES (?, 'status', ?, ?, ?)
-	`, id, t.Status, newStatus, nullIfEmpty(changedBy)); err != nil {
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+			created_at, updated_at)
+		VALUES (?, 'status', ?, ?, ?, datetime('now'), datetime('now'))
+	`, id, t.Status, newStatus, nullIfEmpty(changedBy))
+	if err != nil {
 		return fmt.Errorf("repo: record history: %w", err)
+	}
+	if err := rehashHistoryRow(ctx, tx, res); err != nil {
+		return err
 	}
 
 	return tx.Commit()
@@ -255,12 +276,20 @@ func Assign(ctx context.Context, db *sql.DB, id, agent, changedBy string) error 
 	`, agent, id); err != nil {
 		return fmt.Errorf("repo: update assigned_to: %w", err)
 	}
+	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+		return err
+	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by)
-		VALUES (?, 'assigned_to', ?, ?, ?)
-	`, id, nullIfEmpty(oldVal), agent, nullIfEmpty(changedBy)); err != nil {
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+			created_at, updated_at)
+		VALUES (?, 'assigned_to', ?, ?, ?, datetime('now'), datetime('now'))
+	`, id, nullIfEmpty(oldVal), agent, nullIfEmpty(changedBy))
+	if err != nil {
 		return fmt.Errorf("repo: record assign history: %w", err)
+	}
+	if err := rehashHistoryRow(ctx, tx, res); err != nil {
+		return err
 	}
 
 	return tx.Commit()
@@ -310,12 +339,20 @@ func SetParent(ctx context.Context, db *sql.DB, id, parentID, changedBy string) 
 	`, nullIfEmpty(parentID), id); err != nil {
 		return fmt.Errorf("repo: update parent_id: %w", err)
 	}
+	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+		return err
+	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by)
-		VALUES (?, 'parent_id', ?, ?, ?)
-	`, id, nullIfEmpty(oldVal), nullIfEmpty(parentID), nullIfEmpty(changedBy)); err != nil {
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+			created_at, updated_at)
+		VALUES (?, 'parent_id', ?, ?, ?, datetime('now'), datetime('now'))
+	`, id, nullIfEmpty(oldVal), nullIfEmpty(parentID), nullIfEmpty(changedBy))
+	if err != nil {
 		return fmt.Errorf("repo: record setparent history: %w", err)
+	}
+	if err := rehashHistoryRow(ctx, tx, res); err != nil {
+		return err
 	}
 
 	return tx.Commit()
@@ -563,17 +600,35 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, f UpdateTicketFiel
 	if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
 		return fmt.Errorf("repo: update ticket: %w", err)
 	}
+	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+		return err
+	}
 
 	for _, c := range changes {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by)
-			VALUES (?, ?, ?, ?, ?)
-		`, id, c.field, nullIfEmpty(c.old), nullIfEmpty(c.new), nullIfEmpty(changedBy)); err != nil {
+		res, err := tx.ExecContext(ctx, `
+			INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+				created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+		`, id, c.field, nullIfEmpty(c.old), nullIfEmpty(c.new), nullIfEmpty(changedBy))
+		if err != nil {
 			return fmt.Errorf("repo: record update history: %w", err)
+		}
+		if err := rehashHistoryRow(ctx, tx, res); err != nil {
+			return err
 		}
 	}
 
 	return tx.Commit()
+}
+
+// rehashHistoryRow looks up the rowid of a just-inserted ticket_history
+// row and rehashes it. ticket_history has no natural primary key.
+func rehashHistoryRow(ctx context.Context, tx *sql.Tx, res sql.Result) error {
+	rowid, err := res.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("repo: history rowid: %w", err)
+	}
+	return planning.RehashTicketHistory(ctx, tx, rowid)
 }
 
 func scanTickets(rows *sql.Rows) ([]Ticket, error) {

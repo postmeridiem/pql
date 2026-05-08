@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-05-08T07:57:59Z",
+  "exported_at": "2026-05-08T09:19:55Z",
   "decisions": [
     {
       "id": "D-1",
@@ -557,11 +557,12 @@
       "parent_id": "T-16",
       "title": "add canonical row columns and content hash to all planning tables",
       "description": "Forward migration on every planning table to add three columns: created_at (timestamp, set on INSERT), updated_at (timestamp, set on every write — used as the LWW key and the changelog month-bucketing key), and hash (TEXT, set to H(canonical(row except hash))). Plus a canonical_version column or schema-level marker so canonicalisation rule changes are detectable.\n\nImplement canonical row serialisation in internal/planning/ — a fixed column-order projection with strict value formatting (NULL sentinel, integer vs float distinction, timestamp ISO format). Compute hash at write-finalisation in repo helpers (internal/planning/repo/*.go) on every INSERT/UPDATE so the column is always current.\n\nInline LWW guard for upserts is the SQL idiom: WHERE excluded.updated_at \u003e target.updated_at OR (excluded.updated_at = target.updated_at AND excluded.hash \u003e target.hash). Codify it in a helper used by both writers (D-16) and exporters (T-19).\n\nTouches: internal/planning/schema.go (forward migration), internal/planning/repo/*.go (write paths), new internal/planning/canonical.go (canonicalisation + hash function). Tests: round-trip determinism (two replicas hash identical content to identical bytes), canonical_version bump triggers re-hash, NULL/edge-value coverage.",
-      "status": "backlog",
+      "status": "done",
       "priority": "high",
+      "assigned_to": "claude",
       "decision_ref": "D-16",
       "created_at": "2026-05-08 07:46:29",
-      "updated_at": "2026-05-08 07:46:29"
+      "updated_at": "2026-05-08 09:19:42"
     },
     {
       "id": "T-18",
@@ -569,11 +570,11 @@
       "parent_id": "T-16",
       "title": "implement soft deletes via deleted_at column",
       "description": "Forward migration adding deleted_at (timestamp, NULL = live) to every planning table. Route every existing DELETE through UPDATE ... SET deleted_at = ?. Update every read query in internal/planning/repo/*.go to filter WHERE deleted_at IS NULL by default; add an --include-deleted flag where the surface needs visibility into stubs (e.g. audit, recovery).\n\nStubs persist in pql.db and the changelog so other replicas know the deletion is intentional rather than missing — without this, replay against a fresh replica would re-INSERT the row. The changelog upsert for a deletion is just a regular line where deleted_at is non-null.\n\nTouches: internal/planning/schema.go (migration), internal/planning/repo/*.go (every read query gains the filter; every delete becomes a soft-delete UPDATE), audit log entries for deletion events (recorded as today). Tests: round-trip soft delete / undelete, replay convergence (replica A deletes, replica B has never seen the row → replay creates the stub, then deletion replays into the stub).\n\nStub purge / retention is deferred to Q-10. This ticket lands the column and the read-path filter; it does not implement purge.",
-      "status": "backlog",
+      "status": "ready",
       "priority": "high",
       "decision_ref": "D-17",
       "created_at": "2026-05-08 07:46:41",
-      "updated_at": "2026-05-08 07:46:41"
+      "updated_at": "2026-05-08 08:10:09"
     },
     {
       "id": "T-19",
@@ -858,6 +859,47 @@
       "old_value": "in_progress",
       "new_value": "done",
       "changed_at": "2026-05-06 14:39:25"
+    },
+    {
+      "ticket_id": "T-17",
+      "field": "status",
+      "old_value": "backlog",
+      "new_value": "ready",
+      "changed_at": "2026-05-08 08:10:09"
+    },
+    {
+      "ticket_id": "T-18",
+      "field": "status",
+      "old_value": "backlog",
+      "new_value": "ready",
+      "changed_at": "2026-05-08 08:10:09"
+    },
+    {
+      "ticket_id": "T-17",
+      "field": "status",
+      "old_value": "ready",
+      "new_value": "in_progress",
+      "changed_at": "2026-05-08 08:11:41"
+    },
+    {
+      "ticket_id": "T-17",
+      "field": "assigned_to",
+      "new_value": "claude",
+      "changed_at": "2026-05-08 08:11:41"
+    },
+    {
+      "ticket_id": "T-17",
+      "field": "status",
+      "old_value": "in_progress",
+      "new_value": "review",
+      "changed_at": "2026-05-08 09:17:23"
+    },
+    {
+      "ticket_id": "T-17",
+      "field": "status",
+      "old_value": "review",
+      "new_value": "done",
+      "changed_at": "2026-05-08 09:19:42"
     }
   ]
 }

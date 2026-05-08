@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/postmeridiem/pql/internal/planning"
 	"github.com/postmeridiem/pql/internal/planning/parser"
 )
 
@@ -41,8 +42,9 @@ func SyncDecisions(ctx context.Context, db *sql.DB, decisionsDir, repoRoot strin
 	upserted := 0
 	for _, r := range records {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO decisions (id, type, domain, title, status, date, file_path, synced_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+			INSERT INTO decisions (id, type, domain, title, status, date, file_path,
+				synced_at, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'))
 			ON CONFLICT(id) DO UPDATE SET
 				type      = excluded.type,
 				domain    = excluded.domain,
@@ -50,9 +52,13 @@ func SyncDecisions(ctx context.Context, db *sql.DB, decisionsDir, repoRoot strin
 				status    = excluded.status,
 				date      = excluded.date,
 				file_path = excluded.file_path,
-				synced_at = datetime('now')
+				synced_at = datetime('now'),
+				updated_at = datetime('now')
 		`, r.ID, r.Type, r.Domain, r.Title, r.Status, nullIfEmpty(r.Date), r.FilePath); err != nil {
 			return nil, fmt.Errorf("repo: upsert %s: %w", r.ID, err)
+		}
+		if err := planning.RehashDecision(ctx, tx, r.ID); err != nil {
+			return nil, err
 		}
 		upserted++
 	}
@@ -79,11 +85,19 @@ func SyncDecisions(ctx context.Context, db *sql.DB, decisionsDir, repoRoot strin
 				warnings = append(warnings, fmt.Sprintf("broken ref: %s -> %s (%s)", r.ID, ref.TargetID, ref.RefType))
 				continue
 			}
-			if _, err := tx.ExecContext(ctx, `
-				INSERT OR IGNORE INTO decision_refs (source_id, target_id, ref_type, note)
-				VALUES (?, ?, ?, ?)
-			`, r.ID, ref.TargetID, ref.RefType, ref.Note); err != nil {
+			res, err := tx.ExecContext(ctx, `
+				INSERT OR IGNORE INTO decision_refs
+					(source_id, target_id, ref_type, note, created_at, updated_at)
+				VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+			`, r.ID, ref.TargetID, ref.RefType, ref.Note)
+			if err != nil {
 				return nil, fmt.Errorf("repo: insert ref %s->%s: %w", r.ID, ref.TargetID, err)
+			}
+			n, _ := res.RowsAffected()
+			if n > 0 {
+				if err := planning.RehashDecisionRef(ctx, tx, r.ID, ref.TargetID, ref.RefType); err != nil {
+					return nil, err
+				}
 			}
 			refsCreated++
 		}

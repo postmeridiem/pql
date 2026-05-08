@@ -11,6 +11,7 @@ import (
 	"github.com/postmeridiem/pql/internal/cli/render"
 	"github.com/postmeridiem/pql/internal/config"
 	"github.com/postmeridiem/pql/internal/diag"
+	"github.com/postmeridiem/pql/internal/planning"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
 
@@ -461,10 +462,17 @@ func newTicketBlockCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			if _, err := pdb.SQL().ExecContext(ctx, `
-				INSERT OR IGNORE INTO ticket_deps (blocker_id, blocked_id) VALUES (?, ?)
-			`, byID, args[0]); err != nil {
+			res, err := pdb.SQL().ExecContext(ctx, `
+				INSERT OR IGNORE INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
+				VALUES (?, ?, datetime('now'), datetime('now'))
+			`, byID, args[0])
+			if err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				if err := planning.RehashTicketDep(ctx, pdb.SQL(), byID, args[0]); err != nil {
+					return &exitError{code: diag.DataErr, msg: err.Error()}
+				}
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -563,6 +571,9 @@ func newTicketTeamCmd() *cobra.Command {
 				`, team, id); err != nil {
 					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
 				}
+				if err := planning.RehashTicket(ctx, pdb.SQL(), id); err != nil {
+					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
+				}
 				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
 				if err != nil {
 					return &exitError{code: diag.Software, msg: err.Error()}
@@ -611,16 +622,24 @@ func newTicketLabelCmd() *cobra.Command {
 				}
 				switch action {
 				case "add":
-					_, err = pdb.SQL().ExecContext(ctx, `
-						INSERT OR IGNORE INTO ticket_labels (ticket_id, label) VALUES (?, ?)
+					res, addErr := pdb.SQL().ExecContext(ctx, `
+						INSERT OR IGNORE INTO ticket_labels (ticket_id, label, created_at, updated_at)
+						VALUES (?, ?, datetime('now'), datetime('now'))
 					`, id, label)
+					if addErr != nil {
+						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, addErr)}
+					}
+					if n, _ := res.RowsAffected(); n > 0 {
+						if rehashErr := planning.RehashTicketLabel(ctx, pdb.SQL(), id, label); rehashErr != nil {
+							return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, rehashErr)}
+						}
+					}
 				case "rm":
-					_, err = pdb.SQL().ExecContext(ctx, `
+					if _, rmErr := pdb.SQL().ExecContext(ctx, `
 						DELETE FROM ticket_labels WHERE ticket_id = ? AND label = ?
-					`, id, label)
-				}
-				if err != nil {
-					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
+					`, id, label); rmErr != nil {
+						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, rmErr)}
+					}
 				}
 			}
 
