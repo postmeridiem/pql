@@ -11,6 +11,22 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.19] - 2026-05-08
+
+### Changed
+
+- `pql plan import` now replays `.pql/changelog/` files into pql.db
+  by default, instead of unmarshalling a single `pql-plan.json`
+  (T-20, D-15). Per-file mtime check skips already-replayed
+  content; inline LWW guards from T-19 make replay idempotent and
+  order-free, so the same file can be replayed any number of
+  times without duplicates or stale overwrites. New `--legacy
+  <path>` flag preserves the old JSON-snapshot import path for
+  upgrading repos that still only have `pql-plan.json` (T-23 will
+  automate this).
+- New `last_import_marker` key in the `meta` table tracks per-replica
+  replay progress.
+
 ## [1.4.18] - 2026-05-08
 
 ### Changed

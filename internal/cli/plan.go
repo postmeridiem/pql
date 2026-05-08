@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 
@@ -325,16 +326,24 @@ func stageChangelog(ctx context.Context, paths []string) error {
 // --- import ---
 
 func newPlanImportCmd() *cobra.Command {
-	var inFile string
+	var legacyFile string
 	cmd := &cobra.Command{
 		Use:   "import",
-		Short: "Restore planning state from a JSON export",
-		Long: `Import planning state from a pql plan export file. Existing data
-is upserted (decisions, tickets) or replaced (refs, deps, labels,
-history).
+		Short: "Replay .pql/changelog/ into pql.db",
+		Long: `Replay every changelog file under .pql/changelog/ that has been
+modified since the last import. Inline LWW guards on each line make
+replay idempotent and order-free — the same file can be replayed any
+number of times against any starting state and converge to the same
+result (D-16). Used after git pull / merge to bring pql.db up to
+date with incoming changelog edits, and to populate a fresh pql.db
+on first open.
 
-  pql plan import                         # reads .pql/pql-plan.json
-  pql plan import --from planning.json    # custom filename`,
+  pql plan import                          # replay .pql/changelog/
+  pql plan import --legacy pql-plan.json   # one-time migration from
+                                            # the pre-T-19 JSON snapshot
+
+The --legacy path is for upgrading a repo that still has only the
+old pql-plan.json; T-23 polishes this into an automatic migration.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -348,25 +357,43 @@ history).
 			}
 			defer func() { _ = pdb.Close() }()
 
-			data, err := os.ReadFile(inFile) //nolint:gosec // G304: user-specified import file
+			if legacyFile != "" {
+				return importLegacySnapshot(ctx, pdb.SQL(), legacyFile, cmd.OutOrStdout())
+			}
+
+			res, err := changelog.Import(ctx, pdb.SQL(), cfg.Vault.Path)
 			if err != nil {
-				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("read %s: %v", inFile, err)}
-			}
-
-			var snap repo.Snapshot
-			if err := json.Unmarshal(data, &snap); err != nil {
-				return &exitError{code: diag.DataErr, msg: fmt.Sprintf("parse %s: %v", inFile, err)}
-			}
-
-			if err := repo.Import(ctx, pdb.SQL(), &snap); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "imported from %s (%d decisions, %d tickets)\n",
-				inFile, len(snap.Decisions), len(snap.Tickets))
+			rOpts, err := renderOptsFromFlags(cmd)
+			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			rOpts.Out = cmd.OutOrStdout()
+			if _, err := render.One(res, rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&inFile, "from", defaultSnapshotFile, "input file path")
+	cmd.Flags().StringVar(&legacyFile, "legacy", "", "import from a pre-T-19 pql-plan.json snapshot instead of replaying the changelog")
 	return cmd
+}
+
+func importLegacySnapshot(ctx context.Context, db *sql.DB, path string, out io.Writer) error {
+	data, err := os.ReadFile(path) //nolint:gosec // G304: user-specified --legacy path
+	if err != nil {
+		return &exitError{code: diag.NoInput, msg: fmt.Sprintf("read %s: %v", path, err)}
+	}
+	var snap repo.Snapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return &exitError{code: diag.DataErr, msg: fmt.Sprintf("parse %s: %v", path, err)}
+	}
+	if err := repo.Import(ctx, db, &snap); err != nil {
+		return &exitError{code: diag.Software, msg: err.Error()}
+	}
+	_, _ = fmt.Fprintf(out, "imported from %s (legacy: %d decisions, %d tickets)\n",
+		path, len(snap.Decisions), len(snap.Tickets))
+	return nil
 }
