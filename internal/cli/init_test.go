@@ -187,6 +187,9 @@ func TestRenderPostMergeHook_BakesAbsolutePath(t *testing.T) {
 	if !strings.Contains(body, "'/usr/local/bin/pql' plan import") {
 		t.Errorf("hook missing absolute path for import:\n%s", body)
 	}
+	if !strings.Contains(body, "'/usr/local/bin/pql' decisions sync") {
+		t.Errorf("hook missing decisions sync after import:\n%s", body)
+	}
 	if strings.Contains(body, "command -v pql") {
 		t.Error("post-merge hook should not rely on PATH-based command -v guard")
 	}

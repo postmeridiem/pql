@@ -491,12 +491,15 @@ const pqlPostMergeMarker = "# --- pql plan import ---"
 // same reason renderPreCommitHook does — git's hook PATH isn't the
 // user's interactive PATH.
 func renderPostMergeHook(pqlPath string) string {
+	q := shellQuote(pqlPath)
 	return `# --- pql plan import ---
 # Auto-installed by pql init. Replays new changelog files into
-# pql.db after pull/merge. Inline LWW guards in the changelog SQL
-# (D-16) make replay idempotent — running this when nothing
-# changed is a near no-op.
-` + shellQuote(pqlPath) + ` plan import 2>/dev/null || true
+# pql.db, then re-syncs decisions from decisions/*.md so the
+# markdown-sourced half stays in step with whatever the merge
+# brought in. Both ops are idempotent — a no-op merge is a no-op
+# hook (D-8, D-16).
+` + q + ` plan import 2>/dev/null || true
+` + q + ` decisions sync 2>/dev/null || true
 # --- end pql ---
 `
 }

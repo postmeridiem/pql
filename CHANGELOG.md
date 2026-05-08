@@ -11,6 +11,17 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.25] - 2026-05-08
+
+### Changed
+
+- The post-merge hook now also runs `pql decisions sync` after
+  `pql plan import`, so a pull that brought in `decisions/*.md`
+  edits propagates to pql.db's decisions and decision_refs tables
+  without a manual follow-up. Closes the symmetric gap that the
+  init-time decisions-sync fix already addressed; T-25's scenario
+  5 (decision divergence) now passes without intervention.
+
 ## [1.4.24] - 2026-05-08
 
 ### Added
