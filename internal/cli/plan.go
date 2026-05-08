@@ -12,6 +12,7 @@ import (
 
 	"github.com/postmeridiem/pql/internal/cli/render"
 	"github.com/postmeridiem/pql/internal/diag"
+	"github.com/postmeridiem/pql/internal/planning/changelog"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
 
@@ -245,22 +246,25 @@ func renderOne[T any](cmd *cobra.Command, v *T) error {
 // --- export ---
 
 func newPlanExportCmd() *cobra.Command {
-	var outFile string
 	var stage bool
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export planning state to a JSON file for version control",
-		Long: `Dump all planning state (decisions, tickets, refs, deps, labels,
-history) to a single JSON file. The file is meant to be committed
-to git — pql.db itself stays gitignored.
+		Short: "Append planning state changes to .pql/changelog/<table>/<YYYY-MM>.sql",
+		Long: `Append per-table monthly SQL upsert files under .pql/changelog/
+for every replicated planning row that has been modified since the
+last export. The files are meant to be committed to git; replicas
+pull them and replay via pql plan import.
 
-  pql plan export                         # writes .pql/pql-plan.json
-  pql plan export --to planning.json      # custom filename
-  pql plan export --stage                 # also git-add the file
+Replicated tables: tickets, ticket_deps, ticket_labels,
+ticket_history. Decisions and decision_refs are markdown-sourced
+(D-8) and travel with their .md files instead.
 
---stage runs ` + "`git add <outFile>`" + ` after the write; idempotent across
-untracked / tracked / unchanged states. Used by the pre-commit hook
-installed by pql init.`,
+  pql plan export            # append to .pql/changelog/<table>/<YYYY-MM>.sql
+  pql plan export --stage    # also git-add the touched files
+
+--stage runs ` + "`git add`" + ` over the files written in this run;
+idempotent across untracked / tracked / unchanged states. Used by
+the pre-commit hook installed by pql init.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -274,44 +278,46 @@ installed by pql init.`,
 			}
 			defer func() { _ = pdb.Close() }()
 
-			snap, err := repo.Export(ctx, pdb.SQL())
+			res, err := changelog.Export(ctx, pdb.SQL(), cfg.Vault.Path)
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
-			data, err := json.MarshalIndent(snap, "", "  ")
+			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			rOpts.Out = cmd.OutOrStdout()
+			if _, err := render.One(res, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
-
-			if err := os.WriteFile(outFile, append(data, '\n'), 0o644); err != nil { //nolint:gosec // G306: export file is meant to be committed
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "exported to %s\n", outFile)
 
 			if stage {
-				if err := stageSnapshot(ctx, outFile); err != nil {
+				if err := stageChangelog(ctx, res.FilesWritten); err != nil {
 					return &exitError{code: diag.Software, msg: err.Error()}
 				}
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&outFile, "to", defaultSnapshotFile, "output file path")
-	cmd.Flags().BoolVar(&stage, "stage", false, "git-add the exported file after writing")
+	cmd.Flags().BoolVar(&stage, "stage", false, "git-add the changelog files written in this run")
 	return cmd
 }
 
-// stageSnapshot runs `git add <path>` so the exported snapshot lands in
-// the next commit. `git add` is idempotent across untracked, tracked,
-// and unchanged states, so callers (notably the pre-commit hook) don't
-// need to inspect the file's git state before calling.
-func stageSnapshot(ctx context.Context, path string) error {
-	cmd := exec.CommandContext(ctx, "git", "add", "--", path) //nolint:gosec // G204: path is the resolved snapshot output path; -- separator prevents flag injection
+// stageChangelog runs `git add` over each file written by the
+// exporter. `git add` is idempotent across untracked / tracked /
+// unchanged states, so the pre-commit hook can call this without
+// inspecting per-file git state. Skips silently when there is nothing
+// to stage (no rows changed since the last marker).
+func stageChangelog(ctx context.Context, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	args := append([]string{"add", "--"}, paths...)
+	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // G204: paths come from the exporter's resolved file list under .pql/changelog/
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git add %s: %v: %s", path, err, out)
+		return fmt.Errorf("git add changelog files: %v: %s", err, out)
 	}
 	return nil
 }

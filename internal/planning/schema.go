@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS ticket_history (
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
     deleted_at        TEXT,
-    hash              TEXT,
+    hash              TEXT UNIQUE,
     canonical_version INTEGER
 );
 
@@ -102,6 +102,12 @@ CREATE TABLE IF NOT EXISTS ticket_labels (
     hash              TEXT,
     canonical_version INTEGER,
     PRIMARY KEY (ticket_id, label)
+);
+
+CREATE TABLE IF NOT EXISTS meta (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status        ON tickets(status);
@@ -123,6 +129,10 @@ var replicationColumns = []string{
 // expectedColumns lists the column set every planning table must
 // carry under the current schema. Used by verifySchema to detect
 // pql.db files built under an older shape (D-19: no in-place upgrade).
+//
+// The meta table is intentionally absent: it carries replica-local
+// state (export/import markers) that doesn't participate in
+// replication, so it doesn't need the replication-column conventions.
 //
 //nolint:goconst // schema column names — extracting each as a constant
 // would obscure the schema's surface area for no real benefit; this

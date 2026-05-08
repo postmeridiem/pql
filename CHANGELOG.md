@@ -11,6 +11,26 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.18] - 2026-05-08
+
+### Changed
+
+- `pql plan export` now writes per-table monthly SQL upsert files
+  under `.pql/changelog/<table>/<YYYY-MM>.sql` instead of a single
+  `pql-plan.json` snapshot (T-19, D-15). Files are append-only,
+  byte-deterministic across replicas, and carry inline LWW guards
+  (`WHERE excluded.updated_at > target.updated_at OR …`) so replay
+  is order-free and idempotent (D-16). `--stage` flag now `git add`s
+  the touched changelog files instead of the snapshot. Decisions and
+  decision_refs are intentionally excluded — they are markdown-sourced
+  per D-8 and travel with their `.md` files. The `--to` flag is
+  removed (no single output path under the new format).
+- New `meta` table for replica-local state (export/import markers).
+  Not part of replication; ignored by `verifySchema`.
+- `ticket_history.hash` gains a `UNIQUE` constraint so replay can
+  dedupe identical audit events idempotently via
+  `ON CONFLICT(hash) DO NOTHING`.
+
 ## [1.4.17] - 2026-05-08
 
 ### Changed

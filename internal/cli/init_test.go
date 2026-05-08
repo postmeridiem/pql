@@ -242,8 +242,8 @@ func TestPlanExportStage_StagesUntrackedSnapshot(t *testing.T) {
 		t.Fatalf("chdir: %v", err)
 	}
 
-	if err := stageSnapshot(t.Context(), "snapshot.json"); err != nil {
-		t.Fatalf("stageSnapshot untracked: %v", err)
+	if err := stageChangelog(t.Context(), []string{"snapshot.json"}); err != nil {
+		t.Fatalf("stageChangelog untracked: %v", err)
 	}
 	out, err := exec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
 	if err != nil {
@@ -255,8 +255,14 @@ func TestPlanExportStage_StagesUntrackedSnapshot(t *testing.T) {
 
 	// Idempotent: running again on a tracked-clean file is a no-op
 	// (no error).
-	if err := stageSnapshot(t.Context(), "snapshot.json"); err != nil {
-		t.Fatalf("stageSnapshot tracked: %v", err)
+	if err := stageChangelog(t.Context(), []string{"snapshot.json"}); err != nil {
+		t.Fatalf("stageChangelog tracked: %v", err)
+	}
+
+	// Empty path list is also a no-op (no rows changed since last
+	// export → nothing to stage).
+	if err := stageChangelog(t.Context(), nil); err != nil {
+		t.Fatalf("stageChangelog empty: %v", err)
 	}
 }
 

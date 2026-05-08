@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.4.17
-status: v1.4.17 — T-18 lands soft deletes + D-19 retires the migration runner; pql.db schema is one CREATE per table now.
+version: 1.4.18
+status: v1.4.18 — T-19 rewires `pql plan export` to write per-table monthly changelog files under .pql/changelog/.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT
