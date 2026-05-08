@@ -1,18 +1,8 @@
 #!/bin/sh
 # --- pql plan import ---
-# Auto-installed by pql init. Imports planning state when the
-# snapshot file changes on pull/merge. Skips if local planning
-# state has uncommitted changes to avoid data loss.
-changed=$(git diff-tree -r --name-only ORIG_HEAD HEAD -- .pql/pql-plan.json 2>/dev/null)
-if [ -n "$changed" ]; then
-    tmpfile=$(mktemp)
-    '/var/home/jeroenschweitzer/.local/bin/pql' plan export --to "$tmpfile" 2>/dev/null
-    if git show ORIG_HEAD:.pql/pql-plan.json 2>/dev/null | diff -q - "$tmpfile" >/dev/null 2>&1; then
-        '/var/home/jeroenschweitzer/.local/bin/pql' plan import 2>/dev/null
-    else
-        echo "pql: skipping plan import — local planning state has uncommitted changes" >&2
-        echo "pql: run 'pql plan export' then merge manually, then 'pql plan import'" >&2
-    fi
-    rm -f "$tmpfile"
-fi
+# Auto-installed by pql init. Replays new changelog files into
+# pql.db after pull/merge. Inline LWW guards in the changelog SQL
+# (D-16) make replay idempotent — running this when nothing
+# changed is a near no-op.
+'/var/mnt/data/projects/pql/bin/pql' plan import 2>/dev/null || true
 # --- end pql ---

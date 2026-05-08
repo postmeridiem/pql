@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -22,19 +23,37 @@ import (
 	"github.com/postmeridiem/pql/internal/planning"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 	"github.com/postmeridiem/pql/internal/skill"
+	"github.com/postmeridiem/pql/internal/version"
 )
 
 // initResult is the JSON shape `pql init` emits on stdout. Each sub-stat
 // describes one of the project-state fixers init runs through.
 type initResult struct {
-	Directory       string           `json:"directory"`
-	Config          initConfigStat   `json:"config"`
-	Gitignore       initGitignore    `json:"gitignore"`
-	Skills          []initSkillStat  `json:"skills"`
-	Permissions     initPermissions  `json:"permissions"`
-	PlanImport      initPlanImport   `json:"plan_import"`
-	Hook            initHookStat     `json:"hook"`
-	PostMergeHook   initHookStat     `json:"post_merge_hook"`
+	Directory         string           `json:"directory"`
+	Config            initConfigStat   `json:"config"`
+	Gitignore         initGitignore    `json:"gitignore"`
+	Skills            []initSkillStat  `json:"skills"`
+	Permissions       initPermissions  `json:"permissions"`
+	PlanImport        initPlanImport   `json:"plan_import"`
+	Changelog         initChangelogStat `json:"changelog"`
+	GitAttributes     initGitAttribute `json:"gitattributes"`
+	Hook              initHookStat     `json:"hook"`
+	PostMergeHook     initHookStat     `json:"post_merge_hook"`
+	PostCheckoutHook  initHookStat     `json:"post_checkout_hook"`
+	PostRewriteHook   initHookStat     `json:"post_rewrite_hook"`
+}
+
+type initChangelogStat struct {
+	Root         string   `json:"root,omitempty"`
+	TablesSeeded []string `json:"tables_seeded,omitempty"`
+	Skipped      string   `json:"skipped,omitempty"`
+}
+
+type initGitAttribute struct {
+	Path     string `json:"path,omitempty"`
+	Appended bool   `json:"appended"`
+	Existed  bool   `json:"existed"`
+	Skipped  string `json:"skipped,omitempty"`
 }
 
 type initHookStat struct {
@@ -179,22 +198,30 @@ drift.`,
 
 			permStat := ensurePqlPermissions(dir)
 			planStat := autoImportPlan(cmd.Context(), dir)
+			changelogStat := ensureChangelogDirs(dir)
+			gitAttrStat := ensureGitAttributes(dir)
 			hookStat := ensurePlanExportHook(dir)
 			postMergeStat := ensurePlanImportHook(dir)
+			postCheckoutStat := ensurePostCheckoutHook(dir)
+			postRewriteStat := ensurePostRewriteHook(dir)
 
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			result := &initResult{
-				Directory:     dir,
-				Config:        cfgStat,
-				Gitignore:     giStat,
-				Skills:        skillStats,
-				Permissions:   permStat,
-				PlanImport:    planStat,
-				Hook:          hookStat,
-				PostMergeHook: postMergeStat,
+				Directory:        dir,
+				Config:           cfgStat,
+				Gitignore:        giStat,
+				Skills:           skillStats,
+				Permissions:      permStat,
+				PlanImport:       planStat,
+				Changelog:        changelogStat,
+				GitAttributes:    gitAttrStat,
+				Hook:             hookStat,
+				PostMergeHook:    postMergeStat,
+				PostCheckoutHook: postCheckoutStat,
+				PostRewriteHook:  postRewriteStat,
 			}
 			if _, err := render.One(result, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
@@ -450,23 +477,49 @@ const pqlPostMergeMarker = "# --- pql plan import ---"
 // same reason renderPreCommitHook does — git's hook PATH isn't the
 // user's interactive PATH.
 func renderPostMergeHook(pqlPath string) string {
-	q := shellQuote(pqlPath)
 	return `# --- pql plan import ---
-# Auto-installed by pql init. Imports planning state when the
-# snapshot file changes on pull/merge. Skips if local planning
-# state has uncommitted changes to avoid data loss.
-changed=$(git diff-tree -r --name-only ORIG_HEAD HEAD -- .pql/pql-plan.json 2>/dev/null)
-if [ -n "$changed" ]; then
-    tmpfile=$(mktemp)
-    ` + q + ` plan export --to "$tmpfile" 2>/dev/null
-    if git show ORIG_HEAD:.pql/pql-plan.json 2>/dev/null | diff -q - "$tmpfile" >/dev/null 2>&1; then
-        ` + q + ` plan import 2>/dev/null
-    else
-        echo "pql: skipping plan import — local planning state has uncommitted changes" >&2
-        echo "pql: run 'pql plan export' then merge manually, then 'pql plan import'" >&2
-    fi
-    rm -f "$tmpfile"
+# Auto-installed by pql init. Replays new changelog files into
+# pql.db after pull/merge. Inline LWW guards in the changelog SQL
+# (D-16) make replay idempotent — running this when nothing
+# changed is a near no-op.
+` + shellQuote(pqlPath) + ` plan import 2>/dev/null || true
+# --- end pql ---
+`
+}
+
+const pqlPostCheckoutMarker = "# --- pql plan rebuild (post-checkout) ---"
+
+// renderPostCheckoutHook fires only on branch switches ($3 == "1");
+// file checkouts ($3 == "0") are no-op. Branch switch lands on a
+// different changelog tree — rebuild is the only correct response
+// because incremental replay can't remove rows that lived on the
+// previous branch but not the new one (D-18).
+func renderPostCheckoutHook(pqlPath string) string {
+	return `# --- pql plan rebuild (post-checkout) ---
+# Auto-installed by pql init. On branch checkout (third arg == 1),
+# rebuild pql.db from the changelog so the local cache reflects the
+# new branch's planning state. File-level checkouts ($3 == 0) are
+# skipped.
+if [ "$3" = "1" ]; then
+    echo "pql: rebuilding planning database from changelog..." >&2
+    ` + shellQuote(pqlPath) + ` plan rebuild >/dev/null 2>&1 || true
 fi
+# --- end pql ---
+`
+}
+
+const pqlPostRewriteMarker = "# --- pql plan rebuild (post-rewrite) ---"
+
+// renderPostRewriteHook fires after rebase or `git commit --amend`.
+// Both can rewrite the changelog history visible to this clone, so
+// rebuild is the only safe response (D-18).
+func renderPostRewriteHook(pqlPath string) string {
+	return `# --- pql plan rebuild (post-rewrite) ---
+# Auto-installed by pql init. Fires after rebase / amend, both of
+# which can rewrite the local view of the changelog. Rebuild is
+# safe and deterministic; incremental replay would miss removals.
+echo "pql: rebuilding planning database after rewrite..." >&2
+` + shellQuote(pqlPath) + ` plan rebuild >/dev/null 2>&1 || true
 # --- end pql ---
 `
 }
@@ -558,6 +611,91 @@ func ensurePlanImportHook(dir string) initHookStat {
 	}
 	stat.Installed = true
 	return stat
+}
+
+// hookEndMarker bookends every pql-managed hook block. installNamedHook
+// uses the (start-marker, end-marker) pair to locate and replace its
+// own block while preserving any user customizations outside it.
+const hookEndMarker = "# --- end pql ---"
+
+// installNamedHook factors the four hooks' shared shape: ensure
+// .pql/hooks/<name>, replace the pql-managed block in-place if it
+// already exists (preserves any user content outside the block),
+// prepend it if the file exists without a block, or create the file
+// from scratch. Always (re-)plants the matching git hook shim.
+func installNamedHook(dir, name, marker, body string) initHookStat {
+	gitDir := filepath.Join(dir, ".git")
+	if _, err := os.Stat(gitDir); err != nil {
+		return initHookStat{Skipped: "not a git repository"}
+	}
+	hookDir := filepath.Join(dir, ".pql", "hooks")
+	hookPath := filepath.Join(hookDir, name)
+	stat := initHookStat{Path: hookPath}
+	if err := os.MkdirAll(hookDir, 0o750); err != nil {
+		stat.Skipped = "mkdir: " + err.Error()
+		return stat
+	}
+	defer ensureGitHookShim(dir, name)
+
+	existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: known hook path
+	if err == nil {
+		stat.Existed = true
+		updated, replaced := replaceHookBlock(string(existing), marker, body)
+		if !replaced {
+			// File exists but our block isn't there — prepend.
+			updated = body + "\n" + string(existing)
+		}
+		if updated == string(existing) {
+			return stat
+		}
+		if err := os.WriteFile(hookPath, []byte(updated), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
+			stat.Skipped = "write: " + err.Error()
+			return stat
+		}
+		stat.Installed = true
+		return stat
+	}
+	content := "#!/bin/sh\n" + body
+	if err := os.WriteFile(hookPath, []byte(content), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
+		stat.Skipped = "write: " + err.Error()
+		return stat
+	}
+	stat.Installed = true
+	return stat
+}
+
+// replaceHookBlock locates the (marker … hookEndMarker) span in
+// existing content and replaces it with newBlock. Returns
+// (updatedContent, true) on success; (existing, false) if the start
+// marker isn't found. End marker without start marker is treated as
+// "no block" — the caller falls back to prepend.
+func replaceHookBlock(existing, marker, newBlock string) (string, bool) {
+	startIdx := strings.Index(existing, marker)
+	if startIdx < 0 {
+		return existing, false
+	}
+	tail := existing[startIdx:]
+	endIdx := strings.Index(tail, hookEndMarker)
+	if endIdx < 0 {
+		return existing, false
+	}
+	endIdx += len(hookEndMarker)
+	// Consume the trailing newline if present so we don't accumulate
+	// blank lines on every replacement.
+	if endIdx < len(tail) && tail[endIdx] == '\n' {
+		endIdx++
+	}
+	return existing[:startIdx] + newBlock + existing[startIdx+endIdx:], true
+}
+
+func ensurePostCheckoutHook(dir string) initHookStat {
+	return installNamedHook(dir, "post-checkout", pqlPostCheckoutMarker,
+		renderPostCheckoutHook(resolvePqlPath()))
+}
+
+func ensurePostRewriteHook(dir string) initHookStat {
+	return installNamedHook(dir, "post-rewrite", pqlPostRewriteMarker,
+		renderPostRewriteHook(resolvePqlPath()))
 }
 
 func ensureGitHookShim(dir, hookName string) {
@@ -842,6 +980,90 @@ func ensurePqlPermissions(dir string) initPermissions {
 		return stat
 	}
 	stat.Added = added
+	return stat
+}
+
+// ensureChangelogDirs creates .pql/changelog/<table>/ for every
+// replicated planning table and seeds each with a 0000-schema.sql
+// containing the full pql.db schema (CREATE TABLE IF NOT EXISTS).
+// The schema file is the same in every directory because CREATE
+// statements are idempotent and a self-describing replay (any
+// SQLite tool can replay one directory standalone) doesn't pay if
+// it can't re-create the table set on its own. Per D-15.
+func ensureChangelogDirs(dir string) initChangelogStat {
+	root := filepath.Join(dir, ".pql", "changelog")
+	tables := []string{"tickets", "ticket_deps", "ticket_labels", "ticket_history"}
+	stat := initChangelogStat{Root: root}
+	for _, table := range tables {
+		tableDir := filepath.Join(root, table)
+		if err := os.MkdirAll(tableDir, 0o755); err != nil { //nolint:gosec // G301: changelog dirs are committed
+			stat.Skipped = "mkdir " + tableDir + ": " + err.Error()
+			return stat
+		}
+		schemaPath := filepath.Join(tableDir, "0000-schema.sql")
+		if _, err := os.Stat(schemaPath); err == nil {
+			continue
+		}
+		body := "-- Auto-generated by pql init. CREATE TABLE statements\n" +
+			"-- for the planning schema; per-table dir keeps the changelog\n" +
+			"-- self-describing per D-15. CREATE TABLE IF NOT EXISTS is\n" +
+			"-- idempotent so running schema files from each directory in\n" +
+			"-- replay order is harmless.\n" +
+			"--\n" +
+			"-- Importer parses the markers below to detect schema drift\n" +
+			"-- between the producing pql version and the local one — a\n" +
+			"-- bumped canonical_version means projection rules changed\n" +
+			"-- and replay must refuse rather than silently corrupt state.\n" +
+			"-- pql:created_by: " + version.Version + "\n" +
+			"-- pql:canonical_version: " + strconv.Itoa(planning.CanonicalVersion) + "\n\n" +
+			planning.Schema()
+		if err := os.WriteFile(schemaPath, []byte(body), 0o644); err != nil { //nolint:gosec // G306: schema file is committed to git
+			stat.Skipped = "write " + schemaPath + ": " + err.Error()
+			return stat
+		}
+		stat.TablesSeeded = append(stat.TablesSeeded, table)
+	}
+	return stat
+}
+
+// ensureGitAttributes appends `.pql/changelog/*.sql merge=union` to
+// .gitattributes if not already present. Per D-18: same-line
+// conflicts on changelog files (rare; updated_at distinguishes lines)
+// resolve as union — both sides land, the inline LWW guard does the
+// actual conflict resolution at replay time.
+func ensureGitAttributes(dir string) initGitAttribute {
+	path := filepath.Join(dir, ".gitattributes")
+	stat := initGitAttribute{Path: path}
+	const line = ".pql/changelog/*.sql merge=union"
+
+	existing, err := os.ReadFile(path) //nolint:gosec // G304: known file
+	if err == nil {
+		stat.Existed = true
+		if strings.Contains(string(existing), line) {
+			return stat
+		}
+		var buf bytes.Buffer
+		buf.Write(existing)
+		if len(existing) > 0 && existing[len(existing)-1] != '\n' {
+			buf.WriteByte('\n')
+		}
+		buf.WriteString(line + "\n")
+		if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil { //nolint:gosec // G306: committed file
+			stat.Skipped = "write: " + err.Error()
+			return stat
+		}
+		stat.Appended = true
+		return stat
+	}
+	if !os.IsNotExist(err) {
+		stat.Skipped = "stat: " + err.Error()
+		return stat
+	}
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o644); err != nil { //nolint:gosec // G306: committed file
+		stat.Skipped = "write: " + err.Error()
+		return stat
+	}
+	stat.Appended = true
 	return stat
 }
 

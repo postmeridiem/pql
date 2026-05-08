@@ -184,14 +184,76 @@ func TestRenderPreCommitHook_EscapesSingleQuote(t *testing.T) {
 
 func TestRenderPostMergeHook_BakesAbsolutePath(t *testing.T) {
 	body := renderPostMergeHook("/usr/local/bin/pql")
-	if !strings.Contains(body, "'/usr/local/bin/pql' plan export --to") {
-		t.Errorf("hook missing absolute path for export:\n%s", body)
-	}
 	if !strings.Contains(body, "'/usr/local/bin/pql' plan import") {
 		t.Errorf("hook missing absolute path for import:\n%s", body)
 	}
 	if strings.Contains(body, "command -v pql") {
 		t.Error("post-merge hook should not rely on PATH-based command -v guard")
+	}
+}
+
+func TestRenderPostCheckoutHook_OnlyFiresOnBranchSwitch(t *testing.T) {
+	body := renderPostCheckoutHook("/usr/local/bin/pql")
+	if !strings.Contains(body, `if [ "$3" = "1" ]`) {
+		t.Errorf("post-checkout hook should gate on $3 == 1:\n%s", body)
+	}
+	if !strings.Contains(body, "'/usr/local/bin/pql' plan rebuild") {
+		t.Errorf("post-checkout hook should call plan rebuild:\n%s", body)
+	}
+}
+
+func TestRenderPostRewriteHook_RebuildsAlways(t *testing.T) {
+	body := renderPostRewriteHook("/usr/local/bin/pql")
+	if !strings.Contains(body, "'/usr/local/bin/pql' plan rebuild") {
+		t.Errorf("post-rewrite hook should call plan rebuild:\n%s", body)
+	}
+}
+
+func TestEnsureChangelogDirs_CreatesPerTableSchemaFiles(t *testing.T) {
+	dir := t.TempDir()
+	stat := ensureChangelogDirs(dir)
+	if stat.Skipped != "" {
+		t.Fatalf("skipped: %s", stat.Skipped)
+	}
+	wantTables := []string{"tickets", "ticket_deps", "ticket_labels", "ticket_history"}
+	for _, table := range wantTables {
+		schemaPath := filepath.Join(dir, ".pql", "changelog", table, "0000-schema.sql")
+		body, err := os.ReadFile(schemaPath)
+		if err != nil {
+			t.Errorf("missing schema for %s: %v", table, err)
+			continue
+		}
+		if !strings.Contains(string(body), "pql:canonical_version:") {
+			t.Errorf("%s schema missing canonical_version marker", table)
+		}
+		if !strings.Contains(string(body), "CREATE TABLE IF NOT EXISTS tickets") {
+			t.Errorf("%s schema missing tickets CREATE", table)
+		}
+	}
+}
+
+func TestEnsureGitAttributes_AppendsMergeUnion(t *testing.T) {
+	dir := t.TempDir()
+	stat := ensureGitAttributes(dir)
+	if !stat.Appended {
+		t.Errorf("expected appended=true, got %#v", stat)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, ".gitattributes"))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(string(body), ".pql/changelog/*.sql merge=union") {
+		t.Errorf("missing merge=union line:\n%s", body)
+	}
+
+	// Idempotent: a second call should not double-append.
+	stat2 := ensureGitAttributes(dir)
+	if stat2.Appended {
+		t.Errorf("second call should be idempotent, got %#v", stat2)
+	}
+	body2, _ := os.ReadFile(filepath.Join(dir, ".gitattributes"))
+	if strings.Count(string(body2), ".pql/changelog/*.sql merge=union") != 1 {
+		t.Errorf("line duplicated on re-run:\n%s", body2)
 	}
 }
 

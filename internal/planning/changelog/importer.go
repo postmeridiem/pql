@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/postmeridiem/pql/internal/planning"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
 
@@ -36,6 +38,13 @@ type ImportResult struct {
 // Empty changelog directory is not an error — Import returns an
 // empty result so first-run scenarios (fresh clone, new project)
 // behave cleanly.
+//
+// FK constraints are disabled during replay because per-table dir
+// ordering (lexicographic) doesn't match FK dependency order —
+// e.g. ticket_deps replays before tickets but its INSERTs reference
+// tickets.id. The replayed data was already FK-valid when it was
+// originally written, so re-enforcing during replay buys nothing
+// and breaks bootstrapping.
 func Import(ctx context.Context, db *sql.DB, vaultPath string) (*ImportResult, error) {
 	root := filepath.Join(vaultPath, ChangelogDir)
 	if _, err := os.Stat(root); os.IsNotExist(err) {
@@ -43,6 +52,13 @@ func Import(ctx context.Context, db *sql.DB, vaultPath string) (*ImportResult, e
 	} else if err != nil {
 		return nil, fmt.Errorf("changelog: stat %s: %w", root, err)
 	}
+
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return nil, fmt.Errorf("changelog: disable FKs for replay: %w", err)
+	}
+	defer func() {
+		_, _ = db.ExecContext(ctx, `PRAGMA foreign_keys = ON`)
+	}()
 
 	marker, err := repo.ReadMeta(ctx, db, repo.MetaLastImportMarker)
 	if err != nil {
@@ -90,6 +106,11 @@ func Import(ctx context.Context, db *sql.DB, vaultPath string) (*ImportResult, e
 			if err != nil {
 				return nil, fmt.Errorf("changelog: read %s: %w", path, err)
 			}
+			if isSchemaFile(name) {
+				if err := checkSchemaCompatibility(content, path); err != nil {
+					return nil, err
+				}
+			}
 			if _, err := db.ExecContext(ctx, string(content)); err != nil {
 				return nil, fmt.Errorf("changelog: replay %s: %w", path, err)
 			}
@@ -117,6 +138,58 @@ func parseMarker(m string) time.Time {
 		return time.Time{}
 	}
 	return t.UTC()
+}
+
+// isSchemaFile recognises the per-table schema fixtures planted by
+// pql init (D-15). They sort first lexicographically so the schema
+// is verified before any data file is replayed in the same dir.
+func isSchemaFile(name string) bool {
+	return strings.HasSuffix(name, "-schema.sql") ||
+		strings.HasSuffix(name, "schema.sql") && strings.HasPrefix(name, "0")
+}
+
+// checkSchemaCompatibility scans a schema file for the
+// `pql:canonical_version` marker that pql init bakes into the
+// header and refuses to proceed if the file was produced under a
+// canonical_version this binary doesn't speak. The defensive break
+// matters because two pql versions can produce the same SQL bytes
+// but interpret column-set or projection rules differently — a
+// silent replay would corrupt state. Producing-pql version is also
+// surfaced in error messages for debugging.
+func checkSchemaCompatibility(content []byte, path string) error {
+	produced := readMarker(content, "pql:created_by")
+	canon := readMarker(content, "pql:canonical_version")
+	if canon == "" {
+		// Pre-T-22 schema files don't carry markers. Tolerate them
+		// silently — they were written under canonical_version 1
+		// by definition (no other version has shipped yet).
+		return nil
+	}
+	got, err := strconv.Atoi(canon)
+	if err != nil {
+		return fmt.Errorf("changelog: %s: invalid pql:canonical_version %q: %w", path, canon, err)
+	}
+	if got != planning.CanonicalVersion {
+		return fmt.Errorf(
+			"changelog: %s declares canonical_version %d (pql:created_by=%s) "+
+				"but this binary speaks canonical_version %d — refusing replay; "+
+				"upgrade pql or recover via fresh import",
+			path, got, produced, planning.CanonicalVersion)
+	}
+	return nil
+}
+
+// readMarker pulls a `-- pql:<key>: <value>` line out of a schema
+// file's header. Returns "" if the marker isn't present.
+func readMarker(content []byte, key string) string {
+	prefix := "-- " + key + ":"
+	for _, line := range strings.Split(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+		}
+	}
+	return ""
 }
 
 // countStatements approximates the row count for a replayed file by

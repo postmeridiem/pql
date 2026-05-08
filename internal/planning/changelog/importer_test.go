@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -161,6 +162,36 @@ func TestImport_LWWGuardPreventsStaleOverwrite(t *testing.T) {
 	if title != "newer-title" || status != "done" {
 		t.Errorf("LWW guard failed — older import overwrote newer state: title=%q status=%q",
 			title, status)
+	}
+}
+
+func TestImport_RefusesMismatchedCanonicalVersion(t *testing.T) {
+	ctx := context.Background()
+	vault, db := setupVault(t)
+
+	// Plant a per-table dir with a schema file that declares an
+	// impossible canonical_version (999) so the importer must refuse.
+	tableDir := filepath.Join(vault, ".pql", "changelog", "tickets")
+	if err := os.MkdirAll(tableDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	schemaBody := "-- pql:created_by: 99.99.99\n" +
+		"-- pql:canonical_version: 999\n" +
+		"CREATE TABLE IF NOT EXISTS tickets (id TEXT PRIMARY KEY);\n"
+	schemaPath := filepath.Join(tableDir, "0000-schema.sql")
+	if err := os.WriteFile(schemaPath, []byte(schemaBody), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := os.Chtimes(schemaPath, time.Now(), time.Now()); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+
+	_, err := Import(ctx, db, vault)
+	if err == nil {
+		t.Fatal("expected schema-drift refusal, got nil")
+	}
+	if !strings.Contains(err.Error(), "canonical_version") {
+		t.Errorf("error should reference canonical_version mismatch: %v", err)
 	}
 }
 

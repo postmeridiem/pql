@@ -4,5 +4,5 @@
 # snapshot so it lands in the same commit as the change that produced
 # it. The absolute pql path is baked in at install time — re-run
 # 'pql init' if the binary moves.
-'/var/home/jeroenschweitzer/.local/bin/pql' plan export --stage 2>/dev/null || true
+'/var/mnt/data/projects/pql/bin/pql' plan export --stage 2>/dev/null || true
 # --- end pql ---

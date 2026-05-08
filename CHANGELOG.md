@@ -11,6 +11,43 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.21] - 2026-05-08
+
+### Added
+
+- `pql init` now bootstraps the full replication lifecycle (T-22,
+  D-18):
+  - Creates `.pql/changelog/<table>/` for every replicated planning
+    table (tickets, ticket_deps, ticket_labels, ticket_history) and
+    plants `0000-schema.sql` in each — full CREATE statements with
+    a `pql:created_by` / `pql:canonical_version` header. The
+    importer parses those markers and refuses replay when the
+    declared canonical_version mismatches this binary, catching
+    schema drift across pql versions before it can corrupt state.
+  - Installs `post-checkout` (rebuild on branch switch only,
+    `$3 == 1`) and `post-rewrite` (rebuild on rebase / amend) hooks
+    alongside the existing pre-commit and post-merge ones. Both new
+    hooks call `pql plan rebuild` with a visible status message —
+    branch-switch cleanup is no longer hidden behind random later
+    slowdowns.
+  - Updates the post-merge hook to call `pql plan import` (the new
+    changelog-replay path) instead of the legacy JSON-snapshot
+    diff-and-import logic.
+  - Appends `.pql/changelog/*.sql merge=union` to `.gitattributes`
+    so same-line conflicts on the changelog (rare; `updated_at`
+    distinguishes lines) resolve as a union — both sides land and
+    the inline LWW guard sorts it out at replay.
+- Hook installer now upgrades an existing pql-managed block in place
+  while preserving any user customizations outside it.
+
+### Changed
+
+- Replay (`pql plan import` / `pql plan rebuild`) now disables foreign
+  keys for the duration of the SQL execution. Per-directory replay
+  ordering doesn't match FK dependency order, and the data being
+  replayed was already FK-valid when written — re-enforcing buys
+  nothing and breaks bootstrap.
+
 ## [1.4.20] - 2026-05-08
 
 ### Added
