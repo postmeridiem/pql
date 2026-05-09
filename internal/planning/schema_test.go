@@ -149,6 +149,18 @@ func TestMigrate_RefusesIncompleteSchema(t *testing.T) {
 	if !strings.Contains(err.Error(), "earlier schema") {
 		t.Errorf("error message should hint at earlier schema; got %q", err)
 	}
+	// Recovery hints must distinguish legacy (pql init / --legacy)
+	// from changelog-present (pql plan rebuild) cases — clideclaude
+	// hit the old single-path message and ran the wrong recovery.
+	if !strings.Contains(err.Error(), "pql plan rebuild") {
+		t.Errorf("error should suggest pql plan rebuild for changelog repos; got %q", err)
+	}
+	if !strings.Contains(err.Error(), "pql init") {
+		t.Errorf("error should suggest pql init for legacy repos; got %q", err)
+	}
+	if !strings.Contains(err.Error(), "--legacy") {
+		t.Errorf("error should mention --legacy flag for explicit JSON imports; got %q", err)
+	}
 }
 
 func tableColumns(t *testing.T, db *sql.DB, table string) map[string]bool {

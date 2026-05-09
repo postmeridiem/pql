@@ -190,9 +190,12 @@ func verifySchema(ctx context.Context, db *sql.DB) error {
 		for _, col := range want {
 			if !got[col] {
 				return fmt.Errorf(
-					"planning: %s.%s missing — pql.db is from an earlier schema; "+
-						"delete .pql/pql.db and run 'pql plan import' to rebuild "+
-						"(or 'pql plan rebuild' if changelog files are present)",
+					"planning: %s.%s missing — pql.db is from an earlier schema.\n"+
+						"Recovery (delete the local pql.db first, then):\n"+
+						"  • Repo with committed .pql/changelog/:  pql plan rebuild\n"+
+						"  • Repo with only .pql/pql-plan.json:    pql init    "+
+						"(autoImportPlan picks the legacy path)\n"+
+						"  • or pql plan import --legacy .pql/pql-plan.json",
 					table, col)
 			}
 		}
