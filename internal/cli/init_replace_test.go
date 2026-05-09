@@ -72,6 +72,46 @@ func TestInstallNamedHook_UpgradesExistingHook(t *testing.T) {
 	}
 }
 
+// TestEnsurePqlGitignore_AppendsChangelogException regresses T-27:
+// an existing .gitignore that has /.pql/* + !/.pql/pql-plan.json +
+// !/.pql/hooks/ but lacks !/.pql/changelog/ should pick up the
+// missing entry on pql init.
+func TestEnsurePqlGitignore_AppendsChangelogException(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	pre := "# stuff\n.pql/*\n!.pql/pql-plan.json\n!.pql/hooks/\n"
+	if err := os.WriteFile(path, []byte(pre), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	stat, err := ensurePqlGitignore(path)
+	if err != nil {
+		t.Fatalf("ensurePqlGitignore: %v", err)
+	}
+	if !stat.Appended {
+		t.Errorf("expected Appended=true, got %#v", stat)
+	}
+
+	body, _ := os.ReadFile(path)
+	if !strings.Contains(string(body), "!.pql/changelog/") {
+		t.Errorf("missing !.pql/changelog/ entry:\n%s", body)
+	}
+
+	// Idempotent: a second pass with the entry already present must
+	// not duplicate it.
+	stat2, err := ensurePqlGitignore(path)
+	if err != nil {
+		t.Fatalf("second ensurePqlGitignore: %v", err)
+	}
+	if stat2.Appended {
+		t.Errorf("second pass should be no-op, got %#v", stat2)
+	}
+	body2, _ := os.ReadFile(path)
+	if strings.Count(string(body2), "!.pql/changelog/") != 1 {
+		t.Errorf("entry duplicated on re-run:\n%s", body2)
+	}
+}
+
 func TestReplaceHookBlock_NoMarkerReturnsUnchanged(t *testing.T) {
 	existing := "#!/bin/sh\necho hello\n"
 	got, replaced := replaceHookBlock(existing, "# --- pql plan import ---", "x")

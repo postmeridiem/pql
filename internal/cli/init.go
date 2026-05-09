@@ -371,6 +371,7 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 		pqlGlobIgnore:         true,
 		"!.pql/pql-plan.json": true,
 		"!.pql/hooks/":        true,
+		"!.pql/changelog/":    true,
 	}
 	hasDirForm := false
 
@@ -403,7 +404,7 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 		buf.WriteByte('\n')
 	}
 
-	for _, entry := range []string{pqlGlobIgnore, "!.pql/pql-plan.json", "!.pql/hooks/"} {
+	for _, entry := range []string{pqlGlobIgnore, "!.pql/pql-plan.json", "!.pql/hooks/", "!.pql/changelog/"} {
 		if needed[entry] {
 			buf.WriteString(entry)
 			buf.WriteByte('\n')
