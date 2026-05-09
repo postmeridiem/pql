@@ -125,6 +125,37 @@ func TestImport_AdvancesMarker(t *testing.T) {
 	}
 }
 
+// TestImport_AdvancesExportMarker regresses T-26: after Import
+// replays the changelog, last_export_marker should be set so a
+// subsequent `pql plan export` doesn't re-emit every row that just
+// landed.
+func TestImport_AdvancesExportMarker(t *testing.T) {
+	ctx := context.Background()
+	srcVault, srcDB := setupVault(t)
+	seedTicket(t, srcDB, "T-1", "2025-05-08 11:00:00")
+	if _, err := Export(ctx, srcDB, srcVault); err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	dstVault, dstDB := setupVault(t)
+	copyTree(t,
+		filepath.Join(srcVault, ".pql", "changelog"),
+		filepath.Join(dstVault, ".pql", "changelog"),
+	)
+	if _, err := Import(ctx, dstDB, dstVault); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+
+	// Immediately re-exporting should be a no-op — the row's
+	// updated_at predates the marker we just advanced.
+	res, err := Export(ctx, dstDB, dstVault)
+	if err != nil {
+		t.Fatalf("post-import Export: %v", err)
+	}
+	if res.RowsWritten != 0 {
+		t.Errorf("post-import export wrote %d rows, want 0 (changelog content already exported)", res.RowsWritten)
+	}
+}
+
 func TestImport_LWWGuardPreventsStaleOverwrite(t *testing.T) {
 	ctx := context.Background()
 	srcVault, srcDB := setupVault(t)

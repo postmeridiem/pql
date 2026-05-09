@@ -119,8 +119,17 @@ func Import(ctx context.Context, db *sql.DB, vaultPath string) (*ImportResult, e
 		}
 	}
 
-	if err := repo.WriteMeta(ctx, db, repo.MetaLastImportMarker,
-		time.Now().UTC().Format(markerFormat)); err != nil {
+	now := time.Now().UTC().Format(markerFormat)
+	if err := repo.WriteMeta(ctx, db, repo.MetaLastImportMarker, now); err != nil {
+		return nil, err
+	}
+	// Advance last_export_marker too: rows that just replayed from the
+	// changelog are by definition already exported, so a subsequent
+	// `pql plan export` should only emit rows that mutate AFTER this
+	// replay. Without this, every commit re-emits the entire changelog
+	// content (clideclaude T-25 finding 5: ~5KB of unchanged-content
+	// INSERTs per no-op commit).
+	if err := repo.WriteMeta(ctx, db, repo.MetaLastExportMarker, now); err != nil {
 		return nil, err
 	}
 	return res, nil

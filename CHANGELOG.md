@@ -11,6 +11,30 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.27] - 2026-05-09
+
+### Fixed
+
+- Changelog importer now advances `last_export_marker` after a
+  successful replay, in addition to `last_import_marker` (T-26).
+  Without this, every commit after a `pql init` rebuild re-emitted
+  the entire changelog content (~5KB of unchanged-content INSERTs
+  per no-op commit) because the exporter saw an empty marker and
+  treated all rows as new. Surfaced by clide's T-25 round-2 run.
+
+### Changed
+
+- `pql init` now appends `!.pql/changelog/` to `.gitignore` when an
+  existing `/.pql/*` ignore stanza is present (T-27). The convention
+  matches the existing `!.pql/hooks/` and `!.pql/pql-plan.json`
+  exceptions; legacy repos with only the older two no longer need a
+  manual gitignore edit before staging the new changelog directory.
+- Recovery message in `verifySchema` now distinguishes the
+  changelog-present case (`pql plan rebuild`) from the legacy-only
+  case (`pql init` or `pql plan import --legacy`) (T-31). The old
+  single-path message led clideclaude to try `pql plan import`
+  against an empty changelog and end up with an empty pql.db.
+
 ## [1.4.26] - 2026-05-09
 
 ### Fixed
