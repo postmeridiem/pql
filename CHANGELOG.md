@@ -11,6 +11,22 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.26] - 2026-05-09
+
+### Fixed
+
+- `pql plan import --legacy` (and the implicit legacy fallback in
+  `pql init`'s autoImportPlan) used to abort with a foreign-key
+  failure on the first ticket whose `parent_id` pointed forward in
+  the snapshot's `tickets[]` array. Real-world snapshots — clide's
+  in particular — carry many such forward references. Import now
+  enables `PRAGMA defer_foreign_keys` for the duration of the
+  transaction, so FK validity is checked at COMMIT against the
+  fully-loaded set rather than per-row in array order. Behaviour
+  outside the import transaction is unchanged: per-row FK
+  enforcement returns as soon as the import commits. Surfaced by
+  T-25 scenario 1 against clide.
+
 ## [1.4.25] - 2026-05-08
 
 ### Changed

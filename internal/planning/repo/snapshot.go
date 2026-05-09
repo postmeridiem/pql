@@ -90,12 +90,23 @@ func Export(ctx context.Context, db *sql.DB) (*Snapshot, error) {
 // Import restores planning state from a snapshot. Existing data is
 // replaced (upsert for decisions/tickets, delete+reinsert for the
 // rest). Runs in a single transaction.
+//
+// FK enforcement is deferred to commit time: the snapshot stores
+// tickets in JSON-array order, but parent_id can point forward in
+// the array (a ticket can have a parent that appears later). Without
+// deferral the per-row FK check fires on the first forward reference
+// and aborts the import. defer_foreign_keys is per-transaction and
+// per-connection state, so this doesn't leak past the import.
 func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("import: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `PRAGMA defer_foreign_keys = ON`); err != nil {
+		return fmt.Errorf("import: defer FKs: %w", err)
+	}
 
 	for _, d := range snap.Decisions {
 		if _, err := tx.ExecContext(ctx, `

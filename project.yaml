@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.4.25
-status: v1.4.25 — post-merge hook also runs `pql decisions sync` so pulled markdown changes propagate to pql.db without manual intervention.
+version: 1.4.26
+status: v1.4.26 — legacy import defers FK enforcement so snapshots with forward parent references (real clide data) load cleanly.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT
