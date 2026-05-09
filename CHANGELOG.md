@@ -11,6 +11,39 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.28] - 2026-05-10
+
+### Changed
+
+- `.pql/hooks/` is now treated as per-clone state, not committed
+  content (T-28). `pql init` no longer adds `!.pql/hooks/` to its
+  managed `.gitignore` stanza on a fresh project. Each developer's
+  `pql init` plants hook scripts locally with the correct absolute
+  pql binary path for their machine; nothing about the hook bodies
+  is shared across clones.
+  
+  Rationale: the previous "track the hook content" convention
+  collided with the absolute-path baking from T-5 (`pql` is
+  unreliable on git's hook-shell PATH, so we resolve and bake at
+  install time). Tracking content that's by-design per-machine
+  produced a permanent dirty diff for every developer, surfaced by
+  clide's T-25 round-2 run.
+
+### Migration for existing repos
+
+A repo that committed `.pql/hooks/*` under the old convention should:
+
+```sh
+git rm -r --cached .pql/hooks/
+# Edit .gitignore: remove the `!.pql/hooks/` line.
+git commit -m "untrack .pql/hooks/ — now per-clone state"
+pql init                              # plants fresh local hooks
+```
+
+After every developer pulls + runs `pql init` once, hooks behave
+identically to before (just no longer cause cross-clone diff
+churn).
+
 ## [1.4.27] - 2026-05-09
 
 ### Fixed

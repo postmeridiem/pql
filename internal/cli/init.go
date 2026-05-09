@@ -367,10 +367,16 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 
 	lines := strings.Split(string(body), "\n")
 
+	// .pql/hooks/ is intentionally NOT in the managed list. Per T-28,
+	// hooks are per-clone state planted by `pql init`, not committed
+	// content — every developer has a different absolute pql binary
+	// path baked in, and tracking the files just produces a permanent
+	// dirty diff across machines. Existing repos that still carry the
+	// `!.pql/hooks/` exception keep it (we don't actively prune user
+	// content), but new repos get a clean ignore.
 	needed := map[string]bool{
 		pqlGlobIgnore:         true,
 		"!.pql/pql-plan.json": true,
-		"!.pql/hooks/":        true,
 		"!.pql/changelog/":    true,
 	}
 	hasDirForm := false
@@ -404,7 +410,7 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 		buf.WriteByte('\n')
 	}
 
-	for _, entry := range []string{pqlGlobIgnore, "!.pql/pql-plan.json", "!.pql/hooks/", "!.pql/changelog/"} {
+	for _, entry := range []string{pqlGlobIgnore, "!.pql/pql-plan.json", "!.pql/changelog/"} {
 		if needed[entry] {
 			buf.WriteString(entry)
 			buf.WriteByte('\n')
