@@ -452,53 +452,8 @@ func renderPreCommitHook(pqlPath string) string {
 }
 
 func ensurePlanExportHook(dir string) initHookStat {
-	gitDir := filepath.Join(dir, ".git")
-	if _, err := os.Stat(gitDir); err != nil {
-		return initHookStat{Skipped: "not a git repository"}
-	}
-
-	hookDir := filepath.Join(dir, ".pql", "hooks")
-	hookPath := filepath.Join(hookDir, "pre-commit")
-	stat := initHookStat{Path: hookPath}
-
-	if err := os.MkdirAll(hookDir, 0o750); err != nil {
-		stat.Skipped = "mkdir: " + err.Error()
-		return stat
-	}
-
-	body := renderPreCommitHook(resolvePqlPath())
-
-	// Always (re-)plant the shim so existing installs pick up changes
-	// to where git actually looks for hooks (e.g. core.hooksPath set
-	// after the initial install). The shim itself is idempotent.
-	defer ensureGitHookShim(dir, "pre-commit")
-
-	existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: known hook path
-	if err == nil {
-		stat.Existed = true
-		if strings.Contains(string(existing), pqlHookMarker) {
-			return stat
-		}
-		// Prepend our block to existing hook content.
-		var buf bytes.Buffer
-		buf.WriteString(body)
-		buf.WriteByte('\n')
-		buf.Write(existing)
-		if err := os.WriteFile(hookPath, buf.Bytes(), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
-			stat.Skipped = "write: " + err.Error()
-			return stat
-		}
-		stat.Installed = true
-		return stat
-	}
-
-	content := "#!/bin/sh\n" + body
-	if err := os.WriteFile(hookPath, []byte(content), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
-		stat.Skipped = "write: " + err.Error()
-		return stat
-	}
-	stat.Installed = true
-	return stat
+	return installNamedHook(dir, "pre-commit", pqlHookMarker,
+		renderPreCommitHook(resolvePqlPath()))
 }
 
 const pqlPostMergeMarker = "# --- pql plan import ---"
@@ -600,50 +555,8 @@ func resolvePqlPath() string {
 }
 
 func ensurePlanImportHook(dir string) initHookStat {
-	gitDir := filepath.Join(dir, ".git")
-	if _, err := os.Stat(gitDir); err != nil {
-		return initHookStat{Skipped: "not a git repository"}
-	}
-
-	hookDir := filepath.Join(dir, ".pql", "hooks")
-	hookPath := filepath.Join(hookDir, "post-merge")
-	stat := initHookStat{Path: hookPath}
-
-	if err := os.MkdirAll(hookDir, 0o750); err != nil {
-		stat.Skipped = "mkdir: " + err.Error()
-		return stat
-	}
-
-	body := renderPostMergeHook(resolvePqlPath())
-
-	// See ensurePlanExportHook — always (re-)plant the shim.
-	defer ensureGitHookShim(dir, "post-merge")
-
-	existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: known hook path
-	if err == nil {
-		stat.Existed = true
-		if strings.Contains(string(existing), pqlPostMergeMarker) {
-			return stat
-		}
-		var buf bytes.Buffer
-		buf.WriteString(body)
-		buf.WriteByte('\n')
-		buf.Write(existing)
-		if err := os.WriteFile(hookPath, buf.Bytes(), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
-			stat.Skipped = "write: " + err.Error()
-			return stat
-		}
-		stat.Installed = true
-		return stat
-	}
-
-	content := "#!/bin/sh\n" + body
-	if err := os.WriteFile(hookPath, []byte(content), 0o750); err != nil { //nolint:gosec // G306: hook must be executable
-		stat.Skipped = "write: " + err.Error()
-		return stat
-	}
-	stat.Installed = true
-	return stat
+	return installNamedHook(dir, "post-merge", pqlPostMergeMarker,
+		renderPostMergeHook(resolvePqlPath()))
 }
 
 // hookEndMarker bookends every pql-managed hook block. installNamedHook

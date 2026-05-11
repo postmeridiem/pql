@@ -11,6 +11,19 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.32] - 2026-05-11
+
+### Fixed
+
+- `pql init` now upgrades stale `.pql/hooks/pre-commit` and
+  `.pql/hooks/post-merge` content from older pql versions (T-29).
+  Previously the two oldest hook wrappers short-circuited on
+  marker presence and never replaced the body — only the two
+  newer hooks (post-checkout, post-rewrite) had the upgrade-aware
+  path. All four now route through the same `installNamedHook`
+  helper, which replaces the pql-managed block in-place and
+  preserves user content outside it.
+
 ## [1.4.31] - 2026-05-11
 
 ### Changed

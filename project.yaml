@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.4.31
-status: v1.4.31 — T-41: pql init no longer auto-adds !.pql/pql-plan.json to managed gitignore stanza (pre-D-15 artefact, consumers decide).
+version: 1.4.32
+status: v1.4.32 — T-29: pql init upgrades stale pre-commit/post-merge hook bodies (all four hooks now route through installNamedHook).
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

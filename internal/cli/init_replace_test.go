@@ -72,6 +72,62 @@ func TestInstallNamedHook_UpgradesExistingHook(t *testing.T) {
 	}
 }
 
+// TestEnsurePlanExportHook_UpgradesStaleBody regresses T-29: the
+// pre-commit wrapper used to short-circuit on marker presence and
+// never upgrade the body. It now routes through installNamedHook,
+// which replaces the pql-managed block in-place.
+func TestEnsurePlanExportHook_UpgradesStaleBody(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	hookPath := filepath.Join(dir, ".pql", "hooks", "pre-commit")
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0o750); err != nil {
+		t.Fatalf("mkdir hooks: %v", err)
+	}
+	old := "#!/bin/sh\n# --- pql plan export ---\nOLD STALE BODY\n# --- end pql ---\n"
+	if err := os.WriteFile(hookPath, []byte(old), 0o750); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	ensurePlanExportHook(dir)
+
+	got, _ := os.ReadFile(hookPath)
+	if strings.Contains(string(got), "OLD STALE BODY") {
+		t.Errorf("stale body survived ensurePlanExportHook upgrade:\n%s", got)
+	}
+	if !strings.Contains(string(got), "plan export --stage") {
+		t.Errorf("current body missing:\n%s", got)
+	}
+}
+
+// TestEnsurePlanImportHook_UpgradesStaleBody is T-29's sibling case
+// for the post-merge wrapper.
+func TestEnsurePlanImportHook_UpgradesStaleBody(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	hookPath := filepath.Join(dir, ".pql", "hooks", "post-merge")
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0o750); err != nil {
+		t.Fatalf("mkdir hooks: %v", err)
+	}
+	old := "#!/bin/sh\n# --- pql plan import ---\nOLD STALE BODY\n# --- end pql ---\n"
+	if err := os.WriteFile(hookPath, []byte(old), 0o750); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	ensurePlanImportHook(dir)
+
+	got, _ := os.ReadFile(hookPath)
+	if strings.Contains(string(got), "OLD STALE BODY") {
+		t.Errorf("stale body survived ensurePlanImportHook upgrade:\n%s", got)
+	}
+	if !strings.Contains(string(got), "plan import") {
+		t.Errorf("current body missing:\n%s", got)
+	}
+}
+
 // TestEnsurePqlGitignore_AppendsChangelogException regresses T-27:
 // an existing .gitignore that has /.pql/* + !/.pql/pql-plan.json +
 // !/.pql/hooks/ but lacks !/.pql/changelog/ should pick up the
