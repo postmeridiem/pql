@@ -26,7 +26,6 @@ coverage.*
 # `pql init` plants it locally on every clone with the binary path
 # baked in; tracking would produce per-developer drift.
 .pql/*
-!.pql/pql-plan.json
 !.pql/changelog/
 
 # SQLite index files should never land here, but defensive
