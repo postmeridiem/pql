@@ -35,7 +35,6 @@ in a decisions/ directory at the vault root and are indexed into
 	cmd.AddCommand(newDecisionsListCmd())
 	cmd.AddCommand(newDecisionsShowCmd())
 	cmd.AddCommand(newDecisionsReadCmd())
-	cmd.AddCommand(newDecisionsCoverageCmd())
 	cmd.AddCommand(newDecisionsRefsCmd())
 	return cmd
 }
@@ -346,48 +345,6 @@ func newDecisionsReadCmd() *cobra.Command {
 			rOpts.Out = cmd.OutOrStdout()
 			if _, err := render.One(d, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
-		},
-	}
-}
-
-// --- coverage ---
-
-func newDecisionsCoverageCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "coverage",
-		Short: "List confirmed decisions without implementing tickets",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			cfg, err := config.Load(loadOptsFromFlags(cmd))
-			if err != nil {
-				return &exitError{code: diag.NoInput, msg: err.Error()}
-			}
-
-			pdb, err := openPlanningDB(ctx, cfg)
-			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
-			}
-			defer func() { _ = pdb.Close() }()
-
-			gaps, err := repo.Coverage(ctx, pdb.SQL())
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			n, err := render.Render(gaps, rOpts)
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if n == 0 {
-				return errNoMatch
 			}
 			return nil
 		},

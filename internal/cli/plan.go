@@ -76,9 +76,8 @@ func newPlanStatusCmd() *cobra.Command {
 }
 
 type dashboard struct {
-	Decisions    decisionSummary `json:"decisions"`
-	Tickets      ticketSummary   `json:"tickets"`
-	CoverageGaps int            `json:"coverage_gaps"`
+	Decisions decisionSummary `json:"decisions"`
+	Tickets   ticketSummary   `json:"tickets"`
 }
 
 type decisionSummary struct {
@@ -144,12 +143,6 @@ func buildDashboard(ctx context.Context, db *sql.DB) (*dashboard, error) {
 		d.Tickets.ByStatus[status] = count
 	}
 	_ = trows.Close()
-
-	gaps, err := repo.Coverage(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	d.CoverageGaps = len(gaps)
 
 	return &d, nil
 }

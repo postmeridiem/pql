@@ -11,6 +11,31 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.29] - 2026-05-11
+
+### Removed
+
+- `pql decisions coverage` subcommand and the related repo helpers
+  (`repo.Coverage`, `repo.CoverageGap`). `coverage_gaps` field
+  removed from `pql plan status` output. The question the report
+  was trying to answer — "which confirmed decisions need
+  implementation work?" — is now answered by the existing ticket
+  system: file an `initiative`-type ticket with `decision_ref`
+  pointing at the D-record, and use `pql decisions show <id>
+  --with-tickets` to inspect implementation status. See D-20.
+
+### Changed
+
+- The mid-T-15 work-in-progress that added a `Coverage:` /
+  `Class:` markdown field and column was reverted; it duplicated
+  the ticket-type system without earning its place. No schema
+  change ships in this version on top of the v1.4.28 layout
+  (existing pql.db files are unaffected — but if you ran the
+  intermediate dev build with the `coverage` column, recover via
+  `rm .pql/pql.db && pql init`).
+- T-16 recategorised from `story` to `initiative` to model the
+  D-20 convention on this repo's own dogfood.
+
 ## [1.4.28] - 2026-05-10
 
 ### Changed

@@ -44,7 +44,8 @@ func SyncDecisions(ctx context.Context, db *sql.DB, decisionsDir, repoRoot strin
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO decisions (id, type, domain, title, status, date, file_path,
 				synced_at, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'))
+			VALUES (?, ?, ?, ?, ?, ?, ?,
+				datetime('now'), datetime('now'), datetime('now'))
 			ON CONFLICT(id) DO UPDATE SET
 				type      = excluded.type,
 				domain    = excluded.domain,
@@ -300,41 +301,6 @@ func TicketsForDecision(ctx context.Context, db *sql.DB, decisionID string) ([]T
 			return nil, fmt.Errorf("repo: scan ticket: %w", err)
 		}
 		result = append(result, t)
-	}
-	return result, rows.Err()
-}
-
-// CoverageGap is a D-record without any implementing ticket.
-type CoverageGap struct {
-	ID     string `json:"id"`
-	Domain string `json:"domain"`
-	Title  string `json:"title"`
-}
-
-// Coverage returns confirmed decisions that have no linked tickets.
-// Soft-deleted decisions are excluded; soft-deleted tickets do not
-// satisfy "linked" (so a confirmed decision whose only linked ticket
-// is soft-deleted re-appears as a coverage gap).
-func Coverage(ctx context.Context, db *sql.DB) ([]CoverageGap, error) {
-	rows, err := db.QueryContext(ctx, `
-		SELECT d.id, d.domain, d.title
-		FROM decisions d
-		LEFT JOIN tickets t ON t.decision_ref = d.id AND t.deleted_at IS NULL
-		WHERE d.type = 'confirmed' AND d.deleted_at IS NULL AND t.id IS NULL
-		ORDER BY SUBSTR(d.id, 1, 1), CAST(SUBSTR(d.id, 3) AS INTEGER)
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("repo: coverage: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var result []CoverageGap
-	for rows.Next() {
-		var g CoverageGap
-		if err := rows.Scan(&g.ID, &g.Domain, &g.Title); err != nil {
-			return nil, fmt.Errorf("repo: scan coverage: %w", err)
-		}
-		result = append(result, g)
 	}
 	return result, rows.Err()
 }

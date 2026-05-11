@@ -103,15 +103,6 @@ func TestSyncDecisions(t *testing.T) {
 	if len(refs) != 1 {
 		t.Errorf("refs count = %d, want 1", len(refs))
 	}
-
-	// Coverage (all should be gaps since no tickets)
-	gaps, err := Coverage(ctx, db)
-	if err != nil {
-		t.Fatalf("Coverage: %v", err)
-	}
-	if len(gaps) != 2 {
-		t.Errorf("coverage gaps = %d, want 2", len(gaps))
-	}
 }
 
 func TestSyncDecisions_Idempotent(t *testing.T) {
