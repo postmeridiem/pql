@@ -73,6 +73,14 @@ type Config struct {
 	IgnoreFiles []string `yaml:"ignore_files"`
 	GitMetadata bool     `yaml:"git_metadata"`
 	FTS         bool     `yaml:"fts"`
+
+	// DQRDir names the per-vault parent directory that holds the
+	// Decisions/Questions/Rejected markdown tree. Default `governance/`
+	// per D-21. Set to `decisions/` (or any other path, vault-relative)
+	// to keep a legacy layout without migrating. The directory holds
+	// three type-subdirectories — decisions/, questions/, rejected/ —
+	// each containing one markdown file per domain.
+	DQRDir string `yaml:"dqr_dir"`
 }
 
 // LoadOpts feeds Load. All Flag/Env fields can be empty; Load applies the
@@ -178,6 +186,7 @@ func defaults() *Config {
 		IgnoreFiles: []string{".gitignore"},
 		GitMetadata: false,
 		FTS:         false,
+		DQRDir:      "governance",
 	}
 }
 

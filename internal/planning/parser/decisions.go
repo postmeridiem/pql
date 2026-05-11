@@ -25,10 +25,18 @@ var (
 	refIDRe       = regexp.MustCompile(`\b[DQRT]-\d+\b`)
 )
 
+// Canonical record-type values. Repeated across inferStatus,
+// SubdirRecordType, recordTypeSubdir, and the prefix map.
+const (
+	typeConfirmed = "confirmed"
+	typeQuestion  = "question"
+	typeRejected  = "rejected"
+)
+
 var typeFromPrefix = map[byte]string{
-	'D': "confirmed",
-	'Q': "question",
-	'R': "rejected",
+	'D': typeConfirmed,
+	'Q': typeQuestion,
+	'R': typeRejected,
 }
 
 // Record is one parsed decision/question/rejected record.
@@ -51,9 +59,13 @@ type Ref struct {
 	Note     string
 }
 
-// ParseFile reads a single decisions/*.md file and returns all records found.
-// Domain is inferred from the filename (stripped of "questions-" prefix).
-// filePath is recorded as the path relative to repoRoot.
+// ParseFile reads a single DQR markdown file and returns all records
+// found. Domain comes from the filename stem; for the D-21 layout the
+// record type also comes from the immediate parent directory name
+// (decisions/, questions/, or rejected/). For the legacy flat layout
+// the parent-directory inference is skipped and the heading prefix
+// (D|Q|R) alone determines record type — same behaviour the parser
+// already had before D-21. filePath is recorded relative to repoRoot.
 func ParseFile(path, repoRoot string) ([]Record, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path discovered by caller
 	if err != nil {
@@ -67,12 +79,36 @@ func ParseFile(path, repoRoot string) ([]Record, error) {
 	return parseText(string(data), domain, rel), nil
 }
 
+// domainFromFilename strips the file extension and the legacy
+// `questions-` prefix. Under the D-21 layout the prefix never appears
+// (record type is encoded in the subdirectory, not the filename), so
+// this is effectively just "drop the extension." The prefix strip is
+// retained as a no-cost backstop for repos that still carry legacy
+// filenames.
 func domainFromFilename(name string) string {
 	stem := strings.TrimSuffix(name, filepath.Ext(name))
 	if strings.HasPrefix(stem, "questions-") {
 		return stem[len("questions-"):]
 	}
 	return stem
+}
+
+// SubdirRecordType maps the immediate parent directory name to the
+// record type the parser expects in that file under the D-21 layout.
+// Empty string means "no expectation" — caller skips the consistency
+// check (legacy flat layout, or a file outside the recognised
+// subdirectories).
+func SubdirRecordType(parentDir string) string {
+	switch parentDir {
+	case "decisions":
+		return typeConfirmed
+	case "questions":
+		return typeQuestion
+	case "rejected":
+		return typeRejected
+	default:
+		return ""
+	}
 }
 
 func parseText(text, domain, filePath string) []Record {
@@ -130,7 +166,7 @@ const (
 )
 
 func inferStatus(recType string, body []string) string {
-	if recType == "rejected" {
+	if recType == typeRejected {
 		return statusActive
 	}
 	for _, line := range body {
@@ -138,7 +174,7 @@ func inferStatus(recType string, body []string) string {
 			return statusSuperseded
 		}
 	}
-	if recType == "question" {
+	if recType == typeQuestion {
 		for _, line := range body {
 			m := statusRe.FindStringSubmatch(line)
 			if m == nil {
@@ -214,48 +250,162 @@ func classifyRefLine(line string) string {
 	}
 }
 
-// ParseAll parses every *.md file in decisionsDir (skipping README.md),
-// returning all records and any warnings. repoRoot is the project root
-// used to compute relative file paths.
-func ParseAll(decisionsDir, repoRoot string) ([]Record, []string, error) {
-	entries, err := os.ReadDir(decisionsDir)
+// ParseAll parses every *.md file under dqrRoot. Under the D-21
+// layout the walker descends into the recognised type subdirectories
+// (decisions/, questions/, rejected/) and infers the expected record
+// type from the parent dir; a heading-prefix mismatch surfaces as a
+// warning so authors notice mis-filed records.
+//
+// Under the legacy flat layout (no subdirectories — files live
+// directly at dqrRoot), the parser falls back to the pre-D-21
+// behaviour: domain from filename, type from heading prefix, no
+// subdir-consistency check. README.md at any level is skipped.
+// repoRoot is the project root used to compute relative file paths.
+func ParseAll(dqrRoot, repoRoot string) ([]Record, []string, error) {
+	entries, err := os.ReadDir(dqrRoot)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parser: read %s: %w", decisionsDir, err)
+		return nil, nil, fmt.Errorf("parser: read %s: %w", dqrRoot, err)
 	}
 
-	var paths []string
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		if strings.EqualFold(e.Name(), "readme.md") {
-			continue
-		}
-		paths = append(paths, filepath.Join(decisionsDir, e.Name()))
+	// Detect layout: any of decisions/, questions/, rejected/ as a
+	// direct subdirectory indicates the D-21 layout. Otherwise stay
+	// in the legacy flat mode.
+	type pathInfo struct {
+		path       string
+		expectType string // "" for legacy flat
 	}
-	sort.Strings(paths)
+	var paths []pathInfo
+	var newLayout bool
+	for _, e := range entries {
+		if e.IsDir() && SubdirRecordType(e.Name()) != "" {
+			newLayout = true
+			break
+		}
+	}
+
+	if newLayout {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			expect := SubdirRecordType(e.Name())
+			if expect == "" {
+				continue
+			}
+			subPath := filepath.Join(dqrRoot, e.Name())
+			subEntries, err := os.ReadDir(subPath)
+			if err != nil {
+				return nil, nil, fmt.Errorf("parser: read %s: %w", subPath, err)
+			}
+			for _, se := range subEntries {
+				if se.IsDir() || !strings.HasSuffix(se.Name(), ".md") {
+					continue
+				}
+				if strings.EqualFold(se.Name(), "readme.md") {
+					continue
+				}
+				paths = append(paths, pathInfo{
+					path:       filepath.Join(subPath, se.Name()),
+					expectType: expect,
+				})
+			}
+		}
+	} else {
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			if strings.EqualFold(e.Name(), "readme.md") {
+				continue
+			}
+			paths = append(paths, pathInfo{
+				path: filepath.Join(dqrRoot, e.Name()),
+			})
+		}
+	}
+	sort.Slice(paths, func(i, j int) bool { return paths[i].path < paths[j].path })
 
 	var records []Record
 	var warnings []string
 	for _, p := range paths {
-		recs, err := ParseFile(p, repoRoot)
+		// Filename style check: lowercase, hyphenated, .md extension.
+		// Surfaces on every layout (legacy and D-21) because the
+		// convention applies regardless.
+		if w := filenameStyleWarning(p.path, repoRoot); w != "" {
+			warnings = append(warnings, w)
+		}
+		recs, err := ParseFile(p.path, repoRoot)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("error parsing %s: %v", filepath.Base(p), err))
+			warnings = append(warnings, fmt.Sprintf("error parsing %s: %v", filepath.Base(p.path), err))
 			continue
+		}
+		if p.expectType != "" {
+			for _, rec := range recs {
+				if rec.Type != p.expectType {
+					rel, _ := filepath.Rel(repoRoot, p.path)
+					if rel == "" {
+						rel = p.path
+					}
+					warnings = append(warnings, fmt.Sprintf(
+						"subdir-type mismatch: %s is in a %s/ subdirectory but contains a %s record (%s); "+
+							"move the record to the matching subdirectory",
+						rel, recordTypeSubdir(p.expectType), rec.Type, rec.ID))
+				}
+			}
 		}
 		records = append(records, recs...)
 	}
 	return records, warnings, nil
 }
 
-// Validate runs a dry parse and returns (ok, errors). Non-zero errors
-// fail push-check.
-func Validate(decisionsDir, repoRoot string) (ok bool, errs []string) {
-	records, warnings, err := ParseAll(decisionsDir, repoRoot)
-	if err != nil {
-		return false, []string{err.Error()}
+// filenameStyleRe matches lowercase, hyphenated, .md-extension names.
+// Stems may contain digits but must start with a letter.
+var filenameStyleRe = regexp.MustCompile(`^[a-z][a-z0-9-]*\.md$`)
+
+// filenameStyleWarning checks a markdown filename against D-21's
+// style convention: lowercase letters, digits, hyphens; .md
+// extension. Returns the warning string or "" if the name is OK.
+func filenameStyleWarning(path, repoRoot string) string {
+	base := filepath.Base(path)
+	if filenameStyleRe.MatchString(base) {
+		return ""
 	}
-	errs = append(errs, warnings...)
+	rel, _ := filepath.Rel(repoRoot, path)
+	if rel == "" {
+		rel = path
+	}
+	return fmt.Sprintf(
+		"filename style: %s should be lowercase + hyphenated (e.g. %s)",
+		rel, strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(base, "_", "-"), " ", "-")))
+}
+
+// recordTypeSubdir is the inverse of SubdirRecordType for the
+// warning message.
+func recordTypeSubdir(recType string) string {
+	switch recType {
+	case typeConfirmed:
+		return "decisions"
+	case typeQuestion:
+		return "questions"
+	case typeRejected:
+		return "rejected"
+	default:
+		return recType
+	}
+}
+
+// Validate runs a dry parse and returns (ok, errors, warnings).
+// Errors are structural — duplicate IDs, empty titles, broken refs,
+// and parse failures — and make the result non-ok. Warnings are
+// style-class — filename convention, subdir/heading mismatch — and
+// do not affect ok. CLI callers print both; `--no-style` suppresses
+// the warning stream without touching errors.
+func Validate(decisionsDir, repoRoot string) (ok bool, errs, warnings []string) {
+	records, parseWarnings, err := ParseAll(decisionsDir, repoRoot)
+	if err != nil {
+		return false, []string{err.Error()}, nil
+	}
+	warnings = append(warnings, parseWarnings...)
 
 	idSeen := make(map[string]string)
 	for _, rec := range records {
@@ -281,7 +431,7 @@ func Validate(decisionsDir, repoRoot string) (ok bool, errs []string) {
 			}
 		}
 	}
-	return len(errs) == 0, errs
+	return len(errs) == 0, errs, warnings
 }
 
 func stripMetaLines(lines []string) []string {

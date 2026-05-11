@@ -35,6 +35,7 @@ type initResult struct {
 	Gitignore         initGitignore      `json:"gitignore"`
 	Skills            []initSkillStat    `json:"skills"`
 	Permissions       initPermissions    `json:"permissions"`
+	DQR               initDQRStruct      `json:"dqr"`
 	PlanImport        initPlanImport     `json:"plan_import"`
 	DecisionsSync     initDecisionsSync  `json:"decisions_sync"`
 	Changelog         initChangelogStat  `json:"changelog"`
@@ -209,8 +210,11 @@ drift.`,
 			}
 
 			permStat := ensurePqlPermissions(dir)
+			dqrStat := ensureDQRStructure(dir)
 			planStat := autoImportPlan(cmd.Context(), dir)
 			decisionsStat := ensureDecisionsSynced(cmd.Context(), dir)
+			readmeUpdated := regenerateReadmeStep(cmd.Context(), dir, &dqrStat)
+			_ = readmeUpdated // result captured on dqrStat.ReadmeUpdated
 			changelogStat := ensureChangelogDirs(dir)
 			gitAttrStat := ensureGitAttributes(dir)
 			hookStat := ensurePlanExportHook(dir)
@@ -228,6 +232,7 @@ drift.`,
 				Gitignore:        giStat,
 				Skills:           skillStats,
 				Permissions:      permStat,
+				DQR:              dqrStat,
 				PlanImport:       planStat,
 				DecisionsSync:    decisionsStat,
 				Changelog:        changelogStat,
@@ -1096,19 +1101,58 @@ func ensureGitAttributes(dir string) initGitAttribute {
 // this step pql init leaves the markdown-sourced half of the schema
 // (D-8) empty until the user runs `pql decisions sync` themselves.
 //
-// Skipped silently when the repo has no decisions/ directory — not
-// every pql vault carries decisions; tickets-only setups are valid.
+// resolveDQRDir reads cfg.DQRDir from the vault's .pql/config.yaml (if
+// present) and joins it onto dir. Falls back to the legacy `decisions/`
+// when neither a config file nor the new default `governance/` directory
+// exist but a legacy `decisions/` tree does. Returns the configured
+// (or default) path even if it doesn't exist on disk yet — caller stats
+// for existence and decides what to do.
+func resolveDQRDir(dir string) string {
+	dqr := "governance"
+	cfgPath := filepath.Join(dir, ".pql", "config.yaml")
+	if body, err := os.ReadFile(cfgPath); err == nil { //nolint:gosec // G304: known config path
+		// Lightweight yaml peek — full config.Load isn't worth the import
+		// cycle from cli/init.go's tight loop.
+		for _, line := range strings.Split(string(body), "\n") {
+			t := strings.TrimSpace(line)
+			if strings.HasPrefix(t, "dqr_dir:") {
+				v := strings.TrimSpace(strings.TrimPrefix(t, "dqr_dir:"))
+				v = strings.Trim(v, `"'`)
+				if v != "" {
+					dqr = v
+				}
+				break
+			}
+		}
+	}
+	primary := filepath.Join(dir, dqr)
+	if _, err := os.Stat(primary); err == nil { //nolint:gosec // G703: dqr_dir is config, not external user input
+		return primary
+	}
+	legacy := filepath.Join(dir, "decisions")
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy
+	}
+	return primary
+}
+
+// Skipped silently when the repo has no DQR directory — not every pql
+// vault carries decisions; tickets-only setups are valid.
+//
+// DQR root resolution: honours the configured cfg.DQRDir (default
+// `governance`, per D-21) and falls back to the legacy `decisions/`
+// if only the legacy layout exists.
 func ensureDecisionsSynced(ctx context.Context, dir string) initDecisionsSync {
-	decisionsDir := filepath.Join(dir, "decisions")
-	info, err := os.Stat(decisionsDir)
+	dqrDir := resolveDQRDir(dir)
+	info, err := os.Stat(dqrDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return initDecisionsSync{Skipped: "no decisions/ directory"}
+			return initDecisionsSync{Skipped: "no DQR directory"}
 		}
-		return initDecisionsSync{Skipped: "stat decisions/: " + err.Error()}
+		return initDecisionsSync{Skipped: "stat DQR root: " + err.Error()}
 	}
 	if !info.IsDir() {
-		return initDecisionsSync{Skipped: "decisions/ is not a directory"}
+		return initDecisionsSync{Skipped: "DQR root is not a directory"}
 	}
 
 	pdb, err := planning.Open(ctx, dir)
@@ -1117,7 +1161,7 @@ func ensureDecisionsSynced(ctx context.Context, dir string) initDecisionsSync {
 	}
 	defer func() { _ = pdb.Close() }()
 
-	res, err := repo.SyncDecisions(ctx, pdb.SQL(), decisionsDir, dir)
+	res, err := repo.SyncDecisions(ctx, pdb.SQL(), dqrDir, dir)
 	if err != nil {
 		return initDecisionsSync{Skipped: "sync: " + err.Error()}
 	}

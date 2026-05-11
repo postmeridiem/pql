@@ -185,7 +185,7 @@ func TestValidate_DuplicateID(t *testing.T) {
 	writeFile(t, dir, "b.md", `### D-001: Duplicate
 - **Date:** 2026-01-02
 `)
-	ok, errs := Validate(dir, dir)
+	ok, errs, _ := Validate(dir, dir)
 	if ok {
 		t.Fatal("expected validation failure")
 	}

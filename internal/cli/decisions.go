@@ -39,8 +39,25 @@ in a decisions/ directory at the vault root and are indexed into
 	return cmd
 }
 
-func decisionsDir(vaultPath string) string {
-	return filepath.Join(vaultPath, "decisions")
+// decisionsDir resolves the per-vault DQR root. Honours the cfg.DQRDir
+// knob (default `governance`, configurable per-vault via .pql/config.yaml
+// per D-21) and falls back to the legacy `decisions/` if the configured
+// dir doesn't exist but the legacy one does. The fallback lets older
+// repos keep working until they migrate.
+func decisionsDir(cfg *config.Config) string {
+	dqr := cfg.DQRDir
+	if dqr == "" {
+		dqr = "governance"
+	}
+	primary := filepath.Join(cfg.Vault.Path, dqr)
+	if _, err := os.Stat(primary); err == nil {
+		return primary
+	}
+	legacy := filepath.Join(cfg.Vault.Path, "decisions")
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy
+	}
+	return primary
 }
 
 func openPlanningDB(ctx context.Context, cfg *config.Config) (*planning.DB, error) {
@@ -50,7 +67,8 @@ func openPlanningDB(ctx context.Context, cfg *config.Config) (*planning.DB, erro
 // --- sync ---
 
 func newDecisionsSyncCmd() *cobra.Command {
-	return &cobra.Command{
+	var noStyle bool
+	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Parse decisions/*.md and upsert into pql.db",
 		Args:  cobra.NoArgs,
@@ -61,12 +79,12 @@ func newDecisionsSyncCmd() *cobra.Command {
 				return &exitError{code: diag.NoInput, msg: err.Error()}
 			}
 
-			dir := decisionsDir(cfg.Vault.Path)
+			dir := decisionsDir(cfg)
 			if _, err := os.Stat(dir); err != nil {
 				return &exitError{
 					code: diag.NoInput,
-					msg:  fmt.Sprintf("decisions directory not found: %s", dir),
-					hint: "create a decisions/ directory in the vault root",
+					msg:  fmt.Sprintf("DQR directory not found: %s", dir),
+					hint: "run `pql init` to plant the default `governance/` layout, or set dqr_dir in .pql/config.yaml",
 				}
 			}
 
@@ -81,6 +99,24 @@ func newDecisionsSyncCmd() *cobra.Command {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
+			// Surface style warnings on stderr unless explicitly
+			// suppressed. The drift is most noticeable at sync time, so
+			// this is the natural teachable moment.
+			if !noStyle {
+				_, _, warnings := parser.Validate(dir, cfg.Vault.Path)
+				for _, w := range warnings {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warn: %s\n", w)
+				}
+			}
+
+			// Regenerate the auto-managed records section in
+			// <dqr_root>/README.md so the human-readable index stays
+			// in step with pql.db. Silent on no-op; failure is non-fatal
+			// (sync succeeded, the README just stayed stale).
+			if _, err := regenerateDQRReadme(ctx, pdb.SQL(), dir); err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warn: regenerate README: %v\n", err)
+			}
+
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
@@ -92,23 +128,37 @@ func newDecisionsSyncCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&noStyle, "no-style", false, "suppress style warnings on sync")
+	return cmd
 }
 
 // --- validate ---
 
 func newDecisionsValidateCmd() *cobra.Command {
-	return &cobra.Command{
+	var noStyle bool
+	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Dry-run parse; exits non-zero on malformed records",
-		Args:  cobra.NoArgs,
+		Long: `Run the parser without writing to pql.db. Reports two streams:
+
+  - errors:   structural problems — duplicate IDs, empty titles,
+              broken cross-references, parse failures. Exits non-zero.
+  - warnings: style-class — filename convention (lowercase / hyphenated),
+              subdir-heading mismatch under the D-21 layout. Exits zero.
+
+Use --no-style to suppress warnings (errors are always shown).`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := config.Load(loadOptsFromFlags(cmd))
 			if err != nil {
 				return &exitError{code: diag.NoInput, msg: err.Error()}
 			}
 
-			dir := decisionsDir(cfg.Vault.Path)
-			ok, errs := parser.Validate(dir, cfg.Vault.Path)
+			dir := decisionsDir(cfg)
+			ok, errs, warnings := parser.Validate(dir, cfg.Vault.Path)
+			if noStyle {
+				warnings = nil
+			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
@@ -117,10 +167,11 @@ func newDecisionsValidateCmd() *cobra.Command {
 			rOpts.Out = cmd.OutOrStdout()
 
 			type result struct {
-				OK     bool     `json:"ok"`
-				Errors []string `json:"errors,omitempty"`
+				OK       bool     `json:"ok"`
+				Errors   []string `json:"errors,omitempty"`
+				Warnings []string `json:"warnings,omitempty"`
 			}
-			if _, err := render.One(&result{OK: ok, Errors: errs}, rOpts); err != nil {
+			if _, err := render.One(&result{OK: ok, Errors: errs, Warnings: warnings}, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			if !ok {
@@ -129,6 +180,8 @@ func newDecisionsValidateCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&noStyle, "no-style", false, "suppress style warnings (filename, subdir-mismatch); structural errors are always shown")
+	return cmd
 }
 
 // --- claim ---
@@ -146,7 +199,7 @@ func newDecisionsClaimCmd() *cobra.Command {
 				return &exitError{code: diag.NoInput, msg: err.Error()}
 			}
 
-			dir := decisionsDir(cfg.Vault.Path)
+			dir := decisionsDir(cfg)
 			records, _, err := parser.ParseAll(dir, cfg.Vault.Path)
 			if err != nil {
 				return &exitError{code: diag.NoInput, msg: err.Error()}
