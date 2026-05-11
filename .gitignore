@@ -20,12 +20,13 @@ coverage.*
 # pql's own per-vault state. The project itself isn't a vault, but if
 # anyone runs pql against the repo root (testing, dogfooding), .pql/
 # lands here. Mirror what `pql init` writes to consumers' .gitignore:
-# ignore everything except the planning snapshot, the in-tree hooks,
-# and the replication changelog (D-15: per-table monthly SQL files
-# that get committed and shared between replicas).
+# ignore everything except the planning snapshot and the replication
+# changelog (D-15: per-table monthly SQL files that get committed and
+# shared between replicas). .pql/hooks/ is per-clone state (T-28) —
+# `pql init` plants it locally on every clone with the binary path
+# baked in; tracking would produce per-developer drift.
 .pql/*
 !.pql/pql-plan.json
-!.pql/hooks/
 !.pql/changelog/
 
 # SQLite index files should never land here, but defensive
@@ -55,7 +56,8 @@ Thumbs.db
 .claude/settings.local.json
 
 # pql shims planted by `pql init` into git's hooks dir. The shim is
-# per-clone state (it bridges git's hooks dir to .pql/hooks/), so we
-# track .pql/hooks/* (the actual scripts) and ignore the shim.
+# per-clone state (it bridges git's hooks dir to .pql/hooks/), and
+# the hook scripts it sources are also per-clone (see T-28). Both
+# get replanted on every `pql init`.
 .githooks/pre-commit
 .githooks/post-merge
