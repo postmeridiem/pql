@@ -372,17 +372,21 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 
 	lines := strings.Split(string(body), "\n")
 
-	// .pql/hooks/ is intentionally NOT in the managed list. Per T-28,
-	// hooks are per-clone state planted by `pql init`, not committed
-	// content — every developer has a different absolute pql binary
-	// path baked in, and tracking the files just produces a permanent
-	// dirty diff across machines. Existing repos that still carry the
-	// `!.pql/hooks/` exception keep it (we don't actively prune user
-	// content), but new repos get a clean ignore.
+	// Intentional omissions from the managed list:
+	//   .pql/hooks/        — per-clone state (T-28). Per-developer
+	//                        absolute pql paths bake in; tracking
+	//                        produces multi-dev drift.
+	//   .pql/pql-plan.json — pre-D-15 snapshot artefact (T-41).
+	//                        Replication moved to .pql/changelog/;
+	//                        plan export still writes the file as a
+	//                        manual backup but consumers decide
+	//                        whether to commit it.
+	// Existing repos that still carry either exception keep it — we
+	// don't actively prune user content. New repos get a clean
+	// ignore.
 	needed := map[string]bool{
-		pqlGlobIgnore:         true,
-		"!.pql/pql-plan.json": true,
-		"!.pql/changelog/":    true,
+		pqlGlobIgnore:      true,
+		"!.pql/changelog/": true,
 	}
 	hasDirForm := false
 
@@ -415,7 +419,7 @@ func ensurePqlGitignore(path string) (initGitignore, error) {
 		buf.WriteByte('\n')
 	}
 
-	for _, entry := range []string{pqlGlobIgnore, "!.pql/pql-plan.json", "!.pql/changelog/"} {
+	for _, entry := range []string{pqlGlobIgnore, "!.pql/changelog/"} {
 		if needed[entry] {
 			buf.WriteString(entry)
 			buf.WriteByte('\n')

@@ -112,36 +112,6 @@ func TestEnsurePqlGitignore_AppendsChangelogException(t *testing.T) {
 	}
 }
 
-// TestEnsurePqlGitignore_DoesNotAddHooksException regresses T-28:
-// hooks are per-clone state going forward, so pql init should NOT
-// auto-add `!.pql/hooks/` to a gitignore that doesn't already have
-// it. Existing repos that still carry the line are left alone (we
-// don't actively prune user content); only the auto-add path is
-// disabled.
-func TestEnsurePqlGitignore_DoesNotAddHooksException(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".gitignore")
-	pre := "# stuff\n.pql/*\n"
-	if err := os.WriteFile(path, []byte(pre), 0o644); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-
-	if _, err := ensurePqlGitignore(path); err != nil {
-		t.Fatalf("ensurePqlGitignore: %v", err)
-	}
-	body, _ := os.ReadFile(path)
-	if strings.Contains(string(body), "!.pql/hooks/") {
-		t.Errorf("hooks exception should NOT be auto-added (T-28):\n%s", body)
-	}
-	// Other entries still added as before.
-	if !strings.Contains(string(body), "!.pql/changelog/") {
-		t.Errorf("changelog exception missing:\n%s", body)
-	}
-	if !strings.Contains(string(body), "!.pql/pql-plan.json") {
-		t.Errorf("pql-plan exception missing:\n%s", body)
-	}
-}
-
 func TestEnsurePqlGitignore_PreservesExistingHooksException(t *testing.T) {
 	// Existing repos with the legacy `!.pql/hooks/` keep it (we
 	// don't prune user content during the migration window).

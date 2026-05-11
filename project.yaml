@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.4.30
-status: v1.4.30 — T-32 initiative landed: DQR moves to governance/{decisions,questions,rejected}/ with auto-generated README, default-on style enforcement, dqr_dir config knob (D-21).
+version: 1.4.31
+status: v1.4.31 — T-41: pql init no longer auto-adds !.pql/pql-plan.json to managed gitignore stanza (pre-D-15 artefact, consumers decide).
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

@@ -269,3 +269,18 @@ INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, 
 INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-28', 'status', 'in_progress', 'done', NULL, '2026-05-11 16:01:40', '2026-05-11 16:01:40', '2026-05-11 16:01:40', NULL, 'e364c3bd78ed39f57d5f35188b590ac7', 1) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-37', 'status', 'in_progress', 'done', NULL, '2026-05-11 16:06:05', '2026-05-11 16:06:05', '2026-05-11 16:06:05', NULL, '1e8798890b77701e2c1e0f61e6132bf1', 1) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-32', 'status', 'in_progress', 'done', NULL, '2026-05-11 16:06:05', '2026-05-11 16:06:05', '2026-05-11 16:06:05', NULL, '37cf0451728c49760261c86ae871cfa1', 1) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-39', 'status', 'in_progress', 'done', NULL, '2026-05-11 16:50:06', '2026-05-11 16:50:06', '2026-05-11 16:50:06', NULL, '676bf7705408fbec22344190aae76408', 1) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-41', 'description', NULL, 'Same class of issue as T-39 (tracked .pql/hooks/): pql init''s managed-gitignore stanza is out of sync with current design.
+
+pql init unconditionally re-adds `!.pql/pql-plan.json` to the consumer''s .gitignore (internal/cli/init.go:384 — `needed` map, and :418 — emit loop). The exception dates to pre-D-15, when `pql plan export` writing pql-plan.json was the replication mechanism. D-15 / T-23 moved replication to .pql/changelog/<table>/<YYYY-MM>.sql, which is what init *should* be exempting now (and does, via `!.pql/changelog/`).
+
+Clide hit this during the May 2026 migration: after manually removing `!.pql/pql-plan.json` from .gitignore, the next `pql init` re-added it.
+
+Fix: drop `!.pql/pql-plan.json` from the managed list in init.go. `pql plan export` still writes the file — but it''s now a manual ad-hoc backup, not the shared replication artefact, so consumers can commit or ignore it on their own terms.
+
+Touches:
+  - internal/cli/init.go:384 (remove from `needed`)
+  - internal/cli/init.go:418 (remove from emit slice)
+  - possibly a test in init_test.go that asserts the entry is no longer auto-emitted
+  - CHANGELOG entry: init no longer manages `!.pql/pql-plan.json`', NULL, '2026-05-11 16:52:02', '2026-05-11 16:52:02', '2026-05-11 16:52:02', NULL, '2f82db2dc788d70d0bcd3b4ef9abc2b1', 1) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-41', 'status', 'backlog', 'done', NULL, '2026-05-11 16:54:27', '2026-05-11 16:54:27', '2026-05-11 16:54:27', NULL, '32f942a001b7d51c8060938909a5a1e5', 1) ON CONFLICT(hash) DO NOTHING;

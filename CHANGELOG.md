@@ -11,6 +11,17 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.4.31] - 2026-05-11
+
+### Changed
+
+- `pql init` no longer re-adds `!.pql/pql-plan.json` to the managed
+  gitignore stanza (T-41). The exception predates D-15 changelog
+  replication; `pql plan export` still writes the file as a manual
+  backup but consumers now decide whether to commit it.
+  Existing entries are preserved (we don't prune user content);
+  only the auto-add path is disabled.
+
 ## [1.4.30] - 2026-05-11
 
 ### Added
