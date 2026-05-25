@@ -297,8 +297,7 @@ func tidyProjectScope(cmd *cobra.Command) ([]*skill.Status, error) {
 }
 
 // renderSkillStatuses emits the shared JSON for every skill subcommand.
-// Returns errNoMatch only when *every* skill is missing — partial
-// installs aren't no-match.
+// An all-missing result is reported in the data, not via the exit code.
 func renderSkillStatuses(cmd *cobra.Command, statuses []*skill.Status) error {
 	rOpts, err := renderOptsFromFlags(cmd)
 	if err != nil {
@@ -306,16 +305,6 @@ func renderSkillStatuses(cmd *cobra.Command, statuses []*skill.Status) error {
 	}
 	if _, err := render.Render(statuses, rOpts); err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}
-	}
-	allMissing := len(statuses) > 0
-	for _, st := range statuses {
-		if st.State != skill.StateMissing {
-			allMissing = false
-			break
-		}
-	}
-	if allMissing {
-		return errNoMatch
 	}
 	return nil
 }

@@ -261,12 +261,8 @@ func newDecisionsListCmd() *cobra.Command {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			n, err := render.Render(decs, rOpts)
-			if err != nil {
+			if _, err := render.Render(decs, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if n == 0 {
-				return errNoMatch
 			}
 			return nil
 		},
@@ -434,12 +430,8 @@ func newDecisionsRefsCmd() *cobra.Command {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			n, err := render.Render(refs, rOpts)
-			if err != nil {
+			if _, err := render.Render(refs, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if n == 0 {
-				return errNoMatch
 			}
 			return nil
 		},

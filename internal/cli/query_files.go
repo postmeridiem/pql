@@ -24,7 +24,7 @@ vault-relative path (* and ? wildcards; no doublestar **). Examples:
   pql files 'sessions/*/outcome.md'
 
 Output is JSON by default; --jsonl streams one object per line and --pretty
-indents. Exit code 2 means "ran successfully, zero matches" — distinguish
+indents. Zero matches is success — exit 0 with an empty [] array, distinct
 from real errors (65/66/69/70) per docs/output-contract.md.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

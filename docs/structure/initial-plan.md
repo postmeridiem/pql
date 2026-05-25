@@ -138,15 +138,14 @@ pql version --build-info       # version, build date, Go version, schema version
 - **Data on stdout**, always JSON by default.
 - **Diagnostics on stderr**, also as JSON: `{"level":"warn|error","code":"...","msg":"...","hint":"..."}`. Line-delimited when multiple.
 - **Exit codes:**
-  - `0` — success with ≥1 match
-  - `2` — success with 0 matches (intentional; not an error)
+  - `0` — success, including zero matches (empty `[]` on stdout)
   - `64` (EX_USAGE) — bad CLI flag
   - `65` (EX_DATAERR) — PQL parse or evaluation error
   - `66` (EX_NOINPUT) — vault root not found / unreadable
   - `69` (EX_UNAVAILABLE) — index corruption / migration failure
   - `70` (EX_SOFTWARE) — internal error
 
-This contract is what makes `pql` safe for Claude Code to call: exit 2 is distinct from exit 65, so a zero-row query never masquerades as a bug.
+This contract is what makes `pql` safe for Claude Code to call: a zero-row query exits `0` with an empty `[]`, distinct from the error range `64`–`70`, so it never masquerades as a bug. (Superseded detail: an earlier draft used a dedicated exit `2` for "no match"; retired per D-22 because callers that treat non-zero as failure mis-read it.)
 
 ### Vault-root discovery
 

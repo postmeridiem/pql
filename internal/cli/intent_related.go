@@ -81,12 +81,8 @@ func runIntent(
 		return &exitError{code: diag.Usage, msg: err.Error()}
 	}
 	rOpts.Out = cmd.OutOrStdout()
-	n, err := render.Render(results, rOpts)
-	if err != nil {
+	if _, err := render.Render(results, rOpts); err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}
-	}
-	if n == 0 {
-		return errNoMatch
 	}
 	return nil
 }
@@ -117,12 +113,8 @@ func runFlatFallback(cmd *cobra.Command, st *store.Store, cfg *config.Config, pa
 		return &exitError{code: diag.Usage, msg: err.Error()}
 	}
 	rOpts.Out = cmd.OutOrStdout()
-	n, err := render.Render(results, rOpts)
-	if err != nil {
+	if _, err := render.Render(results, rOpts); err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}
-	}
-	if n == 0 {
-		return errNoMatch
 	}
 	return nil
 }

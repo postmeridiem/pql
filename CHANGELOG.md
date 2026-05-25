@@ -11,6 +11,39 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.5.0] - 2026-05-25
+
+### Changed
+
+- **BREAKING (output contract):** a query that matches nothing now exits
+  `0` with an empty array `[]` on stdout, instead of the former exit `2`
+  (`NoMatch`). Zero results is success — the empty result lives in the
+  data, never in the exit code. This fixes downstream callers that treat
+  any non-zero exit as a failure (`set -e`, `subprocess.check_call`, CI
+  steps, agent harnesses), which were flagging empty results as errors.
+  Errors remain in the `64`/`65`/`66`/`69`/`70` range, each paired with a
+  stderr diagnostic. `internal/diag` no longer defines `NoMatch`; exit `2`
+  is retired. See D-22 and `docs/output-contract.md`.
+
+  **Compatibility note for callers:** stop branching on exit `2`. To detect
+  "no matches", inspect the data — an empty `[]` (JSON) or zero lines
+  (`--jsonl`). `ticket refine next` on an exhausted queue now emits
+  `{"refinement":{"remaining":0,…}}` at exit `0` rather than exiting `2`
+  with no body.
+
+## [1.4.33] - 2026-05-18
+
+### Changed
+
+- `pql ticket show` now accepts the same `<id[,id,...]>` comma-batch
+  syntax as the other ticket verbs (`status`, `assign`, `setparent`,
+  `team`, `label`). A single ID still renders a single show-tree
+  object (no shape break); multiple IDs render an array of show-trees
+  in the order given. Any unknown ID fails the call with `NoInput`,
+  matching the single-ID behaviour. SKILL.md updated to surface the
+  batch form so consumers stop falling back to parallel single-ID
+  calls.
+
 ## [1.4.32] - 2026-05-11
 
 ### Fixed

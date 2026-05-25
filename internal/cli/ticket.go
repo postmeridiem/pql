@@ -232,12 +232,8 @@ func newTicketListCmd() *cobra.Command {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			n, err := render.Render(tks, rOpts)
-			if err != nil {
+			if _, err := render.Render(tks, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if n == 0 {
-				return errNoMatch
 			}
 			return nil
 		},
@@ -255,11 +251,20 @@ func newTicketListCmd() *cobra.Command {
 func newTicketShowCmd() *cobra.Command {
 	var withContext, withBlockers, withChildren bool
 	cmd := &cobra.Command{
-		Use:   "show <id>",
-		Short: "Show a ticket with optional joins",
-		Args:  cobra.ExactArgs(1),
+		Use:   "show <id[,id,...]>",
+		Short: "Show one or more tickets with optional joins",
+		Long: `Show tickets with optional joins. Use commas to batch:
+
+  pql ticket show T-001
+  pql ticket show T-001,T-002,T-003 --with-context
+
+A single ID renders a single show-tree object; multiple IDs render an
+array of show-trees in the order given. Any unknown ID fails the call.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			ids := parseIDs(args[0])
+
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
@@ -270,17 +275,20 @@ func newTicketShowCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			tk, err := repo.GetTicket(ctx, pdb.SQL(), args[0])
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if tk == nil {
-				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", args[0])}
-			}
-
-			out, err := buildShowTree(ctx, pdb.SQL(), tk, withContext, withBlockers, withChildren)
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
+			trees := make([]*ticketShowTree, 0, len(ids))
+			for _, id := range ids {
+				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				if tk == nil {
+					return &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", id)}
+				}
+				tree, err := buildShowTree(ctx, pdb.SQL(), tk, withContext, withBlockers, withChildren)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				trees = append(trees, tree)
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -288,8 +296,14 @@ func newTicketShowCmd() *cobra.Command {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(out, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
+			if len(trees) == 1 {
+				if _, err := render.One(trees[0], rOpts); err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+			} else {
+				if _, err := render.Render(trees, rOpts); err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
 			}
 			return nil
 		},
@@ -704,9 +718,6 @@ func newTicketBoardCmd() *cobra.Command {
 			tks, err := repo.ListTickets(ctx, pdb.SQL(), repo.TicketFilter{Team: teamFlag})
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if len(tks) == 0 {
-				return errNoMatch
 			}
 
 			type column struct {

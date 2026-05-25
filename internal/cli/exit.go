@@ -1,10 +1,6 @@
 package cli
 
-import (
-	"fmt"
-
-	"github.com/postmeridiem/pql/internal/diag"
-)
+import "fmt"
 
 // exitError carries a process exit code through cobra's error-returning
 // path. Run() unwraps these via errors.As; cobra's own error printing is
@@ -25,8 +21,3 @@ func (e *exitError) Error() string {
 	}
 	return fmt.Sprintf("pql: exit code %d", e.code)
 }
-
-// errNoMatch is the canonical "zero matches" sentinel. Subcommands return
-// it when the result set is empty; Run() maps to exit 2 without printing
-// any diagnostic (zero matches is intentional, not an error).
-var errNoMatch = &exitError{code: diag.NoMatch}

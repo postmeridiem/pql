@@ -10,13 +10,12 @@ import (
 
 // Exit codes per docs/output-contract.md.
 const (
-	OK         = 0  // success with at least one match
-	NoMatch    = 2  // success with zero matches; intentional, not an error
-	Usage      = 64 // EX_USAGE — bad CLI flag
-	DataErr    = 65 // EX_DATAERR — PQL parse or evaluation error
-	NoInput    = 66 // EX_NOINPUT — vault root not found / unreadable
-	Unavail    = 69 // EX_UNAVAILABLE — index corruption / migration failure
-	Software   = 70 // EX_SOFTWARE — internal error
+	OK       = 0  // success — including zero results (empty [] on stdout)
+	Usage    = 64 // EX_USAGE — bad CLI flag
+	DataErr  = 65 // EX_DATAERR — PQL parse or evaluation error
+	NoInput  = 66 // EX_NOINPUT — vault root not found / unreadable
+	Unavail  = 69 // EX_UNAVAILABLE — index corruption / migration failure
+	Software = 70 // EX_SOFTWARE — internal error
 )
 
 // Level is the severity tag on a stderr Diagnostic. "warn" is informational,

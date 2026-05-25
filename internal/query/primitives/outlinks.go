@@ -23,7 +23,7 @@ type OutlinksOpts struct {
 // extracted — no resolution applied.
 //
 // Empty result and unknown path are not distinguished: if opts.Path isn't
-// indexed, Outlinks returns []. Callers map zero rows to exit code 2 per
+// indexed, Outlinks returns []. Zero rows is success (exit 0, empty []) per
 // the output contract; explicit "is this file indexed?" probes go through
 // `pql meta` once that ships.
 func Outlinks(ctx context.Context, db *sql.DB, opts OutlinksOpts) ([]Outlink, error) {

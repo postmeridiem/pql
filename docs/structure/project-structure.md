@@ -96,7 +96,7 @@ pql/
 │   ├── intents.md                    # intent catalog + per-intent contract
 │   ├── signals.md                    # signal catalog: what it measures, where it shines/fails
 │   ├── pql-grammar.md                # DSL grammar
-│   ├── output-contract.md            # stdout JSON, stderr JSON, exit codes (0/2/65/66/69)
+│   ├── output-contract.md            # stdout JSON, stderr JSON, exit codes (0/64/65/66/69/70)
 │   ├── compatibility.md              # binary↔skill schema_version negotiation
 │   ├── skill.md
 │   └── adr/                          # ADRs: 0001-no-vectors, 0002-intents-not-primitives, 0003-pql-db-for-user-state
@@ -214,7 +214,7 @@ End-to-end once each milestone lands:
 1. `make lint` + `make test` + `make test-race` → all green.
 2. `make build` → `./bin/pql --version` prints stamped build info; `./bin/pql version --build-info` prints JSON including `schema_version`.
 3. `make snapshot` → `dist/` contains 5 platform archives with checksums.
-4. `make test-integration` against `testdata/council-snapshot/` → exit codes 0/2/65/66 all exercised.
+4. `make test-integration` against `testdata/council-snapshot/` → exit codes 0/65/66 all exercised (zero matches is part of `0`).
 5. `make eval` with a seeded 3-query golden set → produces NDCG@5/MRR/P@5 report + per-signal contribution table.
 6. Push a throwaway branch → `ci/lint.sh` + `ci/test.sh` complete locally under 5 min (the host pipeline shells out to these, so local-equals-CI by construction).
 7. Tag a pre-release `v0.0.1-rc1` and run `ci/release.sh` (or push the tag and let `.github/workflows/release.yaml` invoke it) → produces signed binaries published to GitHub Releases; verify cosign signature locally.

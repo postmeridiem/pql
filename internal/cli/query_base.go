@@ -81,10 +81,6 @@ func listBases(cmd *cobra.Command, vault string) error {
 			names = append(names, strings.TrimSuffix(e.Name(), ".base"))
 		}
 	}
-	if len(names) == 0 {
-		return &exitError{code: diag.NoMatch}
-	}
-
 	rOpts, err := renderOptsFromFlags(cmd)
 	if err != nil {
 		return &exitError{code: diag.Usage, msg: err.Error()}

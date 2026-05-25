@@ -64,6 +64,7 @@ You might also want, project-permitting:
 - [D-19: No ALTER TABLE — schema lives in CREATE statements only](decisions/architecture.md#d-19-no-alter-table--schema-lives-in-create-statements-only) — _architecture_
 - [D-20: Decision implementation tracked via initiative tickets, no coverage report](decisions/architecture.md#d-20-decision-implementation-tracked-via-initiative-tickets-no-coverage-report) — _architecture_
 - [D-21: DQR layout — `governance/` parent with per-type subdirectories](decisions/architecture.md#d-21-dqr-layout--governance-parent-with-per-type-subdirectories) — _architecture_
+- [D-22: Zero results returns exit 0, no distinct no-match code](decisions/architecture.md#d-22-zero-results-returns-exit-0-no-distinct-no-match-code) — _architecture_
 
 ## Open questions
 

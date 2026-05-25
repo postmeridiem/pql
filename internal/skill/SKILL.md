@@ -9,8 +9,8 @@ description: >
   user asks about decisions, tickets, work items, or project planning
   ("sync decisions", "create a ticket", "what's the plan status", "show
   D-5", "board", "refine tickets", "tickets without descriptions").
-  Requires `pql` on PATH. JSON on stdout; exit 2 = zero matches (not an
-  error).
+  Requires `pql` on PATH. JSON on stdout; zero matches is success (exit 0,
+  empty `[]`), not an error.
 ---
 
 # pql — vault queries + project planning
@@ -104,7 +104,7 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 |---|---|
 | `pql ticket new <type> "title" [--decision D-NNN] [--priority P]` | Create (emits T-NNN) |
 | `pql ticket list [--status S] [--team T] [--assigned A] [--label L]` | List with filters |
-| `pql ticket show <id> [--with-context] [--with-blockers] [--with-children]` | Show with joins |
+| `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children]` | Show one or more (comma-batch → array of show-trees) |
 | `pql ticket status <id> <new-status>` | Change status (any valid status accepted) |
 | `pql ticket assign <id> <agent>` | Set assignee |
 | `pql ticket block <id> --by <other>` | Add blocker |
@@ -150,6 +150,7 @@ On a fresh clone, `pql plan import` restores from the snapshot.
 - **Create ticket** → `pql ticket new task "implement X" --decision D-5`
 - **Batch close** → `pql ticket status T-1,T-2,T-3 done`
 - **Full context** → `pql ticket show T-5 --with-context --pretty`
+- **Batch show** → `pql ticket show T-1,T-2,T-3 --pretty`
 - **Refine next ticket** → `pql ticket refine next --pretty`, then `pql ticket refine write T-N '{"description":"..."}'`
 - **What's next?** → `pql plan whatsnext --pretty`
 - **Review queue** → `pql plan review --pretty`
@@ -164,8 +165,7 @@ On a fresh clone, `pql plan import` restores from the snapshot.
 - **stdout:** JSON array (default); `--jsonl` for one object/line; `--pretty`; `--limit N`.
 - **stderr:** JSON diagnostics `{"level":"…","code":"pql.<phase>.<kind>","msg":"…"}`.
 - **Exit codes:**
-  - `0` — success, ≥1 result
-  - `2` — zero matches (not an error — say "no matches", not "failed")
+  - `0` — success, including zero matches (empty `[]` — say "no matches", not "failed")
   - `64` — bad flag
   - `65` — parse/compile error (pass stderr back)
   - `66` — vault/config not found

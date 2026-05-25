@@ -75,12 +75,8 @@ excluding done and cancelled. Sorted by status priority
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			n, err := render.Render(tks, rOpts)
-			if err != nil {
+			if _, err := render.Render(tks, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if n == 0 {
-				return errNoMatch
 			}
 			return nil
 		},
@@ -137,7 +133,18 @@ mutating any state.`,
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			if skip >= len(tks) {
-				return errNoMatch
+				// Queue exhausted: emit the envelope with no ticket so callers
+				// get parseable JSON and a remaining count of zero (exit 0).
+				rOpts, err := renderOptsFromFlags(cmd)
+				if err != nil {
+					return &exitError{code: diag.Usage, msg: err.Error()}
+				}
+				rOpts.Out = cmd.OutOrStdout()
+				empty := &refineNextResult{Refinement: refineMeta{Remaining: 0, Skipped: len(tks)}}
+				if _, err := render.One(empty, rOpts); err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				return nil
 			}
 
 			head := tks[skip]

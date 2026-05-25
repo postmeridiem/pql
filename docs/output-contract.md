@@ -11,15 +11,21 @@ This contract is what makes `pql` safe for AI agents to call. Stable across vers
 
 | Code | Name | Meaning |
 |---:|---|---|
-| `0` | OK | success with ≥1 result |
-| `2` | NoMatch | success with **zero** results — intentional, **not an error** |
+| `0` | OK | success — **including zero results** (empty `[]` on stdout) |
 | `64` | EX_USAGE | bad CLI flag |
 | `65` | EX_DATAERR | PQL parse or evaluation error |
 | `66` | EX_NOINPUT | vault root not found / unreadable |
 | `69` | EX_UNAVAILABLE | index corruption / migration failure |
 | `70` | EX_SOFTWARE | internal error |
 
-The distinction between `0` and `2` is load-bearing. A zero-row query must never look like a bug.
+**Zero results is success, not a special code.** A query that matched nothing
+exits `0` and emits an empty array `[]` on stdout (JSONL emits nothing). The
+empty result lives in the data, never in the exit code — so callers using the
+near-universal "non-zero means failure" convention (`set -e`, `subprocess`,
+CI steps, agent harnesses) treat a zero-row query correctly without special
+casing. Errors are the `64`–`70` range, always paired with a stderr
+diagnostic. Exit code `2` was retired in this regime (it formerly meant
+"no match"); see [D-22](../governance/decisions/architecture.md#d-22-zero-results-returns-exit-0-no-distinct-no-match-code).
 
 ## Result row shape
 

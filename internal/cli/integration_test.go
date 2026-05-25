@@ -158,11 +158,11 @@ func TestIntegration_Files_GlobNarrowsResults(t *testing.T) {
 	}
 }
 
-func TestIntegration_Files_NoMatchExits2(t *testing.T) {
+func TestIntegration_Files_NoMatchExits0(t *testing.T) {
 	vault := councilVault(t)
 	stdout, _, code := run(t, vault, "files", "nope/no-such-folder/*")
-	if code != 2 {
-		t.Errorf("exit = %d, want 2 (zero matches)", code)
+	if code != 0 {
+		t.Errorf("exit = %d, want 0 (zero matches is success)", code)
 	}
 	// JSON path emits "[]" when zero rows; JSONL emits nothing. Default is JSON.
 	if got := strings.TrimSpace(string(stdout)); got != "[]" {
@@ -275,11 +275,11 @@ func TestIntegration_Backlinks_RequiresPathArg(t *testing.T) {
 	}
 }
 
-func TestIntegration_Backlinks_NoMatchExits2(t *testing.T) {
+func TestIntegration_Backlinks_NoMatchExits0(t *testing.T) {
 	vault := councilVault(t)
 	stdout, _, code := run(t, vault, "backlinks", "members/nonexistent/file.md")
-	if code != 2 {
-		t.Errorf("exit = %d, want 2", code)
+	if code != 0 {
+		t.Errorf("exit = %d, want 0 (zero matches is success)", code)
 	}
 	if got := strings.TrimSpace(string(stdout)); got != "[]" {
 		t.Errorf("stdout = %q, want []", got)
@@ -292,15 +292,15 @@ func TestIntegration_Backlinks_FindsSessionReferences(t *testing.T) {
 	// surface at least one hit (the session referencing it).
 	vault := councilVault(t)
 	stdout, stderr, code := run(t, vault, "backlinks", "members/vaasa/persona.md")
-	if code != 0 && code != 2 {
-		t.Fatalf("exit=%d (want 0 or 2)\nstderr: %s", code, stderr)
-	}
-	if code == 2 {
-		t.Skip("Council snapshot has no backlinks to vaasa — fixture may have been refreshed")
+	if code != 0 {
+		t.Fatalf("exit=%d (want 0)\nstderr: %s", code, stderr)
 	}
 	var rows []map[string]any
 	if err := json.Unmarshal(stdout, &rows); err != nil {
 		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if len(rows) == 0 {
+		t.Skip("Council snapshot has no backlinks to vaasa — fixture may have been refreshed")
 	}
 	for i, r := range rows {
 		path, _ := r["path"].(string)
@@ -325,11 +325,11 @@ func TestIntegration_Outlinks_RequiresPathArg(t *testing.T) {
 	}
 }
 
-func TestIntegration_Outlinks_UnknownFileExits2(t *testing.T) {
+func TestIntegration_Outlinks_UnknownFileExits0(t *testing.T) {
 	vault := councilVault(t)
 	stdout, _, code := run(t, vault, "outlinks", "nope/nope.md")
-	if code != 2 {
-		t.Errorf("exit = %d, want 2", code)
+	if code != 0 {
+		t.Errorf("exit = %d, want 0 (zero matches is success)", code)
 	}
 	if got := strings.TrimSpace(string(stdout)); got != "[]" {
 		t.Errorf("stdout = %q, want []", got)
@@ -395,20 +395,15 @@ func TestIntegration_Meta_VaasaPersona(t *testing.T) {
 	}
 }
 
-func TestIntegration_Skill_StatusOnMissingExits2(t *testing.T) {
+func TestIntegration_Skill_StatusOnMissingExits0(t *testing.T) {
 	vault := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
 	cmd := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "status")
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
-	err := cmd.Run()
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) {
-		t.Fatalf("expected ExitError, got %v\nstderr: %s", err, errBuf.String())
-	}
-	if ee.ExitCode() != 2 {
-		t.Errorf("exit = %d, want 2 (missing == no-match)", ee.ExitCode())
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("exit = %v, want 0 (missing state reported in data)\nstderr: %s", err, errBuf.String())
 	}
 	var st map[string]any
 	if err := json.Unmarshal(outBuf.Bytes(), &st); err != nil {
@@ -510,12 +505,8 @@ func TestIntegration_Skill_UninstallRemovesFiles(t *testing.T) {
 
 	cmd := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "uninstall")
 	out, err := cmd.Output()
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) {
-		t.Fatalf("expected ExitError (state=missing post-uninstall), got %v", err)
-	}
-	if ee.ExitCode() != 2 {
-		t.Errorf("exit = %d, want 2 (missing after uninstall)", ee.ExitCode())
+	if err != nil {
+		t.Fatalf("exit = %v, want 0 (state=missing reported in data post-uninstall)", err)
 	}
 	var st map[string]any
 	_ = json.Unmarshal(out, &st)
@@ -551,18 +542,15 @@ func TestIntegration_Query_PositionalDSL(t *testing.T) {
 func TestIntegration_Query_TagMembership(t *testing.T) {
 	vault := councilVault(t)
 	stdout, stderr, code := run(t, vault, "query", "SELECT path WHERE 'volt' IN tags")
-	if code != 0 && code != 2 {
+	if code != 0 {
 		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
-	}
-	if code == 2 {
-		t.Skip("no 'volt' tag in current fixture")
 	}
 	var rows []map[string]any
 	if err := json.Unmarshal(stdout, &rows); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if len(rows) == 0 {
-		t.Errorf("expected at least one file tagged 'volt'")
+		t.Skip("no 'volt' tag in current fixture")
 	}
 }
 
@@ -638,11 +626,11 @@ func TestIntegration_Query_FromFile(t *testing.T) {
 	}
 }
 
-func TestIntegration_Query_NoMatchExits2(t *testing.T) {
+func TestIntegration_Query_NoMatchExits0(t *testing.T) {
 	vault := councilVault(t)
 	stdout, _, code := run(t, vault, "query", "SELECT path WHERE folder = 'nope-never'")
-	if code != 2 {
-		t.Errorf("exit = %d, want 2", code)
+	if code != 0 {
+		t.Errorf("exit = %d, want 0 (zero matches is success)", code)
 	}
 	if got := strings.TrimSpace(string(stdout)); got != "[]" {
 		t.Errorf("stdout = %q, want []", got)
@@ -1017,15 +1005,15 @@ func TestIntegration_Outlinks_OnSessionOutcome(t *testing.T) {
 	target, _ := files[0]["path"].(string)
 
 	stdout, stderr, code = run(t, vault, "outlinks", target)
-	if code != 0 && code != 2 {
+	if code != 0 {
 		t.Fatalf("outlinks: exit=%d stderr=%s", code, stderr)
-	}
-	if code == 2 {
-		t.Skipf("session outcome %s has no outlinks in this fixture", target)
 	}
 	var rows []map[string]any
 	if err := json.Unmarshal(stdout, &rows); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(rows) == 0 {
+		t.Skipf("session outcome %s has no outlinks in this fixture", target)
 	}
 	for i, r := range rows {
 		t1, _ := r["target"].(string)

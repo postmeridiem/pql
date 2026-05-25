@@ -59,13 +59,13 @@ func runQueryOne[T any](
 
 // runQuery encapsulates the boilerplate every read-only primitive
 // subcommand shares: load config, open the store, refresh the index, run
-// the query, render, map the result count to an exit code.
+// the query, render.
 //
 // Subcommands provide only the "query" closure — what they actually want
 // from the store given a fresh index. The closure receives the live store
 // and config so subcommands can use config-driven data (e.g. tag sources)
 // without re-loading. Returning a non-nil error from the closure surfaces
-// as exit code 70 (Software); zero rows returns errNoMatch (exit 2).
+// as exit code 70 (Software); zero rows is success (exit 0, empty []).
 //
 // Generic over T so each subcommand keeps its typed primitive return value
 // — render.Render works on any T via JSON reflection.
@@ -99,12 +99,8 @@ func runQuery[T any](
 	if err != nil {
 		return &exitError{code: diag.Usage, msg: err.Error()}
 	}
-	n, err := render.Render(rows, rOpts)
-	if err != nil {
+	if _, err := render.Render(rows, rOpts); err != nil {
 		return &exitError{code: diag.Software, msg: err.Error()}
-	}
-	if n == 0 {
-		return errNoMatch
 	}
 	return nil
 }
