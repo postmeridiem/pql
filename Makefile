@@ -2,6 +2,21 @@
 
 GO       ?= go
 BIN_DIR  ?= bin
+
+# OS / arch detection.
+OS   := $(strip $(shell uname -s | tr A-Z a-z))
+ARCH := $(shell uname -m)
+ifeq ($(ARCH),x86_64)
+  ARCH := amd64
+endif
+ifeq ($(ARCH),aarch64)
+  ARCH := arm64
+endif
+
+GOOS   ?= $(OS)
+GOARCH ?= $(ARCH)
+
+# Default install directory. Override with INSTALL_DIR=.
 INSTALL_DIR ?= $(HOME)/.local/bin
 
 # Version stamping. Source of truth: project.yaml `version:` field.
@@ -23,7 +38,7 @@ help: ## Show this help.
 
 .PHONY: build
 build: ## Build the pql binary into ./bin/pql with version stamped.
-	$(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/pql ./cmd/pql
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/pql ./cmd/pql
 
 .PHONY: install
 install: build ## Install ./bin/pql into $(INSTALL_DIR).
