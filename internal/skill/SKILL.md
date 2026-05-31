@@ -153,9 +153,9 @@ On a fresh clone, `pql plan import` restores from the snapshot.
 - **Full context** → `pql ticket show T-5 --with-context --pretty`
 - **Batch show** → `pql ticket show T-1,T-2,T-3 --pretty`
 - **Refine next ticket** → `pql ticket refine next --pretty`, then `pql ticket refine write T-N '{"description":"..."}'`
-- **Append a note** → `pql ticket append T-5 "benchmarked; TTL now 5m"` (no read-modify-write needed)
-- **Subtree of an epic** → `pql ticket show T-2 --tree --pretty` (nested descendants + parent)
-- **Ready leaf work under an epic** → `pql ticket list --under T-2 --leaf --unblocked`
+- **Append a note** → `pql ticket append T-5 "benchmarked; TTL now 5m"` — blank-line separated, never overwrites; use `--file note.md` or `--stdin` for longer content
+- **Subtree of an epic** → `pql ticket show T-2 --tree --pretty` — nested `subtree` + direct parent in `ancestors`; add `--depth N` to cap levels
+- **Ready leaf work under an epic** → `pql ticket list --under T-2 --leaf --unblocked` — leaf tickets beneath T-2 whose blockers are all done/cancelled; the batch complement to `plan whatsnext`
 - **What's next?** → `pql plan whatsnext --pretty`
 - **Review queue** → `pql plan review --pretty`
 - **Coverage gaps** → `pql decisions coverage`
@@ -207,3 +207,8 @@ The consuming project's `.claude/settings.json` should allow:
 
 `pql skill status` reports drift. `pql skill install` writes/updates;
 `--force` overrides hand-edits. `pql doctor` also surfaces skill state.
+`pql skill show [name]` echoes the skill content embedded in *this*
+binary (defaults to the `pql` skill; pass a name like `clean-house` for
+another) — JSON keyed by file path, `--pretty` to read as text. Works
+from any directory, no vault required; handy for confirming exactly
+which skill a given binary ships.
