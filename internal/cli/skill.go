@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -61,9 +62,74 @@ embedded bundle to detect:
 `,
 	}
 	cmd.AddCommand(newSkillStatusCmd())
+	cmd.AddCommand(newSkillShowCmd())
 	cmd.AddCommand(newSkillInstallCmd())
 	cmd.AddCommand(newSkillUninstallCmd())
 	return cmd
+}
+
+// --- show ---
+
+// skillContent is the JSON shape emitted by `pql skill show`: the skill
+// name plus every file in the bundle keyed by its relative path. Single-
+// file skills (like pql) carry just SKILL.md; bundles carry all files.
+type skillContent struct {
+	Name  string            `json:"name"`
+	Files map[string]string `json:"files"`
+}
+
+func newSkillShowCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show [name]",
+		Short: "Print the skill content embedded in this binary",
+		Long: `Echo a bundled skill's content as baked into this binary — not the
+copy installed on disk, so it works from anywhere without a vault.
+Defaults to the "pql" skill; pass a name for another bundled skill.
+
+Output is a JSON object mapping each file in the bundle to its embedded
+content; pass --pretty to read it as text.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := skill.PrimarySkill
+			if len(args) == 1 {
+				name = args[0]
+			}
+			s := skill.ByName(name)
+			if s == nil {
+				return &exitError{
+					code: diag.NoInput,
+					msg:  fmt.Sprintf("no bundled skill %q (have: %s)", name, strings.Join(bundledSkillNames(), ", ")),
+				}
+			}
+
+			files := make(map[string]string, len(s.Files()))
+			for _, rel := range s.Files() {
+				files[rel] = s.FileContent(rel)
+			}
+
+			rOpts, err := renderOptsFromFlags(cmd)
+			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			rOpts.Out = cmd.OutOrStdout()
+			if _, err := render.One(&skillContent{Name: s.Name, Files: files}, rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			return nil
+		},
+	}
+	return cmd
+}
+
+// bundledSkillNames lists the names of every skill embedded in the
+// binary, in their deterministic bundle order — used for the "have: …"
+// hint when an unknown name is requested.
+func bundledSkillNames() []string {
+	names := make([]string, 0, len(skill.Bundled))
+	for _, s := range skill.Bundled {
+		names = append(names, s.Name)
+	}
+	return names
 }
 
 func newSkillStatusCmd() *cobra.Command {

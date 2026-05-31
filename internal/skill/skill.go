@@ -40,6 +40,11 @@ const (
 	LockFile  = ".pql-install.json"
 )
 
+// PrimarySkill is the name of the main skill bundled with the binary —
+// the query/planning skill itself. It is the default target for
+// `pql skill show`.
+const PrimarySkill = "pql"
+
 //go:embed SKILL.md
 var pqlSkillMd string
 
@@ -56,7 +61,7 @@ func buildBundled() []*Skill {
 
 	// pql — single-file skill, embedded directly.
 	skills = append(skills, &Skill{
-		Name:  "pql",
+		Name:  PrimarySkill,
 		files: map[string]string{SkillFile: pqlSkillMd},
 	})
 

@@ -43,6 +43,9 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   blockers are all done or cancelled. Composed (`--under E --leaf
   --unblocked`), they are the batch complement to `pql plan whatsnext` —
   "what leaf work under this epic is ready to pick up" in one call.
+- **`pql skill show [name]`** — echo a bundled skill's content as embedded
+  in the binary (defaults to the `pql` skill). JSON keyed by file path;
+  `--pretty` to read as text. Works from anywhere, no vault required.
 
 ### Internal
 
