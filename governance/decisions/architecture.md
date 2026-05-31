@@ -182,6 +182,8 @@ Core design constraints for pql.
 
   `pql decisions validate` and `pql decisions sync` enforce convention by default: filename style (lowercase, hyphenated), one record type per file, file-vs-subdirectory consistency, stale-README detection. The flag `--no-style` opts out of warnings; structural errors (broken refs, malformed records) remain unconditional.
 
+  **Amendment (2026-05-31):** The domain-stem prefix-collision check (two stems in one subdirectory where one is a prefix of the other, e.g. `arch.md` vs `architecture.md`) and the questions↔decisions domain-pairing check ship as style **warnings**, not errors. The original sketch (via T-36) framed the collision as a hard error; in practice a fuzzy prefix heuristic must not fail `sync`/`validate` (exit 65) on a legitimate pair like `test`/`testing`. Both are suppressible via `--no-style`; only structural problems (broken refs, malformed records) remain unconditional errors. (T-43)
+
 - **Rationale:** The previous flat layout had asymmetric prefixes (`questions-X.md`, `rejected.md`, plain `X.md` for decisions) and no enforcement, creating a "filename wilderness" risk across multiple consumers. Subdirectories are symmetric — each record type owns its namespace, `ls governance/questions/` is the natural way to see all Q-records, and per-domain files inside each type scale to many records without one giant file.
 
   `governance/` as the parent reads as "rules of the road" with at least the LLM-priority of `decisions/` (the previous default), avoids the `decisions/decisions/` repetition that a simpler rename would have caused, and creates room for future record types (`governance/runbooks/`, `governance/postmortems/`) without re-rooting.
