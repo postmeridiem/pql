@@ -39,6 +39,16 @@ observable behavior (e.g. `whatsnext` now skipping blocked tickets).
 - **No** (internal refactor, test-only, internal-doc edit) → skip the doc
   update. Don't manufacture changelog noise.
 
+**Also — does the change deviate from a decision record?** This is a separate
+trigger from user-facing-ness: a change can contradict a D-record without
+touching the CLI surface (a retired option, a changed default, an error
+downgraded to a warning, a different mechanism than the one the record
+describes). If so, reconcile it in the **same commit** — amend the record with
+an inline `**Amendment (YYYY-MM-DD):**` marker if the implementation is the
+right call, or change the code if the decision is. Never ship a D-record that
+contradicts the code; a stale record is worse than none. See the
+`d-record-implementation-sync` memory.
+
 Sanity check after editing: the documented flags/commands should be ones that
 actually exist in `internal/cli/`. If you added a command, confirm it appears in
 `pql <cmd> --help` (cobra generates help from the command's own `Short`/`Long`,
