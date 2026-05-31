@@ -20,7 +20,7 @@
 ### Q-4: Validator strictness
 - **Status:** Open
 - **Question:** How strict should `pql decisions validate` be? Missing fields = error or warning?
-- **Context:** The parser is permissive (missing Date: doesn't fail). The validate command exits non-zero only on duplicate IDs, empty titles, and broken refs.
+- **Context:** The parser is permissive (missing Date: doesn't fail). The validate command exits non-zero only on duplicate IDs, empty titles, and broken refs. A separate **warnings** tier has since shipped (filename convention, subdir/heading mismatch, domain pairing/conflict — suppressible via `--no-style`, D-21/T-43), but the core question stands: should *missing fields* be an error or a warning? Still open.
 
 ### Q-5: Body access in the DSL
 - **Status:** Open

@@ -25,6 +25,7 @@ Core design constraints for pql.
 - **Rationale:** One store fails both tests: as a cache it's too durable, as user state it's too fragile. The CLI-today / MCPs-tomorrow split reinforces this: a query MCP needs only index.db, a planning MCP needs only pql.db. The skill install lock sits outside SQLite so the cache invariant survived; planning cannot — status transitions, ticket history, and the D-record ↔ ticket join graph are user-authored state that must survive index rebuilds.
 - **Cost:** Two files to manage. pql.db must survive upgrades; uninstalling pql leaves it in place.
 - **Raised by:** Planning subcommands feature design.
+- **Amendment (2026-05-31):** The "forward-only migrations" phrase predates [D-19](#d-19-no-alter-table--schema-lives-in-create-statements-only), which removed the migration runner — pql.db is currently schema-create-if-missing and regenerated from the changelog, with no in-place migrations. Forward migrations return as a planned step at third-party distribution (see D-19's amendment + T-44). Treat D-19 as the current authority on how pql.db evolves; the index.db-vs-pql.db split this record establishes is unchanged.
 
 ### D-4: Consumer-agnostic core
 - **Date:** 2026-04-22
@@ -61,6 +62,7 @@ Core design constraints for pql.
 - **Rationale:** Shipping tickets without the mirror lets us deliver the feature now. The markdown mirror (auto-writing `tickets/T-NNN.md` on mutation) requires solving concurrent-edit conflicts, which is a separate problem.
 - **Cost:** Tickets are invisible to git until explicitly exported. Acceptable for single-user workflows.
 - **Raised by:** Planning locked decision. See [Q-1](questions.md#q-1-markdown-mirror-for-tickets).
+- **Amendment (2026-05-31):** `pql ticket export` was never built, and the merge-conflict problem this record was waiting on was since solved by the changelog replication design ([D-15](#d-15-per-table-monthly-sql-changelog-files-not-one-json-snapshot)/[D-16](#d-16-inline-lww-guards-make-changelog-replay-idempotent)) — tickets now travel in git via `.pql/changelog/`, not a markdown mirror. The load-bearing decision (tickets live in pql.db, no automatic `tickets/T-NNN.md` mirror) still holds; whether a markdown mirror is wanted at all is the live question (Q-1).
 
 ### D-9: One combined skill, not separate query/plan skills
 - **Date:** 2026-04-22
@@ -151,6 +153,7 @@ Core design constraints for pql.
 - **Rationale:** pql.db is a derived cache of authoritative state living in the changelog (D-3 + D-15). Carrying a migration framework — version tracking, ALTER TABLE deltas, backfill goroutines, transient-state tests — to evolve a regenerable cache is unwarranted complexity. The codebase should optimise for clean installs, not for in-place upgrades. Schema changes propagate the same way data changes propagate: through the changelog, with consumers rebuilding their local cache. Open path becomes "create schema if missing, verify columns match expectations, refuse to operate if not."
 - **Cost:** Any pql.db built under an earlier schema is non-recoverable in place. Recovery is `rm .pql/pql.db && pql plan import` (or `pql plan rebuild` once T-21 lands). Migration-style ALTER TABLE deltas would have allowed in-place upgrades; this decision trades that affordance for a cleaner codebase.
 - **Raised by:** T-18 implementation review. Initial plan layered an ALTER TABLE migration v2 on top of v1 to add `deleted_at`; user pushback flagged this as unnecessary clutter for a regenerable cache.
+- **Amendment (2026-05-31):** "No migration runner *ever*" is too strong — it holds only while pql is single-author and pre-distribution, where pql.db is a regenerable cache (rm + rebuild from the changelog is fine recovery). Once pql is distributed to third parties or used beyond the author, an in-place forward-migration path becomes necessary: external users can't be told to `rm .pql/pql.db` on every schema change, and their pql.db may hold state not yet in any shared changelog. The no-migration stance stands **for now**; introducing forward migrations (the in-house runner [D-6](#d-6-in-house-migration-runner-not-golang-migrate-or-goose) sketched, or equivalent) is gated on that distribution boundary and tracked by T-44.
 
 ### D-20: Decision implementation tracked via initiative tickets, no coverage report
 - **Date:** 2026-05-11
