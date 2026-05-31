@@ -75,9 +75,12 @@ You might also want, project-permitting:
 - [Q-5: Body access in the DSL](questions/architecture.md#q-5-body-access-in-the-dsl) — _architecture_
 - [Q-6: Outlink target normalization](questions/architecture.md#q-6-outlink-target-normalization) — _architecture_
 - [Q-7: Code-aware extractor](questions/architecture.md#q-7-code-aware-extractor) — _architecture_
-- [Q-8: Occasional pql.db backups into git](questions/architecture.md#q-8-occasional-pqldb-backups-into-git) — _architecture_
 - [Q-9: Multi-user ticket ID distribution](questions/architecture.md#q-9-multi-user-ticket-id-distribution) — _architecture_
 - [Q-10: Soft-delete stub retention and purge](questions/architecture.md#q-10-soft-delete-stub-retention-and-purge) — _architecture_
+
+## Resolved questions
+
+- [Q-8: Occasional pql.db backups into git](questions/architecture.md#q-8-occasional-pqldb-backups-into-git) — _architecture_
 
 ## Rejected
 
