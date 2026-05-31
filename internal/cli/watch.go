@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -46,6 +47,14 @@ func newWatchStartCmd() *cobra.Command {
 				scope, err = filepath.Abs(args[0])
 				if err != nil {
 					return &exitError{code: diag.NoInput, msg: err.Error()}
+				}
+				// Scope must be inside the vault root (docs/watching.md).
+				rel, relErr := filepath.Rel(cfg.Vault.Path, scope)
+				if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					return &exitError{
+						code: diag.Usage,
+						msg:  fmt.Sprintf("watch scope %s is outside the vault root %s", scope, cfg.Vault.Path),
+					}
 				}
 			}
 

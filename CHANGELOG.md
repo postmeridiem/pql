@@ -13,6 +13,18 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ## [1.6.0]
 
+### Fixed
+
+- **`--quiet` now actually suppresses stderr warnings.** The flag was
+  registered but never read; warnings always printed. Wired into `diag`
+  via a pre-run toggle (errors still emit).
+- **`pql watch start <path>` rejects a scope outside the vault root**, as
+  `docs/watching.md` specifies — previously any path was accepted.
+- **The governance README no longer lists resolved questions as open.**
+  The records-section generator bucketed by record type only; a question
+  with `status: resolved` rendered under "Open questions" and re-synced
+  that way. It now splits into "Open questions" / "Resolved questions".
+
 ### Removed
 
 - **`TODO.md`** at the repo root. pql dogfoods its own planning dataset

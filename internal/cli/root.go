@@ -55,6 +55,13 @@ func newRootCmd() *cobra.Command {
 		Short:   "Project Query Language — SQL-derived CLI for markdown vaults",
 		Long:    longDescription,
 		Version: version.Version,
+		// --quiet is a global flag; honor it before any subcommand runs by
+		// toggling diag's warning suppression. Subcommands don't define their
+		// own PersistentPreRun, so this fires for all of them.
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			q, _ := cmd.Flags().GetBool("quiet")
+			diag.SetQuiet(q)
+		},
 		// No subcommand given. Cobra's default would print help and exit 0;
 		// we want exit 64 (Usage) so callers can distinguish "user invoked
 		// pql with no instructions" from "pql ran something successfully".

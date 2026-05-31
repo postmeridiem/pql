@@ -209,11 +209,27 @@ func buildRecordsSection(ctx context.Context, db *sql.DB, dqrRoot string) (strin
 		byType[d.Type] = append(byType[d.Type], d)
 	}
 
+	// Split questions by status so a resolved question doesn't render
+	// under "Open questions" (the bucket keys on type, but status carries
+	// whether a question is still live).
+	var openQs, resolvedQs []repo.Decision
+	for _, q := range byType["question"] {
+		if q.Status == "resolved" {
+			resolvedQs = append(resolvedQs, q)
+		} else {
+			openQs = append(openQs, q)
+		}
+	}
+
 	var b strings.Builder
 	b.WriteString("## Decisions\n\n")
 	writeBucket(&b, byType["confirmed"], dqrRoot)
 	b.WriteString("\n## Open questions\n\n")
-	writeBucket(&b, byType["question"], dqrRoot)
+	writeBucket(&b, openQs, dqrRoot)
+	if len(resolvedQs) > 0 {
+		b.WriteString("\n## Resolved questions\n\n")
+		writeBucket(&b, resolvedQs, dqrRoot)
+	}
 	b.WriteString("\n## Rejected\n\n")
 	writeBucket(&b, byType["rejected"], dqrRoot)
 	return b.String(), nil

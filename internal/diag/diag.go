@@ -48,8 +48,20 @@ func Emit(w io.Writer, d Diagnostic) {
 	_, _ = w.Write(append(b, '\n'))
 }
 
-// Warn emits a warning diagnostic to stderr.
+// quiet, when set, suppresses warning diagnostics (errors still emit).
+// Toggled once from the global --quiet flag in the root pre-run. The CLI
+// is single-threaded at this layer, so a package-level toggle is safe and
+// matches diag's existing process-wide os.Stderr target.
+var quiet bool
+
+// SetQuiet enables or disables suppression of warning diagnostics.
+func SetQuiet(q bool) { quiet = q }
+
+// Warn emits a warning diagnostic to stderr, unless --quiet is set.
 func Warn(code, msg string) {
+	if quiet {
+		return
+	}
 	Emit(os.Stderr, Diagnostic{Level: LevelWarn, Code: code, Msg: msg})
 }
 
