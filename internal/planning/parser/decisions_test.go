@@ -206,3 +206,59 @@ func writeFile(t *testing.T, dir, name, content string) {
 		t.Fatalf("write %s: %v", name, err)
 	}
 }
+
+func TestParseAll_DomainConsistencyWarnings(t *testing.T) {
+	dir := t.TempDir()
+	for _, sub := range []string{"decisions", "questions"} {
+		if err := os.MkdirAll(dir+"/"+sub, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", sub, err)
+		}
+	}
+	// architecture has both a decision and a question → no pairing warning.
+	// retrieval is a question with no decision companion → pairing warning.
+	// arch.md collides by prefix with architecture.md in decisions/.
+	writeFile(t, dir, "decisions/architecture.md", "### D-1: Arch\n")
+	writeFile(t, dir, "decisions/arch.md", "### D-2: Arch abbrev\n")
+	writeFile(t, dir, "questions/architecture.md", "### Q-1: Arch q\n")
+	writeFile(t, dir, "questions/retrieval.md", "### Q-2: Vectors\n")
+
+	_, warnings, err := ParseAll(dir, dir)
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	joined := strings.Join(warnings, "\n")
+
+	// Pairing fires for retrieval (no decision companion)...
+	if !strings.Contains(joined, "domain pairing") || !strings.Contains(joined, "retrieval") {
+		t.Errorf("expected pairing warning for retrieval, got:\n%s", joined)
+	}
+	// ...but not for architecture (companion exists).
+	for _, w := range warnings {
+		if strings.Contains(w, "domain pairing") && strings.Contains(w, "questions/architecture.md") {
+			t.Errorf("unexpected pairing warning for architecture (has companion): %s", w)
+		}
+	}
+	// Prefix collision fires for arch / architecture in decisions/.
+	if !strings.Contains(joined, "domain conflict") ||
+		!strings.Contains(joined, "arch.md") || !strings.Contains(joined, "architecture.md") {
+		t.Errorf("expected prefix-collision warning for arch/architecture, got:\n%s", joined)
+	}
+}
+
+func TestStemPrefixCollision(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"arch", "architecture", true},
+		{"test", "testing", true},
+		{"architecture", "process", false},
+		{"design", "design", false}, // identical = same file, not a collision
+		{"code", "coding", false},   // 'code' is not a prefix of 'coding'
+	}
+	for _, c := range cases {
+		if got := stemPrefixCollision(c.a, c.b); got != c.want {
+			t.Errorf("stemPrefixCollision(%q,%q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}

@@ -464,3 +464,38 @@ func writeFile(t *testing.T, path, body string) {
 		t.Fatalf("write %q: %v", path, err)
 	}
 }
+
+func TestLoad_DQRDirDefaultAndEnvOverride(t *testing.T) {
+	// Default when unset.
+	cfg, err := Load(LoadOpts{
+		VaultFlag: t.TempDir(),
+		HomeDir:   t.TempDir(),
+		CacheDir:  t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DQRDir != "governance" {
+		t.Errorf("default DQRDir = %q, want governance", cfg.DQRDir)
+	}
+
+	// Config-file value overrides the default.
+	vault := t.TempDir()
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), "dqr_dir: decisions\n")
+	cfg, err = Load(LoadOpts{VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Load with file: %v", err)
+	}
+	if cfg.DQRDir != "decisions" {
+		t.Errorf("file DQRDir = %q, want decisions", cfg.DQRDir)
+	}
+
+	// $PQL_DQR_DIR wins over the config file (env > file > default).
+	cfg, err = Load(LoadOpts{VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir(), DQRDirEnv: "rules"})
+	if err != nil {
+		t.Fatalf("Load with env: %v", err)
+	}
+	if cfg.DQRDir != "rules" {
+		t.Errorf("env DQRDir = %q, want rules (env should beat file)", cfg.DQRDir)
+	}
+}

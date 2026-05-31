@@ -79,7 +79,8 @@ type Config struct {
 	// per D-21. Set to `decisions/` (or any other path, vault-relative)
 	// to keep a legacy layout without migrating. The directory holds
 	// three type-subdirectories — decisions/, questions/, rejected/ —
-	// each containing one markdown file per domain.
+	// each containing one markdown file per domain. The $PQL_DQR_DIR
+	// env var overrides this value (env > file > default).
 	DQRDir string `yaml:"dqr_dir"`
 }
 
@@ -92,6 +93,7 @@ type LoadOpts struct {
 	DBEnv      string // $PQL_DB
 	ConfigFlag string // --config
 	ConfigEnv  string // $PQL_CONFIG
+	DQRDirEnv  string // $PQL_DQR_DIR
 
 	// Test injection. If empty, Load uses runtime values.
 	StartDir string // for vault discovery (cwd if empty)
@@ -124,6 +126,12 @@ func Load(opts LoadOpts) (*Config, error) {
 			return nil, fmt.Errorf("config: load %q: %w", cfgPath, err)
 		}
 		cfg.ConfigPath = cfgPath
+	}
+
+	// $PQL_DQR_DIR overrides the config-file value (env > file > default),
+	// matching the precedence of the other PQL_* path knobs.
+	if opts.DQRDirEnv != "" {
+		cfg.DQRDir = opts.DQRDirEnv
 	}
 
 	if err := cfg.validate(); err != nil {

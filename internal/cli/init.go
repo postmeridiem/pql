@@ -1042,6 +1042,11 @@ func resolveDQRDir(dir string) string {
 			}
 		}
 	}
+	// $PQL_DQR_DIR overrides the config-file value, matching config.Load's
+	// env > file > default precedence (init bypasses config.Load).
+	if v := os.Getenv("PQL_DQR_DIR"); v != "" {
+		dqr = v
+	}
 	primary := filepath.Join(dir, dqr)
 	if _, err := os.Stat(primary); err == nil { //nolint:gosec // G703: dqr_dir is config, not external user input
 		return primary

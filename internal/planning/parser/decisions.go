@@ -276,6 +276,10 @@ func ParseAll(dqrRoot, repoRoot string) ([]Record, []string, error) {
 	}
 	var paths []pathInfo
 	var newLayout bool
+	// bySubdir maps a type-subdirectory name (decisions/questions/rejected)
+	// to its domain stems — populated only under the D-21 layout, and used
+	// for the cross-file domain checks after the per-file pass.
+	bySubdir := map[string][]string{}
 	for _, e := range entries {
 		if e.IsDir() && SubdirRecordType(e.Name()) != "" {
 			newLayout = true
@@ -304,6 +308,7 @@ func ParseAll(dqrRoot, repoRoot string) ([]Record, []string, error) {
 				if strings.EqualFold(se.Name(), "readme.md") {
 					continue
 				}
+				bySubdir[e.Name()] = append(bySubdir[e.Name()], strings.TrimSuffix(se.Name(), ".md"))
 				paths = append(paths, pathInfo{
 					path:       filepath.Join(subPath, se.Name()),
 					expectType: expect,
@@ -355,7 +360,82 @@ func ParseAll(dqrRoot, repoRoot string) ([]Record, []string, error) {
 		}
 		records = append(records, recs...)
 	}
+	if newLayout {
+		warnings = append(warnings, domainConsistencyWarnings(bySubdir, dqrRoot, repoRoot)...)
+	}
 	return records, warnings, nil
+}
+
+// domainConsistencyWarnings runs the cross-file D-21 style checks over a
+// new-layout DQR tree:
+//
+//  1. Domain pairing (informational): a questions/<d>.md with no
+//     decisions/<d>.md companion — an open question with no recorded
+//     decision yet is fine, just worth noticing.
+//  2. Prefix collision: two stems in the same subdirectory where one is a
+//     prefix of the other (e.g. arch.md / architecture.md), which usually
+//     signals abbreviation drift that should consolidate to one domain.
+//
+// Both are style-class warnings — suppressible via --no-style — and never
+// fail the parse. (D-21/T-36 framed the collision as an error; it ships as
+// a warning so a heuristic match can't break sync on a legitimate pair
+// like test/testing.)
+func domainConsistencyWarnings(bySubdir map[string][]string, dqrRoot, repoRoot string) []string {
+	rel := func(subdir, stem string) string {
+		p := filepath.Join(dqrRoot, subdir, stem+".md")
+		if r, err := filepath.Rel(repoRoot, p); err == nil {
+			return r
+		}
+		return p
+	}
+	var out []string
+
+	decisions := map[string]bool{}
+	for _, stem := range bySubdir[recordTypeSubdir(typeConfirmed)] {
+		decisions[stem] = true
+	}
+	questions := append([]string(nil), bySubdir[recordTypeSubdir(typeQuestion)]...)
+	sort.Strings(questions)
+	for _, stem := range questions {
+		if !decisions[stem] {
+			out = append(out, fmt.Sprintf(
+				"domain pairing (informational): %s has no %s companion",
+				rel(recordTypeSubdir(typeQuestion), stem), rel(recordTypeSubdir(typeConfirmed), stem)))
+		}
+	}
+
+	subdirs := make([]string, 0, len(bySubdir))
+	for sd := range bySubdir {
+		subdirs = append(subdirs, sd)
+	}
+	sort.Strings(subdirs)
+	for _, sd := range subdirs {
+		stems := append([]string(nil), bySubdir[sd]...)
+		sort.Strings(stems)
+		for i := 0; i < len(stems); i++ {
+			for j := i + 1; j < len(stems); j++ {
+				if stemPrefixCollision(stems[i], stems[j]) {
+					out = append(out, fmt.Sprintf(
+						"domain conflict: %s and %s share a name prefix in the same subdirectory; consolidate to one domain stem",
+						rel(sd, stems[i]), rel(sd, stems[j])))
+				}
+			}
+		}
+	}
+	return out
+}
+
+// stemPrefixCollision reports whether two distinct domain stems collide by
+// one being a prefix of the other.
+func stemPrefixCollision(a, b string) bool {
+	if a == b {
+		return false
+	}
+	short, long := a, b
+	if len(short) > len(long) {
+		short, long = long, short
+	}
+	return strings.HasPrefix(long, short)
 }
 
 // filenameStyleRe matches lowercase, hyphenated, .md-extension names.

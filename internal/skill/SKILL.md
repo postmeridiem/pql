@@ -81,15 +81,18 @@ content into the command line.
 ## Surface 2: Planning (decisions + tickets)
 
 Planning state lives in `<vault>/.pql/pql.db` (user-authored state, not a
-cache). Decision records come from `decisions/*.md`; tickets are
-SQLite-native.
+cache). Decision records come from the DQR tree — `governance/{decisions,
+questions,rejected}/<domain>.md` by default (D-21), configurable via
+`dqr_dir` in `.pql/config.yaml` or the `PQL_DQR_DIR` env var (env > file >
+default); a legacy flat `decisions/` is auto-detected as a fallback.
+Tickets are SQLite-native.
 
 ### Decision subcommands
 
 | Command | Purpose |
 |---|---|
-| `pql decisions sync` | Parse decisions/*.md → upsert into pql.db |
-| `pql decisions validate` | Dry-run parse; exits non-zero on malformed records |
+| `pql decisions sync [--no-style]` | Parse the DQR tree → upsert into pql.db; surfaces style warnings (filename, subdir-type, domain pairing/conflicts) unless `--no-style` |
+| `pql decisions validate [--no-style]` | Dry-run parse; structural errors exit non-zero, style issues warn (suppress with `--no-style`) |
 | `pql decisions claim <D\|Q\|R> <domain> "title"` | Print next available ID |
 | `pql decisions list [--type X] [--domain X] [--status X]` | List decisions |
 | `pql decisions show <id> [--with-refs] [--with-tickets]` | Show with joins |

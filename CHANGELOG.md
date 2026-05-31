@@ -56,6 +56,16 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 - **`pql skill show [name]`** — echo a bundled skill's content as embedded
   in the binary (defaults to the `pql` skill). JSON keyed by file path;
   `--pretty` to read as text. Works from anywhere, no vault required.
+- **`PQL_DQR_DIR` env var** — override the DQR directory (`dqr_dir`) without
+  editing `.pql/config.yaml`; precedence is env > file > default
+  (`governance/`), matching the other `PQL_*` knobs. Honored by both
+  `config.Load` and `pql init` (T-43, completing the D-21 layout work).
+- **Two DQR style checks** in `decisions sync`/`validate` (style-class,
+  suppressed by `--no-style`): an informational note when a
+  `questions/<d>.md` has no `decisions/<d>.md` companion, and a warning
+  when two domain stems in one subdirectory collide by prefix (e.g.
+  `arch.md` / `architecture.md`). Implemented as warnings, not the
+  hard error D-21 sketched, so a heuristic match can't break sync.
 
 ### Internal
 

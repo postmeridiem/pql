@@ -25,6 +25,7 @@ func loadOptsFromFlags(cmd *cobra.Command) config.LoadOpts {
 		DBEnv:      os.Getenv("PQL_DB"),
 		ConfigFlag: flag("config"),
 		ConfigEnv:  os.Getenv("PQL_CONFIG"),
+		DQRDirEnv:  os.Getenv("PQL_DQR_DIR"),
 	}
 }
 
