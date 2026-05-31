@@ -148,7 +148,7 @@ mutating any state.`,
 			}
 
 			head := tks[skip]
-			tree, err := buildShowTree(ctx, pdb.SQL(), &head, true, true, true)
+			tree, err := buildShowTree(ctx, pdb.SQL(), &head, fullTree)
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
@@ -202,7 +202,7 @@ so the caller can verify the write took.`,
 			id := args[0]
 
 			payloadArgs := args[1:]
-			payload, err := readRefinePayload(payloadArgs, fromFile, fromStdin, cmd.InOrStdin())
+			payload, err := readContentArg(payloadArgs, fromFile, fromStdin, cmd.InOrStdin(), "pql ticket refine write")
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
@@ -238,7 +238,7 @@ so the caller can verify the write took.`,
 			if tk == nil {
 				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", id)}
 			}
-			tree, err := buildShowTree(ctx, pdb.SQL(), tk, true, true, true)
+			tree, err := buildShowTree(ctx, pdb.SQL(), tk, fullTree)
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
@@ -259,9 +259,12 @@ so the caller can verify the write took.`,
 	return cmd
 }
 
-// readRefinePayload resolves the JSON payload from one of three
-// mutually exclusive inputs. Mirrors readDSLSource in query_dsl.go.
-func readRefinePayload(args []string, fromFile string, fromStdin bool, stdin io.Reader) ([]byte, error) {
+// readContentArg resolves content bytes from one of three mutually
+// exclusive inputs (positional / --file / --stdin). Shared by the
+// commands that take a free-form blob — `refine write` (a JSON patch)
+// and `append` (raw text). The what argument names the command in error
+// messages. Mirrors readDSLSource in query_dsl.go.
+func readContentArg(args []string, fromFile string, fromStdin bool, stdin io.Reader, what string) ([]byte, error) {
 	chosen := 0
 	if len(args) > 0 {
 		chosen++
@@ -274,10 +277,10 @@ func readRefinePayload(args []string, fromFile string, fromStdin bool, stdin io.
 	}
 	switch chosen {
 	case 0:
-		return nil, errors.New("pql ticket refine write: provide a JSON payload via positional arg, --file, or --stdin")
+		return nil, fmt.Errorf("%s: provide content via positional arg, --file, or --stdin", what)
 	case 1:
 	default:
-		return nil, errors.New("pql ticket refine write: positional, --file, and --stdin are mutually exclusive")
+		return nil, fmt.Errorf("%s: positional, --file, and --stdin are mutually exclusive", what)
 	}
 
 	switch {

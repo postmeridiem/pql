@@ -128,10 +128,33 @@ type TicketFilter struct {
 	DecisionRef string
 	Label       string
 	ParentID    string
+	// Under, when set, restricts to the recursive descendants of the
+	// given ticket (any depth). The root itself is excluded. Shares the
+	// descendants primitive with `ticket show --tree`.
+	Under string
+	// Leaf, when true, restricts to tickets with no live children.
+	Leaf bool
+	// Unblocked, when true, restricts to tickets with no live blocker
+	// still open (a blocker counts as cleared once done or cancelled).
+	Unblocked bool
 	// Unrefined, when true, restricts to tickets with an empty
 	// description (NULL or whitespace) and excludes done/cancelled.
 	Unrefined bool
 }
+
+// unblockedClause restricts a ticket query to rows with no live blocker
+// still open — a blocker counts as cleared once it is done or cancelled.
+// Correlates on tickets.id, so the surrounding query must select FROM
+// tickets unaliased. Shared by ListTickets (--unblocked) and WhatNext so
+// "what can I pick up" and "what's next" agree on what blocked means.
+const unblockedClause = ` AND NOT EXISTS (
+		SELECT 1 FROM ticket_deps d
+		JOIN tickets b ON b.id = d.blocker_id
+		WHERE d.blocked_id = tickets.id
+		  AND d.deleted_at IS NULL
+		  AND b.deleted_at IS NULL
+		  AND b.status NOT IN ('done', 'cancelled')
+	)`
 
 // ListTickets returns tickets matching the filter. Soft-deleted rows
 // (deleted_at IS NOT NULL) are excluded by default per D-17.
@@ -166,6 +189,33 @@ func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, err
 			WHERE label = ? AND deleted_at IS NULL
 		)`
 		params = append(params, f.Label)
+	}
+	if f.Under != "" {
+		ds, err := DescendantsOf(ctx, db, f.Under, 0)
+		if err != nil {
+			return nil, err
+		}
+		if len(ds) == 0 {
+			// No descendants → nothing can match. Short-circuit rather
+			// than emit an invalid empty `id IN ()`.
+			return nil, nil
+		}
+		placeholders := make([]string, len(ds))
+		for i, d := range ds {
+			placeholders[i] = "?"
+			params = append(params, d.ID)
+		}
+		//nolint:gosec // G202: the joined fragment is only "?" placeholders; the descendant IDs bind via params
+		query += " AND id IN (" + strings.Join(placeholders, ", ") + ")"
+	}
+	if f.Leaf {
+		query += ` AND NOT EXISTS (
+			SELECT 1 FROM tickets c
+			WHERE c.parent_id = tickets.id AND c.deleted_at IS NULL
+		)`
+	}
+	if f.Unblocked {
+		query += unblockedClause
 	}
 	if f.Unrefined {
 		query += " AND (description IS NULL OR TRIM(description) = '')"
@@ -423,17 +473,129 @@ func ChildrenOf(ctx context.Context, db *sql.DB, parentID string) ([]TicketSumma
 	return result, rows.Err()
 }
 
+// maxTreeDepth is the sentinel used when a descendants walk is
+// unbounded. It also caps a pathological parent cycle (SetParent only
+// rejects direct self-parent, not deeper loops) so the recursive CTE
+// terminates instead of spinning.
+const maxTreeDepth = 1 << 20
+
+// Descendant is a ticket in a subtree, carrying the parent link and
+// depth (1 = direct child of the root) needed to reassemble nesting.
+type Descendant struct {
+	TicketSummary
+	ParentID string `json:"parent_id"`
+	Depth    int    `json:"depth"`
+}
+
+// descendantsCTE returns every live descendant of a root ticket with
+// its depth (1 = direct child) and parent link, bounded to maxDepth
+// levels. It is the shared primitive behind `ticket show --tree`
+// (nested) and `ticket list --under` (flat filter). Rows are ordered
+// parent-before-child (by depth) so callers can assemble nesting in a
+// single pass.
+const descendantsCTE = `
+WITH RECURSIVE subtree(id, type, title, status, priority, parent_id, depth) AS (
+	SELECT id, type, title, status, priority, parent_id, 1
+	FROM tickets
+	WHERE parent_id = ? AND deleted_at IS NULL
+	UNION ALL
+	SELECT t.id, t.type, t.title, t.status, t.priority, t.parent_id, s.depth + 1
+	FROM tickets t
+	JOIN subtree s ON t.parent_id = s.id
+	WHERE t.deleted_at IS NULL AND s.depth < ?
+)
+SELECT id, type, title, status, priority, parent_id, depth
+FROM subtree
+ORDER BY depth, CAST(SUBSTR(id, 3) AS INTEGER)`
+
+// DescendantsOf returns the flat list of descendants of rootID, ordered
+// parent-before-child. maxDepth <= 0 means unbounded (1 = direct
+// children only, 2 = children + grandchildren, …). The root ticket is
+// not included. An unknown or childless root yields an empty slice.
+func DescendantsOf(ctx context.Context, db *sql.DB, rootID string, maxDepth int) ([]Descendant, error) {
+	if maxDepth <= 0 {
+		maxDepth = maxTreeDepth
+	}
+	rows, err := db.QueryContext(ctx, descendantsCTE, rootID, maxDepth)
+	if err != nil {
+		return nil, fmt.Errorf("repo: descendants of %s: %w", rootID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var result []Descendant
+	for rows.Next() {
+		var d Descendant
+		var parent sql.NullString
+		if err := rows.Scan(&d.ID, &d.Type, &d.Title, &d.Status, &d.Priority, &parent, &d.Depth); err != nil {
+			return nil, fmt.Errorf("repo: scan descendant: %w", err)
+		}
+		d.ParentID = parent.String
+		result = append(result, d)
+	}
+	return result, rows.Err()
+}
+
+// TreeNode is a ticket summary plus its nested descendant subtree.
+// Children is omitted when empty so leaves render flat.
+type TreeNode struct {
+	TicketSummary
+	Children []TreeNode `json:"children,omitempty"`
+}
+
+// Subtree returns the descendants of rootID nested into a tree, ordered
+// parent-before-child within each level. maxDepth follows DescendantsOf
+// semantics. The returned slice is the root's direct children, each
+// carrying its own subtree.
+func Subtree(ctx context.Context, db *sql.DB, rootID string, maxDepth int) ([]TreeNode, error) {
+	ds, err := DescendantsOf(ctx, db, rootID, maxDepth)
+	if err != nil {
+		return nil, err
+	}
+	return nestDescendants(rootID, ds), nil
+}
+
+// nestDescendants assembles flat descendant rows (ordered
+// parent-before-child) into a tree hanging off rootID. Insertion order
+// per parent is preserved, so the nested output keeps the flat query's
+// ordering.
+func nestDescendants(rootID string, ds []Descendant) []TreeNode {
+	index := make(map[string]*TreeNode, len(ds))
+	childIDs := make(map[string][]string)
+	for i := range ds {
+		index[ds[i].ID] = &TreeNode{TicketSummary: ds[i].TicketSummary}
+		childIDs[ds[i].ParentID] = append(childIDs[ds[i].ParentID], ds[i].ID)
+	}
+	var build func(parent string) []TreeNode
+	build = func(parent string) []TreeNode {
+		ids := childIDs[parent]
+		if len(ids) == 0 {
+			return nil
+		}
+		out := make([]TreeNode, 0, len(ids))
+		for _, cid := range ids {
+			n := index[cid]
+			n.Children = build(cid)
+			out = append(out, *n)
+		}
+		return out
+	}
+	return build(rootID)
+}
+
 // WhatNext returns the single best ticket to work on, or nil when
 // nothing is actionable. Selection order: in_progress (finish current
 // work), then ready (pick up new work), each bucket sorted by priority.
-// Review tickets are deliberately excluded — the author context should
-// not review its own work.
+// Tickets with an open blocker are excluded — recommending work you
+// can't start isn't actionable (shares unblockedClause with the
+// ListTickets --unblocked filter). Review tickets are deliberately
+// excluded too — the author context should not review its own work.
 func WhatNext(ctx context.Context, db *sql.DB) (*Ticket, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, type, parent_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at
 		FROM tickets
-		WHERE status IN ('in_progress', 'ready') AND deleted_at IS NULL
+		WHERE status IN ('in_progress', 'ready') AND deleted_at IS NULL`+
+		unblockedClause+`
 		ORDER BY
 			CASE status WHEN 'in_progress' THEN 0 ELSE 1 END,
 			CASE priority
@@ -630,6 +792,33 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, f UpdateTicketFiel
 	}
 
 	return tx.Commit()
+}
+
+// AppendDescription appends text to a ticket's description, separated
+// from any existing content by a blank line (the markdown paragraph
+// break, so accumulated notes stay readable). When the description is
+// empty the text becomes the whole description. Delegates the write to
+// UpdateTicket so the history row, rehash, and transaction are shared.
+// Empty or whitespace-only text is rejected.
+func AppendDescription(ctx context.Context, db *sql.DB, id, text, changedBy string) error {
+	// Trim surrounding whitespace so piped/file input doesn't leave a
+	// dangling newline before the next block; internal structure is kept.
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return fmt.Errorf("repo: append text cannot be empty")
+	}
+	t, err := GetTicket(ctx, db, id)
+	if err != nil {
+		return err
+	}
+	if t == nil {
+		return fmt.Errorf("repo: ticket %s not found", id)
+	}
+	combined := text
+	if t.Description != nil && strings.TrimSpace(*t.Description) != "" {
+		combined = *t.Description + "\n\n" + text
+	}
+	return UpdateTicket(ctx, db, id, UpdateTicketFields{Description: &combined}, changedBy)
 }
 
 // rehashHistoryRow looks up the rowid of a just-inserted ticket_history

@@ -193,10 +193,11 @@ anything the planning core needs to do without cobra lives under
 | command | behaviour |
 |---|---|
 | `pql ticket new <type> "title" [--parent T-NNN] [--priority P] [--decision D-NNN] [--team T]` | Create. Emits the new `T-NNN`. |
-| `pql ticket list [--status S] [--team T] [--assigned A] [--decision D] [--label L]` | Columnar list; `--output json`. |
-| `pql ticket show <id> [--with-decision] [--with-blockers] [--with-children] [--tree]` | Ticket body + optional joins. `--tree` recurses into children (epics). `--with-blockers` walks `ticket_deps` transitively. `--with-decision` inlines the linked D/Q-record body. |
+| `pql ticket list [--status S] [--team T] [--assigned A] [--decision D] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | Columnar list; `--output json`. `--under` restricts to recursive descendants of a ticket; `--leaf` to childless tickets; `--unblocked` to tickets whose blockers are all done/cancelled. Composed (`--under E --leaf --unblocked`), they are the batch complement to `pql plan whatsnext`. |
+| `pql ticket show <id> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Ticket body + optional joins. `--with-children` lists direct children only; `--tree` nests the full descendant subtree (cap with `--depth N`) and includes the direct parent for context. `--with-context` pulls the full ancestor spine to the root plus linked decisions. `--with-blockers` walks `ticket_deps`. |
 | `pql ticket status <id> <new-status>` | Transition; records in `ticket_history`. Enforces state-machine rules (can't go `backlog`→`done` in one hop). |
 | `pql ticket assign <id> <agent>` | Set `assigned_to`. |
+| `pql ticket append <id> [text] [--file F] [--stdin]` | Append text to the description, separated from existing content by a blank line. Unlike `refine write` (replace-from-JSON-patch), never round-trips the existing text. Records a `description` history row. |
 | `pql ticket block <id> --by <other>` / `pql ticket unblock <id> --from <other>` | Maintain `ticket_deps`. |
 | `pql ticket team <id> <team>` | Set `team`. |
 | `pql ticket label <id> add\|rm <label>` | Manage `ticket_labels`. |

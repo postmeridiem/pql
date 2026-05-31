@@ -172,12 +172,12 @@ func newPlanWhatsNextCmd() *cobra.Command {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
-			out, err := buildShowTree(ctx, db, t, true, true, true)
+			out, err := buildShowTree(ctx, db, t, fullTree)
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			if t == nil {
-				out.Message = "no in-progress or ready tickets; review backlog to flag tickets ready for work"
+				out.Message = "no actionable ticket — nothing in_progress or ready with all blockers cleared; check the board, unblock work, or flag backlog tickets ready"
 			}
 
 			return renderOne(cmd, out)
@@ -210,7 +210,7 @@ func newPlanReviewCmd() *cobra.Command {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
-			out, err := buildShowTree(ctx, db, t, true, true, true)
+			out, err := buildShowTree(ctx, db, t, fullTree)
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}

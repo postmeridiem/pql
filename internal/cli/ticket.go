@@ -27,30 +27,48 @@ type ticketShowTree struct {
 	Decisions []repo.Decision      `json:"decisions,omitempty"`
 	Blockers  []repo.BlockerInfo   `json:"blockers,omitempty"`
 	Children  []repo.TicketSummary `json:"children,omitempty"`
+	Subtree   []repo.TreeNode      `json:"subtree,omitempty"`
 	Message   string               `json:"message,omitempty"`
 }
 
+// showOpts selects which joins buildShowTree assembles.
+//
+// withContext pulls the full ancestor spine to the root plus every
+// linked decision; tree pulls the recursive descendant subtree plus the
+// direct parent only (the cheap "why does this subtree exist" context,
+// without the full spine). withContext is a superset of tree's parent,
+// so when both are set the full spine wins.
+type showOpts struct {
+	withContext  bool
+	withBlockers bool
+	withChildren bool
+	tree         bool
+	treeDepth    int
+}
+
+// fullTree is the join set used by the planning verbs and refinement
+// flows: ancestors, blockers, and direct children, but not the
+// recursive subtree (those surfaces zoom in on one ticket).
+var fullTree = showOpts{withContext: true, withBlockers: true, withChildren: true}
+
 // buildShowTree assembles the ticket show-tree from the requested
-// joins. Pass all three flags true for the full tree (planning verbs,
-// refinement flows). A nil ticket returns an empty tree — callers that
-// want a "nothing to do" response set Message on the result.
-func buildShowTree(ctx context.Context, db *sql.DB, t *repo.Ticket, withContext, withBlockers, withChildren bool) (*ticketShowTree, error) {
+// joins. A nil ticket returns an empty tree — callers that want a
+// "nothing to do" response set Message on the result.
+func buildShowTree(ctx context.Context, db *sql.DB, t *repo.Ticket, o showOpts) (*ticketShowTree, error) {
 	if t == nil {
 		return &ticketShowTree{}, nil
 	}
 	out := &ticketShowTree{Ticket: t}
 
-	var ancestors []repo.Ticket
-	if withContext {
-		var err error
-		ancestors, err = repo.Ancestors(ctx, db, t)
+	switch {
+	case o.withContext:
+		ancestors, err := repo.Ancestors(ctx, db, t)
 		if err != nil {
 			return nil, err
 		}
 		if len(ancestors) > 0 {
 			out.Ancestors = ancestors
 		}
-
 		for _, ref := range collectDecisionRefs(t, ancestors) {
 			d, err := repo.GetDecision(ctx, db, ref)
 			if err != nil {
@@ -60,8 +78,18 @@ func buildShowTree(ctx context.Context, db *sql.DB, t *repo.Ticket, withContext,
 				out.Decisions = append(out.Decisions, *d)
 			}
 		}
+	case o.tree && t.ParentID != nil:
+		// Direct parent only: paints why the subtree exists without the
+		// cost of the full ancestor spine + decision joins.
+		p, err := repo.GetTicket(ctx, db, *t.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		if p != nil {
+			out.Ancestors = []repo.Ticket{*p}
+		}
 	}
-	if withChildren || withContext {
+	if o.withChildren || o.withContext {
 		children, err := repo.ChildrenOf(ctx, db, t.ID)
 		if err != nil {
 			return nil, err
@@ -70,7 +98,14 @@ func buildShowTree(ctx context.Context, db *sql.DB, t *repo.Ticket, withContext,
 			out.Children = children
 		}
 	}
-	if withBlockers {
+	if o.tree {
+		sub, err := repo.Subtree(ctx, db, t.ID, o.treeDepth)
+		if err != nil {
+			return nil, err
+		}
+		out.Subtree = sub
+	}
+	if o.withBlockers {
 		blockers, err := repo.BlockersOf(ctx, db, t.ID)
 		if err != nil {
 			return nil, err
@@ -134,7 +169,68 @@ func newTicketCmd() *cobra.Command {
 	cmd.AddCommand(newTicketTeamCmd())
 	cmd.AddCommand(newTicketLabelCmd())
 	cmd.AddCommand(newTicketBoardCmd())
+	cmd.AddCommand(newTicketAppendCmd())
 	cmd.AddCommand(newTicketRefineCmd())
+	return cmd
+}
+
+// --- append ---
+
+func newTicketAppendCmd() *cobra.Command {
+	var fromFile string
+	var fromStdin bool
+	cmd := &cobra.Command{
+		Use:   "append <id> [text]",
+		Short: "Append text to a ticket's description",
+		Long: `Append text to a ticket's description, separated from existing
+content by a blank line. When the description is empty the text becomes
+the whole description. Unlike ` + "`refine write`" + ` (which replaces the
+description from a JSON patch), this never round-trips the existing
+text, so accumulating notes is one call.
+
+Three input modes (mutually exclusive), mirroring ` + "`refine write`" + `:
+
+  pql ticket append T-5 "refined the cache TTL to 5m after benchmarking"
+  pql ticket append T-5 --file note.md
+  pql ticket append T-5 --stdin
+
+Output is the updated ticket row, so the caller can verify the append.`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			id := args[0]
+
+			content, err := readContentArg(args[1:], fromFile, fromStdin, cmd.InOrStdin(), "pql ticket append")
+			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			if err := repo.AppendDescription(ctx, pdb.SQL(), id, string(content), ""); err != nil {
+				return &exitError{code: diag.DataErr, msg: err.Error()}
+			}
+
+			tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			if tk == nil {
+				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", id)}
+			}
+			return renderTicketResults(cmd, []repo.Ticket{*tk})
+		},
+	}
+	cmd.Flags().StringVar(&fromFile, "file", "", "read the text from this file path")
+	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read the text from stdin")
 	return cmd
 }
 
@@ -199,10 +295,20 @@ func newTicketNewCmd() *cobra.Command {
 // --- list ---
 
 func newTicketListCmd() *cobra.Command {
-	var statusFlag, teamFlag, assignedFlag, decisionFlag, labelFlag string
+	var statusFlag, teamFlag, assignedFlag, decisionFlag, labelFlag, underFlag string
+	var leafFlag, unblockedFlag bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tickets from pql.db",
+		Long: `List tickets, optionally filtered. Filters compose (AND):
+
+  pql ticket list --status ready
+  pql ticket list --under T-2 --leaf --unblocked
+
+--under restricts to the recursive descendants of a ticket; --leaf to
+tickets with no children; --unblocked to tickets whose blockers are all
+done or cancelled. Composed, they answer "what leaf work under this epic
+is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`" + `.`,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -222,6 +328,9 @@ func newTicketListCmd() *cobra.Command {
 				AssignedTo:  assignedFlag,
 				DecisionRef: decisionFlag,
 				Label:       labelFlag,
+				Under:       underFlag,
+				Leaf:        leafFlag,
+				Unblocked:   unblockedFlag,
 			})
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
@@ -243,13 +352,17 @@ func newTicketListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&assignedFlag, "assigned", "", "filter by assignee")
 	cmd.Flags().StringVar(&decisionFlag, "decision", "", "filter by linked decision")
 	cmd.Flags().StringVar(&labelFlag, "label", "", "filter by label")
+	cmd.Flags().StringVar(&underFlag, "under", "", "restrict to recursive descendants of this ticket")
+	cmd.Flags().BoolVar(&leafFlag, "leaf", false, "restrict to tickets with no children")
+	cmd.Flags().BoolVar(&unblockedFlag, "unblocked", false, "restrict to tickets whose blockers are all done/cancelled")
 	return cmd
 }
 
 // --- show ---
 
 func newTicketShowCmd() *cobra.Command {
-	var withContext, withBlockers, withChildren bool
+	var withContext, withBlockers, withChildren, tree bool
+	var depth int
 	cmd := &cobra.Command{
 		Use:   "show <id[,id,...]>",
 		Short: "Show one or more tickets with optional joins",
@@ -259,7 +372,12 @@ func newTicketShowCmd() *cobra.Command {
   pql ticket show T-001,T-002,T-003 --with-context
 
 A single ID renders a single show-tree object; multiple IDs render an
-array of show-trees in the order given. Any unknown ID fails the call.`,
+array of show-trees in the order given. Any unknown ID fails the call.
+
+--with-children lists direct children only. --tree instead nests the
+full descendant subtree (cap depth with --depth N) and includes the
+direct parent for context. --with-context pulls the full ancestor spine
+to the root plus linked decisions.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -284,11 +402,17 @@ array of show-trees in the order given. Any unknown ID fails the call.`,
 				if tk == nil {
 					return &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", id)}
 				}
-				tree, err := buildShowTree(ctx, pdb.SQL(), tk, withContext, withBlockers, withChildren)
+				showTree, err := buildShowTree(ctx, pdb.SQL(), tk, showOpts{
+					withContext:  withContext,
+					withBlockers: withBlockers,
+					withChildren: withChildren,
+					tree:         tree,
+					treeDepth:    depth,
+				})
 				if err != nil {
 					return &exitError{code: diag.Software, msg: err.Error()}
 				}
-				trees = append(trees, tree)
+				trees = append(trees, showTree)
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -310,7 +434,9 @@ array of show-trees in the order given. Any unknown ID fails the call.`,
 	}
 	cmd.Flags().BoolVar(&withContext, "with-context", false, "include ancestor tree and linked decisions")
 	cmd.Flags().BoolVar(&withBlockers, "with-blockers", false, "include blocking tickets")
-	cmd.Flags().BoolVar(&withChildren, "with-children", false, "include child tickets")
+	cmd.Flags().BoolVar(&withChildren, "with-children", false, "include direct child tickets")
+	cmd.Flags().BoolVar(&tree, "tree", false, "include the nested descendant subtree plus the direct parent")
+	cmd.Flags().IntVar(&depth, "depth", 0, "limit --tree to this many levels (0 = unlimited)")
 	return cmd
 }
 

@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 
 	"github.com/postmeridiem/pql/internal/planning"
@@ -513,5 +514,294 @@ func TestSoftDelete_ChangesHash(t *testing.T) {
 	}
 	if before == after {
 		t.Errorf("soft delete didn't change hash: %s", before)
+	}
+}
+
+// buildSampleTree creates a small hierarchy and returns nothing; IDs are
+// deterministic (T-1..T-5):
+//
+//	T-1 (epic)
+//	 ├─ T-2 (story) ── T-4 (task) ── T-5 (task)
+//	 └─ T-3 (task)
+func buildSampleTree(ctx context.Context, t *testing.T, db *sql.DB) {
+	t.Helper()
+	mk := func(typ, title, parent string) string {
+		id, err := CreateTicket(ctx, db, NewTicketOpts{Type: typ, Title: title, ParentID: parent})
+		if err != nil {
+			t.Fatalf("create %s: %v", title, err)
+		}
+		return id
+	}
+	mk("epic", "root", "")     // T-1
+	mk("story", "branch", "T-1") // T-2
+	mk("task", "leaf-b", "T-1")  // T-3
+	mk("task", "mid", "T-2")     // T-4
+	mk("task", "leaf-deep", "T-4") // T-5
+}
+
+func TestDescendantsOf_Unbounded(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	buildSampleTree(ctx, t, db)
+
+	ds, err := DescendantsOf(ctx, db, "T-1", 0)
+	if err != nil {
+		t.Fatalf("descendants: %v", err)
+	}
+	got := make([]string, len(ds))
+	for i, d := range ds {
+		got[i] = d.ID
+	}
+	// Ordered by depth, then numeric id: T-2,T-3 (depth 1), T-4 (2), T-5 (3).
+	want := []string{"T-2", "T-3", "T-4", "T-5"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("descendants = %v, want %v", got, want)
+	}
+	// Depth + parent links.
+	byID := map[string]Descendant{}
+	for _, d := range ds {
+		byID[d.ID] = d
+	}
+	if byID["T-2"].Depth != 1 || byID["T-2"].ParentID != "T-1" {
+		t.Errorf("T-2 = depth %d parent %q, want 1/T-1", byID["T-2"].Depth, byID["T-2"].ParentID)
+	}
+	if byID["T-5"].Depth != 3 || byID["T-5"].ParentID != "T-4" {
+		t.Errorf("T-5 = depth %d parent %q, want 3/T-4", byID["T-5"].Depth, byID["T-5"].ParentID)
+	}
+}
+
+func TestDescendantsOf_DepthBound(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	buildSampleTree(ctx, t, db)
+
+	ds, err := DescendantsOf(ctx, db, "T-1", 1) // direct children only
+	if err != nil {
+		t.Fatalf("descendants: %v", err)
+	}
+	got := make([]string, len(ds))
+	for i, d := range ds {
+		got[i] = d.ID
+	}
+	if strings.Join(got, ",") != "T-2,T-3" {
+		t.Errorf("depth-1 descendants = %v, want [T-2 T-3]", got)
+	}
+}
+
+func TestDescendantsOf_SoftDeletedExcluded(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	buildSampleTree(ctx, t, db)
+
+	// Soft-delete T-2; its subtree (T-4, T-5) detaches too since the
+	// recursion can't descend through a removed node.
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET deleted_at = datetime('now') WHERE id = 'T-2'`); err != nil {
+		t.Fatalf("soft delete: %v", err)
+	}
+	ds, err := DescendantsOf(ctx, db, "T-1", 0)
+	if err != nil {
+		t.Fatalf("descendants: %v", err)
+	}
+	for _, d := range ds {
+		if d.ID == "T-2" || d.ID == "T-4" || d.ID == "T-5" {
+			t.Errorf("descendant %s should be excluded after T-2 soft-delete", d.ID)
+		}
+	}
+}
+
+func TestSubtree_Nesting(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	buildSampleTree(ctx, t, db)
+
+	roots, err := Subtree(ctx, db, "T-1", 0)
+	if err != nil {
+		t.Fatalf("subtree: %v", err)
+	}
+	if len(roots) != 2 {
+		t.Fatalf("top-level children = %d, want 2", len(roots))
+	}
+	// roots[0] = T-2 with child T-4 with child T-5; roots[1] = T-3 leaf.
+	if roots[0].ID != "T-2" || len(roots[0].Children) != 1 || roots[0].Children[0].ID != "T-4" {
+		t.Fatalf("T-2 nesting wrong: %+v", roots[0])
+	}
+	if len(roots[0].Children[0].Children) != 1 || roots[0].Children[0].Children[0].ID != "T-5" {
+		t.Errorf("T-4 should nest T-5: %+v", roots[0].Children[0])
+	}
+	if roots[1].ID != "T-3" || len(roots[1].Children) != 0 {
+		t.Errorf("T-3 should be a leaf: %+v", roots[1])
+	}
+}
+
+func TestListTickets_Under(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	buildSampleTree(ctx, t, db)
+
+	tks, err := ListTickets(ctx, db, TicketFilter{Under: "T-2"})
+	if err != nil {
+		t.Fatalf("list under: %v", err)
+	}
+	got := make([]string, len(tks))
+	for i, tk := range tks {
+		got[i] = tk.ID
+	}
+	if strings.Join(got, ",") != "T-4,T-5" {
+		t.Errorf("under T-2 = %v, want [T-4 T-5]", got)
+	}
+
+	// A childless root short-circuits to empty, not an error.
+	empty, err := ListTickets(ctx, db, TicketFilter{Under: "T-5"})
+	if err != nil {
+		t.Fatalf("list under leaf: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("under T-5 = %v, want empty", empty)
+	}
+}
+
+func TestListTickets_Leaf(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	buildSampleTree(ctx, t, db)
+
+	tks, err := ListTickets(ctx, db, TicketFilter{Leaf: true})
+	if err != nil {
+		t.Fatalf("list leaf: %v", err)
+	}
+	got := map[string]bool{}
+	for _, tk := range tks {
+		got[tk.ID] = true
+	}
+	// Leaves: T-3, T-5. Non-leaves: T-1 (has T-2,T-3), T-2 (has T-4), T-4 (has T-5).
+	if !got["T-3"] || !got["T-5"] {
+		t.Errorf("leaves missing T-3/T-5: %v", got)
+	}
+	if got["T-1"] || got["T-2"] || got["T-4"] {
+		t.Errorf("non-leaf returned: %v", got)
+	}
+}
+
+func TestListTickets_Unblocked(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	buildSampleTree(ctx, t, db)
+
+	// T-3 blocked by T-2 (open) → blocked. T-5 blocked by T-3 → also.
+	for _, dep := range [][2]string{{"T-2", "T-3"}, {"T-3", "T-5"}} {
+		if _, err := db.ExecContext(ctx, `
+			INSERT INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
+			VALUES (?, ?, datetime('now'), datetime('now'))
+		`, dep[0], dep[1]); err != nil {
+			t.Fatalf("insert dep %v: %v", dep, err)
+		}
+	}
+
+	blocked := func(f TicketFilter) map[string]bool {
+		tks, err := ListTickets(ctx, db, f)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		m := map[string]bool{}
+		for _, tk := range tks {
+			m[tk.ID] = true
+		}
+		return m
+	}
+
+	got := blocked(TicketFilter{Unblocked: true})
+	if got["T-3"] || got["T-5"] {
+		t.Errorf("blocked tickets returned as unblocked: %v", got)
+	}
+	if !got["T-1"] || !got["T-2"] || !got["T-4"] {
+		t.Errorf("unblocked tickets missing: %v", got)
+	}
+
+	// Resolving the blocker clears the block.
+	if err := SetStatus(ctx, db, "T-2", "done", ""); err != nil {
+		t.Fatalf("set status: %v", err)
+	}
+	got = blocked(TicketFilter{Unblocked: true})
+	if !got["T-3"] {
+		t.Errorf("T-3 should be unblocked after T-2 done: %v", got)
+	}
+	if got["T-5"] {
+		t.Errorf("T-5 still blocked by open T-3: %v", got)
+	}
+}
+
+func TestAppendDescription(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	id, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "notes"})
+
+	// First append on empty description becomes the whole body.
+	if err := AppendDescription(ctx, db, id, "first note", ""); err != nil {
+		t.Fatalf("append 1: %v", err)
+	}
+	tk, _ := GetTicket(ctx, db, id)
+	if tk.Description == nil || *tk.Description != "first note" {
+		t.Fatalf("after append 1 = %v, want \"first note\"", tk.Description)
+	}
+
+	// Second append separates with a blank line.
+	if err := AppendDescription(ctx, db, id, "second note", ""); err != nil {
+		t.Fatalf("append 2: %v", err)
+	}
+	tk, _ = GetTicket(ctx, db, id)
+	if *tk.Description != "first note\n\nsecond note" {
+		t.Errorf("after append 2 = %q, want blank-line separated", *tk.Description)
+	}
+
+	// Empty text is rejected.
+	if err := AppendDescription(ctx, db, id, "   ", ""); err == nil {
+		t.Error("append of whitespace should error")
+	}
+
+	// History records each description change.
+	var n int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM ticket_history WHERE ticket_id = ? AND field = 'description'`, id).Scan(&n)
+	if n != 2 {
+		t.Errorf("description history rows = %d, want 2", n)
+	}
+}
+
+func TestWhatNext_ExcludesBlocked(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+
+	// High-priority ready ticket, but blocked by an open task.
+	blocked, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "blocked high", Priority: "high"})
+	_ = SetStatus(ctx, db, blocked, "ready", "")
+	blocker, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "the blocker"})
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
+		VALUES (?, ?, datetime('now'), datetime('now'))
+	`, blocker, blocked); err != nil {
+		t.Fatalf("insert dep: %v", err)
+	}
+	// Lower-priority ready ticket, unblocked.
+	free, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "free medium", Priority: "medium"})
+	_ = SetStatus(ctx, db, free, "ready", "")
+
+	// Despite lower priority, the unblocked ticket wins.
+	tk, err := WhatNext(ctx, db)
+	if err != nil {
+		t.Fatalf("whatnext: %v", err)
+	}
+	if tk == nil || tk.ID != free {
+		t.Fatalf("expected %s (unblocked), got %v", free, tk)
+	}
+
+	// Clearing the blocker makes the high-priority ticket actionable.
+	if err := SetStatus(ctx, db, blocker, "done", ""); err != nil {
+		t.Fatalf("resolve blocker: %v", err)
+	}
+	tk, err = WhatNext(ctx, db)
+	if err != nil {
+		t.Fatalf("whatnext after unblock: %v", err)
+	}
+	if tk == nil || tk.ID != blocked {
+		t.Fatalf("expected %s (now unblocked, high priority), got %v", blocked, tk)
 	}
 }

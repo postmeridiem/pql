@@ -103,10 +103,11 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | Command | Purpose |
 |---|---|
 | `pql ticket new <type> "title" [--decision D-NNN] [--priority P]` | Create (emits T-NNN) |
-| `pql ticket list [--status S] [--team T] [--assigned A] [--label L]` | List with filters |
-| `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children]` | Show one or more (comma-batch → array of show-trees) |
+| `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | List with filters. `--under` = recursive descendants of a ticket; `--leaf` = no children; `--unblocked` = blockers all done/cancelled |
+| `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Show one or more (comma-batch → array of show-trees). `--with-children` = direct children; `--tree` = nested descendant subtree + direct parent (cap with `--depth N`) |
 | `pql ticket status <id> <new-status>` | Change status (any valid status accepted) |
 | `pql ticket assign <id> <agent>` | Set assignee |
+| `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description (blank-line separated); never round-trips existing text |
 | `pql ticket block <id> --by <other>` | Add blocker |
 | `pql ticket unblock <id> --from <other>` | Remove blocker |
 | `pql ticket team <id> <team>` | Set team |
@@ -152,6 +153,9 @@ On a fresh clone, `pql plan import` restores from the snapshot.
 - **Full context** → `pql ticket show T-5 --with-context --pretty`
 - **Batch show** → `pql ticket show T-1,T-2,T-3 --pretty`
 - **Refine next ticket** → `pql ticket refine next --pretty`, then `pql ticket refine write T-N '{"description":"..."}'`
+- **Append a note** → `pql ticket append T-5 "benchmarked; TTL now 5m"` (no read-modify-write needed)
+- **Subtree of an epic** → `pql ticket show T-2 --tree --pretty` (nested descendants + parent)
+- **Ready leaf work under an epic** → `pql ticket list --under T-2 --leaf --unblocked`
 - **What's next?** → `pql plan whatsnext --pretty`
 - **Review queue** → `pql plan review --pretty`
 - **Coverage gaps** → `pql decisions coverage`

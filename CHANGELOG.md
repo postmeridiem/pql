@@ -11,6 +11,46 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.6.0]
+
+### Changed
+
+- **`pql plan whatsnext` now skips blocked tickets.** A ticket with an
+  open blocker (a blocker not yet done/cancelled) is no longer surfaced as
+  the next thing to work on — recommending work you can't start isn't
+  actionable. `WhatNext` shares the same `unblockedClause` as the new
+  `ticket list --unblocked` filter, so "what can I pick up" and "what's
+  next" agree on what blocked means. When everything actionable is blocked,
+  `whatsnext` returns the no-actionable-ticket message.
+
+### Added
+
+- **`pql ticket append <id> [text] [--file F] [--stdin]`** — append text to
+  a ticket's description, separated from existing content by a blank line.
+  Unlike `refine write` (which replaces the description from a JSON patch),
+  append never round-trips the existing text, so accumulating notes is one
+  call instead of read → splice → write. Records a `description` row in
+  `ticket_history`. Mirrors `refine write`'s three input modes.
+- **`pql ticket show --tree [--depth N]`** — nest the full descendant
+  subtree under a ticket (cap with `--depth N`) plus the direct parent for
+  context. `--with-children` remains direct-children-only; `--tree` is the
+  recursive opt-in. The direct parent rides along (depth-1 `ancestors`) so
+  a consumer sees what the subtree hangs under without the full
+  `--with-context` spine.
+- **`pql ticket list --under T-NNN / --leaf / --unblocked`** — composable
+  filters: `--under` restricts to a ticket's recursive descendants;
+  `--leaf` to tickets with no children; `--unblocked` to tickets whose
+  blockers are all done or cancelled. Composed (`--under E --leaf
+  --unblocked`), they are the batch complement to `pql plan whatsnext` —
+  "what leaf work under this epic is ready to pick up" in one call.
+
+### Internal
+
+- New shared recursive-descendants primitive (`repo.DescendantsOf` /
+  `repo.Subtree`) backs both `ticket show --tree` and `ticket list
+  --under` — a single depth-bounded recursive CTE (the bound also caps any
+  pathological parent cycle).
+
 ## [1.5.0] - 2026-05-25
 
 ### Changed
