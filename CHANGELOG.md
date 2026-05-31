@@ -13,6 +13,16 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ## [1.6.0]
 
+### Removed
+
+- **`TODO.md`** at the repo root. pql dogfoods its own planning dataset
+  (`decisions/` Q-records + tickets in `pql.db`), which is the canonical
+  forward-looking tracker — TODO.md had degraded to a redundant pointer
+  ("not the canonical tracker," by its own admission). Open work lives in
+  Q-records (`pql decisions list --type question --status open`) and the
+  ticket backlog (`pql ticket list --status backlog`); shipped history
+  lives here in the changelog.
+
 ### Changed
 
 - **`pql plan whatsnext` now skips blocked tickets.** A ticket with an

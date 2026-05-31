@@ -254,7 +254,8 @@ ADR 0003.
 
 ## Commits (tentative)
 
-Refine during implementation. This is the sequence landed in `TODO.md`:
+Refine during implementation. This was the planned landing sequence
+(all shipped — see `CHANGELOG.md` and the planning dataset for status):
 
 1. `add internal/planning/ package skeleton + pql.db schema + migration runner`
 2. `implement markdown parser for decisions/`
