@@ -13,7 +13,7 @@ This document is the canonical reference for `pql`'s repository layout, build pi
 
 ## Guiding principles
 
-- **Query-first surface, connections on request.** Direct subcommands (`pql files`, `pql tags`, `pql backlinks`, `pql query <DSL>`) feel like a query engine. A `--connect` flag (and intent-level commands that default it on) attaches related-context bundles when signals exist. No enrichment = plain rows. Enrichment = same rows + `connections` array with provenance.
+- **Query-first surface, connections on request.** Direct subcommands (`pql files`, `pql tags`, `pql backlinks`, `pql query <DSL>`) feel like a query engine and return plain rows. Intent-level commands (`pql related`, `pql search`, `pql context`) attach related-context bundles by default; `--flat-search` forces the plain path on any command. No enrichment = plain rows. Enrichment = same rows + `connections` array with provenance.
 - **Always an off-switch for enrichment.** A global `--flat-search` flag forces raw query results — disables `connect/` entirely, even on intent subcommands that would otherwise enrich by default. *"Sometimes you just need the exact result queried exactly where you want it to look."* The DSL path (`pql query <DSL>`) is already flat by default and doubles as the explicit "give me only what I asked for" entry point; `--flat-search` covers the cross-cutting case so any subcommand can be reduced to its primitive layer.
 - **Generate wide, rank careful, return sparingly.** Architecturally separate packages; neither imports the other.
 - **Provenance is data, not a cross-cutting concern.** Each signal returns its own `Contribution{Name, Raw, Normalized, Weight}`; the combiner aggregates. No central `explain.go`.
@@ -56,12 +56,12 @@ pql/
 │   │   ├── search/
 │   │   ├── context/
 │   │   └── …                         # NEW INTENT = NEW SUBPACKAGE + one cli/intent_*.go file
-│   ├── planning/                     # decisions + tickets; writes to pql.db (see planning.md, ADR 0003)
-│   │   ├── db.go                     # opens <vault>/.pql/pql.db; applies migrations
-│   │   ├── schema.go                 # schema SQL + forward-only migration runner (distinct from store/)
-│   │   ├── parser/                   # decisions/*.md → []Record (regex per planning.md)
-│   │   ├── repo/                     # decisions.go, tickets.go: upsert, list, joins, history
-│   │   └── format/                   # markdown / json / table renderers for joined views
+│   ├── planning/                     # decisions + tickets; writes to pql.db (see planning.md, D-3)
+│   │   ├── db.go                     # opens <vault>/.pql/pql.db; creates schema if missing
+│   │   ├── schema.go                 # CREATE TABLE IF NOT EXISTS + CanonicalVersion (no migration runner, D-19)
+│   │   ├── parser/                   # DQR markdown → []Record (decisions.go, headings.go)
+│   │   ├── repo/                     # decisions.go, tickets.go, meta.go, snapshot.go
+│   │   └── changelog/                # exporter/importer/rebuild: git-committed replication (D-15/D-16)
 │   ├── index/                        # walker, parsers, incremental update
 │   │   ├── walker.go
 │   │   ├── extractor/                # Registry pattern — extractors register by file pattern
@@ -118,7 +118,7 @@ pql/
 └── LICENSE                           # MIT
 ```
 
-> **Tier-2 packages.** Many of the directories above (`internal/query/…`, `internal/connect/…`, `internal/intent/…`, `internal/planning/…`, `tools/eval-report/`) are **planned**, not yet scaffolded. They land alongside their first feature so empty package directories don't sit in the tree. `internal/store/` and `internal/index/` already exist (0.1.0 shipped them); `testdata/council-snapshot/` is populated; `internal/planning/` arrives with the first decisions/ticket commit per `planning.md`.
+> **Layout status (as of v1.6).** The tree above is the *intended* canonical layout; most of it now exists — `internal/query/`, `internal/connect/`, `internal/intent/`, `internal/planning/`, `internal/store/`, `internal/index/` are all shipped and populated, and `internal/watch/` (the `pql watch` toggle) is live but not drawn above. Still **not built / aspirational**, despite appearing in the tree: `internal/query/result/`, `internal/planning/format/` (rendering lives in `internal/cli/render` + `planning/repo`), `internal/index/incremental.go` (change detection is in `indexer.go`/`walker.go`), `internal/fixture/`, `tools/eval-report/`, `cmd/pql-eval/`, and `docs/adr/` (ADRs became decision records under `governance/decisions/`). New packages still land alongside their first feature.
 
 ## The query → connect → bundle pipeline
 
@@ -128,7 +128,7 @@ CLI subcommand (cli/query_*.go | cli/intent_*.go | cli/dsl.go)
    ▼
 query/primitives  (or  query/dsl)        ← produces typed rows
    │
-   ▼                                     ← if --connect or intent requests it (and not --flat-search):
+   ▼                                     ← if an intent requests enrichment (and not --flat-search):
 connect/{signal,rank,neighborhood,bundle}
    │
    ▼
@@ -158,7 +158,7 @@ Three tiers, idiomatic Go placement:
 
 1. **Unit tests** — `_test.go` next to source. Includes fuzz targets for the DSL (`internal/query/dsl/lex/fuzz_test.go`, `internal/query/dsl/parse/fuzz_test.go`). Run via `make test`.
 2. **Integration tests** — `internal/cli/integration_test.go` gated by `//go:build integration`. Shells the built binary against fixture vaults in `testdata/`. Validates the full output contract (stdout JSON shape, stderr JSON diagnostics, exit codes). Run via `make test-integration`.
-3. **Ranking-quality eval** — `internal/connect/rank/eval_test.go` gated by `//go:build eval`. Goldens at `internal/connect/rank/testdata/golden/*.json` as `{query, intent, expected_top_k, notes}`. Computes NDCG@k / MRR / P@k, **plus per-signal contribution diffs vs. the previous run** (debuggability > metric). A standalone `cmd/pql-eval/` binary exposes the same harness for bisecting weight changes. Run via `make eval`.
+3. **Ranking-quality eval** — `internal/connect/rank/eval_test.go` gated by `//go:build eval`. Goldens at `internal/connect/rank/testdata/golden/*.json` as `{query, intent, expected_top_k, notes}`. Computes NDCG@k / MRR / P@k, **plus per-signal contribution diffs vs. the previous run** (debuggability > metric). Run via `make eval` (`go test -tags=eval`); there is no separate `cmd/pql-eval/` binary.
 
 Fixture vaults: `testdata/council-snapshot/` (frozen copy of `/var/mnt/data/projects/council/`), plus synthetic vaults generated by `internal/fixture/` for eval corners.
 
@@ -218,5 +218,5 @@ End-to-end once each milestone lands:
 5. `make eval` with a seeded 3-query golden set → produces NDCG@5/MRR/P@5 report + per-signal contribution table.
 6. Push a throwaway branch → `ci/lint.sh` + `ci/test.sh` complete locally under 5 min (the host pipeline shells out to these, so local-equals-CI by construction).
 7. Tag a pre-release `v0.0.1-rc1` and run `ci/release.sh` (or push the tag and let `.github/workflows/release.yaml` invoke it) → produces signed binaries published to GitHub Releases; verify cosign signature locally.
-8. Install binary + skill on a clean machine; run `pql files` in the Council vault → feels like a query engine. Add `--connect` → same query, now with `connections[]` and `signals[]`. Confirms the simple-but-optionally-enriched surface.
+8. Install binary + skill on a clean machine; run `pql files` in the Council vault → feels like a query engine (plain rows). Run an intent (`pql related <path>`) → same substrate, now with `connections[]` and `signals[]`. Confirms the simple-but-optionally-enriched surface.
 9. Run an intent command (`pql related members/vaasa/persona.md`) with and without `--flat-search`: without the flag returns enriched bundle; with the flag returns the bare query result and zero connections/provenance. Confirms the off-switch is reachable from every entry point.

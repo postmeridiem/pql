@@ -90,6 +90,8 @@ Pinned minimums; avoid dependency bloat. Review every add against a simple "does
 
 ## The CLI
 
+> **Superseded — historical.** This CLI section is the original v1 sketch. The shipped surface differs: there is no positional `pql <QUERY>` default (use `pql query <DSL>`), and the global flags below (`--table`, `--csv`, `--select`, `--no-color`) were not built — output is JSON / `--pretty` / `--jsonl` only. The grammar, SQLite schema, and exit codes further down remain authoritative. For the real command surface see `docs/output-contract.md`, `docs/structure/planning.md`, and `pql --help`.
+
 Design principle: **the default invocation is `pql <QUERY>`** — a positional PQL query. Subcommands handle setup, introspection, and operations that don't fit the query language.
 
 ### Subcommands

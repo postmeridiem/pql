@@ -144,29 +144,27 @@ next to the existing `query_*.go` / `intent_*.go` files.
 projects/pql/
   internal/
     planning/
-      db.go                   # opens <vault>/.pql/pql.db, applies migrations
-      schema.go               # schema SQL + forward-only migration runner
+      db.go                   # opens <vault>/.pql/pql.db, creates schema if missing
+      schema.go               # CREATE TABLE IF NOT EXISTS + CanonicalVersion (no migration runner, D-19)
+      canonical.go, rehash.go # canonical row hashing for changelog replication
       parser/
-        decisions.go          # decisions/*.md → []Record
-        refs.go               # extract D-NNN / Q-NNN / R-NNN / T-NNN refs
-        amendments.go         # parse inline **Amendment (YYYY-MM-DD):**
+        decisions.go          # DQR markdown → []Record (type from subdir, domain from filename stem)
+        headings.go           # heading / anchor helpers
       repo/
-        decisions.go          # upsert, list, get, coverage
+        decisions.go          # upsert, list, get
         tickets.go            # crud, joins, history
-      format/
-        markdown.go           # render joined views as markdown
-        json.go               # --output json
-        table.go              # --output table (default for TTY)
+        meta.go               # local-only meta key/value
+        snapshot.go           # legacy pql-plan.json import/export
+      changelog/
+        exporter.go           # write changed rows → .pql/changelog/<table>/<YYYY-MM>.sql (D-15)
+        importer.go           # replay changelog into pql.db, inline LWW guards (D-16)
+        rebuild.go            # drop replicated tables + full replay
     cli/
-      decisions_sync.go       # pql decisions sync
-      decisions_list.go       # pql decisions list
-      decisions_show.go       # …                                (one file per verb)
-      ticket_new.go           # pql ticket new
-      ticket_list.go          # …
-      plan_status.go          # pql plan status
-      plan_search.go          # …
+      decisions.go            # pql decisions <verb>  (sync/validate/claim/list/show/read/refs)
+      ticket.go, ticket_refine.go  # pql ticket <verb>
+      plan.go                 # pql plan <verb>  (status/whatsnext/review/export/rebuild/import)
   cmd/
-    pql/main.go               # wires new verbs into the cobra root alongside existing subcommands
+    pql/main.go               # wires verbs into the cobra root (rendering lives in cli/render, not a planning/format pkg)
 ```
 
 Rule of thumb: anything that imports cobra lives under `internal/cli/`;
@@ -180,13 +178,15 @@ anything the planning core needs to do without cobra lives under
 
 | command | behaviour |
 |---|---|
-| `pql decisions sync` | Parse `decisions/*.md` → upsert into `pql.db`. Append-only (superseded rows marked, not removed). Idempotent. |
-| `pql decisions validate` | Parser dry-run; exits non-zero on malformed records. Cheap (~200ms); safe for pre-push hooks. |
+| `pql decisions sync [--no-style]` | Parse the DQR tree (`governance/…` by default, per D-21) → upsert into `pql.db`. Idempotent; regenerates the README records section. Surfaces style warnings unless `--no-style`. |
+| `pql decisions validate [--no-style]` | Parser dry-run; structural errors (duplicate IDs, empty titles, broken refs) exit non-zero, style issues warn (`--no-style` to suppress). Cheap; safe for pre-push hooks. |
 | `pql decisions claim D\|Q\|R <domain> "title"` | Print next-available ID. No side effects. |
-| `pql decisions list [--domain X] [--type confirmed\|question\|rejected] [--status active\|resolved\|…]` | Columnar list; `--output json` for scripting. |
-| `pql decisions show <id> [--with-tickets] [--with-refs] [--with-amendments]` | Render the decision; optional joins pull linked tickets / cross-refs / inline amendments. |
-| `pql decisions coverage` | D-records with no implementing tickets. Mirrors settled-reach `decisions-orphan`. |
+| `pql decisions list [--domain X] [--type confirmed\|question\|rejected] [--status active\|resolved\|…]` | JSON array (default); `--pretty`/`--jsonl` for shape. |
+| `pql decisions show <id> [--with-tickets] [--with-refs]` | Render the decision; optional joins pull linked tickets / cross-refs. |
+| `pql decisions read <id>` | Render the decision with its full markdown body. |
 | `pql decisions refs <id>` | Graph-walk `decision_refs` in both directions. |
+
+(`pql decisions coverage` was removed per D-20 — implementation status is tracked via initiative tickets and `show --with-tickets`, not a coverage report.)
 
 ### `pql ticket`
 
@@ -195,23 +195,30 @@ anything the planning core needs to do without cobra lives under
 | `pql ticket new <type> "title" [--parent T-NNN] [--priority P] [--decision D-NNN] [--team T]` | Create. Emits the new `T-NNN`. |
 | `pql ticket list [--status S] [--team T] [--assigned A] [--decision D] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | Columnar list; `--output json`. `--under` restricts to recursive descendants of a ticket; `--leaf` to childless tickets; `--unblocked` to tickets whose blockers are all done/cancelled. Composed (`--under E --leaf --unblocked`), they are the batch complement to `pql plan whatsnext`. |
 | `pql ticket show <id> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Ticket body + optional joins. `--with-children` lists direct children only; `--tree` nests the full descendant subtree (cap with `--depth N`) and includes the direct parent for context. `--with-context` pulls the full ancestor spine to the root plus linked decisions. `--with-blockers` walks `ticket_deps`. |
-| `pql ticket status <id> <new-status>` | Transition; records in `ticket_history`. Enforces state-machine rules (can't go `backlog`→`done` in one hop). |
+| `pql ticket status <id[,id,…]> <new-status>` | Transition (any status → any status; pql does **not** enforce a state machine). Records in `ticket_history`. Comma-batch supported. |
 | `pql ticket assign <id> <agent>` | Set `assigned_to`. |
+| `pql ticket setparent <id[,id,…]> <parent-id\|none>` | Set or clear a ticket's parent. |
 | `pql ticket append <id> [text] [--file F] [--stdin]` | Append text to the description, separated from existing content by a blank line. Unlike `refine write` (replace-from-JSON-patch), never round-trips the existing text. Records a `description` history row. |
 | `pql ticket block <id> --by <other>` / `pql ticket unblock <id> --from <other>` | Maintain `ticket_deps`. |
 | `pql ticket team <id> <team>` | Set `team`. |
 | `pql ticket label <id> add\|rm <label>` | Manage `ticket_labels`. |
-| `pql ticket board [--team T]` | Print kanban columns (`backlog`/`ready`/`in_progress`/`review`/`done`/`cancelled`) as a table. |
-| `pql ticket search "query"` | FTS over title + description. SQLite FTS5. |
-| `pql ticket export --to tickets/` | Dump each ticket to `tickets/T-NNN.md`. Markdown-mirror half-step — clide's `Q-022` decides whether this becomes auto-on-write. |
+| `pql ticket board [--team T]` | Print kanban columns (`backlog`/`ready`/`in_progress`/`review`/`done`/`cancelled`) as JSON. |
+| `pql ticket refine list\|next\|write` | Triage tickets with empty descriptions: `list` the queue, `next [--skip N]` zooms in with a full show-tree, `write <id> <json\|--file\|--stdin>` patches writable fields. |
+
+(`pql ticket search` (FTS, Q-2) and `pql ticket export`/markdown mirror (Q-1) are not yet built — see the open questions.)
 
 ### `pql plan` (cross-cutting)
 
 | command | behaviour |
 |---|---|
-| `pql plan status` | Dashboard: decision counts, open Qs, stale tickets, coverage gaps. |
-| `pql plan search "query"` | FTS across both decisions and tickets. |
-| `pql plan export [--md\|--json\|--csv]` | Snapshot for sharing / reports. |
+| `pql plan status` | Dashboard: decision counts (by type, open Qs) + ticket counts by status. |
+| `pql plan whatsnext` | The single next ticket to work on (in_progress/ready, unblocked) with full context bundle. |
+| `pql plan review` | The next ticket awaiting review, with full context bundle. |
+| `pql plan export [--stage]` | Append changed planning rows to `.pql/changelog/<table>/<YYYY-MM>.sql` (git-committed replication, D-15). `--stage` also `git add`s them. |
+| `pql plan rebuild` | Drop replicated tables and replay `.pql/changelog/` from scratch. |
+| `pql plan import [--legacy FILE]` | Replay `.pql/changelog/` into `pql.db` (or migrate a legacy `pql-plan.json`). |
+
+(`pql plan search` is not built; cross-cutting FTS is part of Q-2.)
 
 ## What gets imported to pql's repo
 

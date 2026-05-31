@@ -97,6 +97,8 @@ A single transactional store means indexing operations are atomic: a file and it
 
 Introducing a second store — for vectors, for caches, for anything — should be resisted unless the case is overwhelming. Every additional store is a new consistency problem, a new lifecycle to manage, a new failure mode, and a new thing for users to understand. The monolithic storage choice is doing real work; treat it as a feature, not as a limitation to route around.
 
+This section is about the **index/query substrate** (`index.db`). One deliberate exception to "one store" has since been made and is worth naming: `pql.db`, the user-authored planning store, lives beside `index.db` per [D-3](../../governance/decisions/architecture.md). The two have genuinely different lifecycles — the index is a regenerable cache (drop and rebuild on mismatch), planning state is durable user data that must survive index rebuilds — so collapsing them would fail both regimes. That bar was cleared once, with rationale; it should not be cleared again casually.
+
 ## Indexing is a product surface too
 
 How the binary builds its index is as important as how it serves queries. Two principles matter most:
@@ -127,7 +129,7 @@ If the rest of this document is ever lost, these are the sentences worth keeping
 3. The orchestrator is the tool, not the agent.
 4. Generate widely, rank carefully, return sparingly.
 5. Every result carries its own explanation.
-6. One store, one transaction, one artifact.
+6. One store for the index; a second only when the case is overwhelming (it was, once — `pql.db`, per D-3).
 7. Staying narrow is the discipline.
 
 Everything else follows.
