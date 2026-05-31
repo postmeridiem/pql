@@ -35,7 +35,7 @@ Primitive query (no enrichment):
 { "path": "members/vaasa/persona.md", "name": "vaasa", "tags": ["council-member"], … }
 ```
 
-Enriched (`--connect` or default-on intent):
+Enriched (default-on intent):
 
 ```json
 {
@@ -43,14 +43,14 @@ Enriched (`--connect` or default-on intent):
   "name": "vaasa",
   "tags": ["council-member"],
   "signals": [
-    { "name": "textual",        "raw": 0.82, "normalized": 0.91, "weight": 0.4 },
-    { "name": "centrality",     "raw": 0.13, "normalized": 0.31, "weight": 0.2 },
-    { "name": "path-proximity", "raw": 0.50, "normalized": 0.62, "weight": 0.4 }
+    { "name": "link_overlap",   "raw": 0.82, "normalized": 0.91, "weight": 0.40, "weighted": 0.36 },
+    { "name": "centrality",     "raw": 0.13, "normalized": 0.31, "weight": 0.20, "weighted": 0.06 },
+    { "name": "path_proximity", "raw": 0.50, "normalized": 0.62, "weight": 0.40, "weighted": 0.25 }
   ],
   "score": 0.71,
   "connections": [
-    { "path": "sessions/<slug>/outcome.md", "via": "outlink", "hops": 1 },
-    { "path": "members/vaasa/journal.md",   "via": "co-folder", "hops": 1 }
+    { "path": "sessions/<slug>/outcome.md", "relation": "outlink" },
+    { "path": "members/vaasa/journal.md",   "relation": "shared_tags" }
   ]
 }
 ```
@@ -63,13 +63,12 @@ Enriched (`--connect` or default-on intent):
 |---|---|
 | `--pretty` | pretty-print stdout JSON |
 | `--jsonl` | emit JSON lines instead of an array |
-| `--table` | human-readable ad-hoc table (auto-colour; `--no-color` to override) |
-| `--csv` | CSV for spreadsheet import |
-| `--select <jsonpath>` | project into a JSONPath expression (avoids piping to `jq`) |
 | `--limit <n>` | clamp output rows; overrides PQL `LIMIT` |
 | `--flat-search` | force the primitive path on any subcommand; strips `signals[]` and `connections[]` |
 | `--quiet` | suppress stderr warnings |
 | `--verbose` | emit per-phase timing diagnostics on stderr (`internal/telemetry/`) |
+
+Output is JSON only (default array, `--pretty`, or `--jsonl`). Non-JSON renderers (`--table`, `--csv`) and projection (`--select <jsonpath>`, `--no-color`) are **not implemented** — they were in the original sketch but never built; pipe to `jq` if you need them.
 
 ## `--flat-search` semantics
 
@@ -79,4 +78,4 @@ A global short-circuit. When set:
 - Telemetry still works (`generate_ms` reported; no `rank_ms` since ranking is skipped).
 - Exit codes unchanged.
 
-The DSL path (`pql query <DSL>`, positional `pql <QUERY>`) is already flat by default.
+The DSL path (`pql query <DSL>`) is already flat by default. (There is no positional `pql <QUERY>` form — the DSL is always invoked via `pql query`.)

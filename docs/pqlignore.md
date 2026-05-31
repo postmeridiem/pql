@@ -10,7 +10,7 @@ Three layers, in increasing scope of "user can override":
 
 Out of the box `pql init` seeds `ignore_files: [.gitignore]` because it's the right answer for the overwhelming majority of vaults. Run `pql files` in a typical git repo and pql skips `node_modules/`, `dist/`, `*.log`, etc., without you doing anything.
 
-If the vault isn't a git repo, the default silently no-ops — the named file isn't there, so nothing extra is excluded beyond the built-in defaults plus your `exclude:` list.
+If the vault isn't a git repo, the `ignore_files` default silently no-ops — the named file isn't there. Note that the `exclude:` config key carries its own default of `[**/.obsidian/**, **/.git/**, **/node_modules/**]`, so those are skipped even with no `.gitignore` present (override by setting `exclude:` explicitly).
 
 ## Deviating: pql-specific rules without polluting `.gitignore`
 

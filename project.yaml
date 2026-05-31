@@ -7,10 +7,10 @@
 #     version of it is on disk right now"
 #
 # Convention: this file declares the version the codebase *claims to be*.
-# Local `make build` stamps that version + git short SHA + dirty marker
-# into the binary. Tagged releases (handled by goreleaser) use the git
-# tag itself for the binary's reported version; project.yaml's `version`
-# is bumped in the post-release commit.
+# Local `make build` stamps this clean version string into the binary
+# (just the number — no git SHA or dirty suffix). Tagged releases
+# (handled by goreleaser) use the git tag for the binary's reported
+# version; project.yaml's `version` is bumped in the post-release commit.
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.

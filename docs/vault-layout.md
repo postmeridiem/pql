@@ -66,7 +66,7 @@ No. Add `.pql/` to your repo's `.gitignore`. The index is regenerable from the v
 Three layers, fully documented in [`pqlignore.md`](pqlignore.md). Quick summary:
 
 - **`ignore_files` in `.pql/config.yaml`** — defaults to `[.gitignore]`. Walker reads each named file with gitignore syntax. Add `.pqlignore` (or anything else) for pql-specific deviations; order matters.
-- **`exclude:` in `.pql/config.yaml`** — flat list of doublestar patterns for one-off in-config rules.
+- **`exclude:` in `.pql/config.yaml`** — flat list of doublestar patterns. **Defaults to `[**/.obsidian/**, **/.git/**, **/node_modules/**]`** when the key is unset, so editor/VCS/dependency noise is skipped out of the box even with no `.gitignore`; set the key explicitly to override.
 - **Built-in non-overridable default** — only `.git/`, matching git's exact behaviour. Pql's own `.pql/` is excluded via the `ignore_files` → `.gitignore` layer (`pql init` appends `.pql/` to the project's gitignore as a one-time setup), keeping the user in control of every other "what to skip" decision.
 
 ## `.pql/config.yaml` — per-vault configuration

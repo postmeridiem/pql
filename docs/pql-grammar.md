@@ -2,6 +2,8 @@
 
 PQL — **Project Query Language** — is a SQL-derived dialect for querying a markdown vault as if it were a relational store. The PQL DSL is the **escape hatch** layer of the binary (raw rows, no ranking, no provenance); intent-level commands sit above it. See `intents.md` for the intent surface and `output-contract.md` for the JSON shape on stdout.
 
+> **Implementation status (v1.6).** This document describes the intended v1 grammar; part of it is **not yet implemented** and currently errors at runtime (tracked by T-45). Not built: the `REGEXP`/`MATCH` operators (no UDF registered), the array helpers `contains`/`position`/`slice`, the path functions `dirname`/`basename`/`extension`, the date aliases `now()`/`today()`, and `cast(x AS type)`; array columns can be used with `IN`/`NOT IN` but not yet passed to functions like `length()`. Implemented and working: `=`/`<>`/`<`/`LIKE`/`GLOB`/`IN`/`BETWEEN`/`IS NULL`, the string/scalar functions, `fm.<key>` access, tag/link membership, ordering, and limits. Examples below that use the unimplemented surface will not run until T-45 lands.
+
 ## Why SQL-derived (not DQL-shaped)
 
 Earlier sketches of this project described a Dataview-compatible dialect, but PQL is being designed to run *outside* Obsidian and to be primarily called by an agent. SQL gives us:
