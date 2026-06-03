@@ -104,12 +104,12 @@ func (c *compiler) query(q *parse.Query) error {
 				return err
 			}
 			if p.Alias != "" {
-				c.emit(" AS \"%s\"", p.Alias)
+				c.emit(" AS %s", quoteIdent(p.Alias))
 			} else if alias := defaultAlias(p.Expr); alias != "" {
 				// SQLite's default column name is the SQL fragment itself,
 				// which is unfriendly when the fragment is a long subquery.
 				// Emit a stable alias derived from the AST.
-				c.emit(" AS \"%s\"", alias)
+				c.emit(" AS %s", quoteIdent(alias))
 			}
 		}
 	}
@@ -156,6 +156,16 @@ func (c *compiler) query(q *parse.Query) error {
 	}
 
 	return nil
+}
+
+// quoteIdent renders s as a SQLite double-quoted identifier, doubling any
+// embedded double-quote. Aliases are SQL identifiers, not values, so they
+// can't be bound as parameters — escaping is the only defense against an
+// alias that carries a `"` (the lexer un-escapes `""`→`"`, so user text
+// can contain one) closing the identifier early and injecting into the
+// SELECT projection.
+func quoteIdent(s string) string {
+	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
 // defaultAlias returns a friendly column name for a projection.

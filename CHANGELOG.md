@@ -30,6 +30,12 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   and annotates the legacy `pql plan import --legacy pql-plan.json` path as
   possibly stale, so an upgrade-time schema error no longer steers users
   toward restoring an out-of-date snapshot.
+- **Security: DSL column aliases are now escaped as SQLite identifiers.**
+  A `query` alias carrying a double-quote (the lexer un-escapes `""`→`"`)
+  could close the identifier early and inject an extra projection/subquery
+  into the compiled `SELECT` — a read-side SQL injection that matters most
+  when query text is machine-generated (the planned MCP/automation
+  consumers). Aliases now double any embedded quote (`compile.go`).
 
 ### Added
 

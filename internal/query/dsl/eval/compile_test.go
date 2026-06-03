@@ -63,6 +63,31 @@ func TestCompile_ExplicitFromFilesAccepted(t *testing.T) {
 	}
 }
 
+func TestQuoteIdent_DoublesEmbeddedQuote(t *testing.T) {
+	if got := quoteIdent(`a"b`); got != `"a""b"` {
+		t.Errorf("quoteIdent(`a\"b`) = %q, want %q", got, `"a""b"`)
+	}
+	if got := quoteIdent("plain"); got != `"plain"` {
+		t.Errorf("quoteIdent(plain) = %q, want %q", got, `"plain"`)
+	}
+}
+
+// TestCompile_AliasQuoteCannotBreakOut guards against SQL injection through
+// a column alias: the lexer un-escapes `""`→`"`, so a user alias can carry a
+// literal quote. The compiler must double it back, keeping everything inside
+// one identifier rather than letting an injected projection execute.
+func TestCompile_AliasQuoteCannotBreakOut(t *testing.T) {
+	c := mustCompile(t, `SELECT path AS "q"" , (SELECT 1) AS leak --"`)
+	// A breakout would look like `AS "q" , (SELECT 1) AS leak` — the quote
+	// closing the identifier early. After escaping it is `AS "q"" , …"`.
+	if strings.Contains(c.SQL, `AS "q" ,`) {
+		t.Fatalf("alias quote not escaped — injection breakout in SQL: %s", c.SQL)
+	}
+	if !strings.Contains(c.SQL, `""`) {
+		t.Fatalf("expected the embedded quote to be doubled: %s", c.SQL)
+	}
+}
+
 func TestCompile_FromOtherTableErrors(t *testing.T) {
 	err := compileErr(t, "SELECT * FROM tags")
 	var ee *Error
