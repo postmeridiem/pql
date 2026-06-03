@@ -149,17 +149,22 @@ func TestMigrate_RefusesIncompleteSchema(t *testing.T) {
 	if !strings.Contains(err.Error(), "earlier schema") {
 		t.Errorf("error message should hint at earlier schema; got %q", err)
 	}
-	// Recovery hints must distinguish legacy (pql init / --legacy)
-	// from changelog-present (pql plan rebuild) cases — clideclaude
-	// hit the old single-path message and ran the wrong recovery.
-	if !strings.Contains(err.Error(), "pql plan rebuild") {
+	// Recovery hints must lead with the changelog rebuild (the durable
+	// path) and de-emphasize the legacy pql-plan.json import, which is
+	// no longer written and may be stale — a consumer hit the old
+	// message and restored an out-of-date snapshot.
+	msg := err.Error()
+	if !strings.Contains(msg, "pql plan rebuild") {
 		t.Errorf("error should suggest pql plan rebuild for changelog repos; got %q", err)
 	}
-	if !strings.Contains(err.Error(), "pql init") {
-		t.Errorf("error should suggest pql init for legacy repos; got %q", err)
+	if !strings.Contains(msg, "--legacy") {
+		t.Errorf("error should still mention the --legacy escape hatch; got %q", err)
 	}
-	if !strings.Contains(err.Error(), "--legacy") {
-		t.Errorf("error should mention --legacy flag for explicit JSON imports; got %q", err)
+	if !strings.Contains(msg, "stale") {
+		t.Errorf("error should annotate the legacy pql-plan.json path as possibly stale; got %q", err)
+	}
+	if strings.Index(msg, "pql plan rebuild") > strings.Index(msg, "--legacy") {
+		t.Errorf("rebuild (recommended) should be listed before the legacy --legacy path; got %q", err)
 	}
 }
 

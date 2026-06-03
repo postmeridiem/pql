@@ -192,10 +192,11 @@ func verifySchema(ctx context.Context, db *sql.DB) error {
 				return fmt.Errorf(
 					"planning: %s.%s missing — pql.db is from an earlier schema.\n"+
 						"Recovery (delete the local pql.db first, then):\n"+
-						"  • Repo with committed .pql/changelog/:  pql plan rebuild\n"+
-						"  • Repo with only .pql/pql-plan.json:    pql init    "+
-						"(autoImportPlan picks the legacy path)\n"+
-						"  • or pql plan import --legacy .pql/pql-plan.json",
+						"  • Recommended — repo with committed .pql/changelog/:  pql plan rebuild\n"+
+						"  • Legacy repo (pre-D-15, only .pql/pql-plan.json):    "+
+						"pql plan import --legacy .pql/pql-plan.json\n"+
+						"    (NOTE: pql-plan.json is no longer written and may be stale — "+
+						"prefer the changelog rebuild whenever .pql/changelog/ exists)",
 					table, col)
 			}
 		}

@@ -26,6 +26,10 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   file-level line dedupe, rapid same-second bursts (e.g. building a ticket
   tree) are no longer skipped. The `pre-commit` hook stages the whole
   `.pql/changelog/` tree.
+- **The schema-mismatch recovery hint now leads with `pql plan rebuild`**
+  and annotates the legacy `pql plan import --legacy pql-plan.json` path as
+  possibly stale, so an upgrade-time schema error no longer steers users
+  toward restoring an out-of-date snapshot.
 
 ### Added
 
