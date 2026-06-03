@@ -105,7 +105,7 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 
 | Command | Purpose |
 |---|---|
-| `pql ticket new <type> "title" [--decision D-NNN] [--priority P]` | Create (emits T-NNN) |
+| `pql ticket new <type> "title" [--decision D-NNN] [--priority P] [--id-only]` | Create (emits T-NNN; `--id-only` prints the bare id for tree-creation scripts) |
 | `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | List with filters. `--under` = recursive descendants of a ticket; `--leaf` = no children; `--unblocked` = blockers all done/cancelled |
 | `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Show one or more (comma-batch → array of show-trees). `--with-children` = direct children; `--tree` = nested descendant subtree + direct parent (cap with `--depth N`) |
 | `pql ticket status <id> <new-status>` | Change status (any valid status accepted) |
@@ -131,20 +131,26 @@ Any status can transition to any other — pql does not enforce a state machine.
 | `pql plan status` | Dashboard: decision counts, open Qs, ticket summary, coverage gaps |
 | `pql plan whatsnext` | Next ticket to work on (in_progress or ready) with full context bundle |
 | `pql plan review` | Next ticket awaiting review with full context bundle |
-| `pql plan export [--to FILE]` | Snapshot planning state to JSON (default: `pql-plan.json`) |
-| `pql plan import [--from FILE]` | Restore planning state from a JSON snapshot |
+| `pql plan export [--stage]` | Append changed planning rows to `.pql/changelog/<table>/<YYYY-MM>.sql` (the git-tracked log of record); `--stage` also `git add`s them. Normally a no-op — mutations already write through |
+| `pql plan import [--legacy FILE]` | Replay `.pql/changelog/` into `pql.db` (or one-time `--legacy pql-plan.json` migration from the pre-D-15 snapshot) |
 
 ### Versioning planning state
 
-Planning state lives in `pql.db` (gitignored). To version it in git,
-use `pql plan export` to write a committed JSON snapshot. pql does NOT
-do this automatically — the user decides when and how to trigger it:
+`pql.db` is gitignored — the durable, git-tracked artifact is
+`.pql/changelog/` (D-15/D-16). Ticket mutations **write through** to the
+changelog synchronously, so it is always current; you never have to
+remember to "export". The hooks installed by `pql init` do the rest:
 
-- Pre-push hook: `.githooks/pre-push` calls `pql plan export && git add pql-plan.json`
-- Sprint close: a skill or script exports + commits on milestone
-- Manual: run `pql plan export` before committing when state changed
+- `pre-commit` stages `.pql/changelog/` so it lands in the same commit as
+  the change that produced it.
+- `post-merge` replays incoming changelog edits (`pql plan import`) and
+  re-syncs decisions from their markdown.
+- `post-checkout` / `post-rewrite` rebuild `pql.db` from the changelog.
 
-On a fresh clone, `pql plan import` restores from the snapshot.
+On a fresh clone, `pql plan import` (run automatically on first open)
+replays the changelog into a new `pql.db`. There is **no** `pql-plan.json`
+snapshot — that artifact is retired; `pql plan export` is now only a
+manual catch-up/reconcile.
 
 ### Planning cookbook
 
@@ -152,6 +158,7 @@ On a fresh clone, `pql plan import` restores from the snapshot.
 - **Show with refs** → `pql decisions show D-5 --with-refs --pretty`
 - **Read full body** → `pql decisions read D-5`
 - **Create ticket** → `pql ticket new task "implement X" --decision D-5`
+- **Create ticket, capture id for a script** → `id=$(pql ticket new task "implement X" --id-only)` — prints just `T-NNN`
 - **Batch close** → `pql ticket status T-1,T-2,T-3 done`
 - **Full context** → `pql ticket show T-5 --with-context --pretty`
 - **Batch show** → `pql ticket show T-1,T-2,T-3 --pretty`
@@ -163,7 +170,7 @@ On a fresh clone, `pql plan import` restores from the snapshot.
 - **Review queue** → `pql plan review --pretty`
 - **Coverage gaps** → `pql decisions coverage`
 - **Dashboard** → `pql plan status --pretty`
-- **Snapshot for git** → `pql plan export`
+- **Force a changelog catch-up** → `pql plan export` (normally a no-op; mutations already write through to `.pql/changelog/`)
 
 ---
 

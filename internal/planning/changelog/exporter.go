@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/postmeridiem/pql/internal/planning/repo"
@@ -21,6 +22,15 @@ const ChangelogDir = ".pql/changelog"
 // row, so direct string comparison works (lexicographic == temporal
 // for this format).
 const markerFormat = "2006-01-02 15:04:05"
+
+// The marker query is inclusive (updated_at >= marker), not strict.
+// Write-through (D-23) calls Export after every mutation, so the marker
+// is repeatedly advanced to "now" with second granularity; a mutation
+// landing in the same second as the previous marker would be skipped
+// under a strict `>`, silently failing to persist — the exact data-loss
+// class write-through exists to close. Inclusive `>=` re-scans the
+// current second instead; fileSink dedupes byte-identical lines so the
+// re-scan never rewrites an already-exported row-version.
 
 // Result summarises an Export run.
 type Result struct {
@@ -37,18 +47,25 @@ type Result struct {
 // not exported — they are derived from markdown per D-8 and travel
 // with the markdown source files.
 //
-// Marker semantics: rows with updated_at > marker get exported. The
-// marker advances to "now" at the end of a successful run. First
-// export against an unset marker treats the marker as the empty
-// string, which sorts before every real timestamp — so all rows are
-// exported.
+// Marker semantics: rows with updated_at >= marker get exported (see the
+// note on markerFormat for why inclusive). The marker advances to "now"
+// at the end of a successful run. First export against an unset marker
+// treats the marker as the empty string, which sorts before every real
+// timestamp — so all rows are exported. fileSink skips byte-identical
+// lines already present in the target file, so re-scanning a row that was
+// exported in a prior run (the cost of inclusive marker semantics) never
+// produces a duplicate changelog line.
 func Export(ctx context.Context, db *sql.DB, vaultPath string) (*Result, error) {
 	since, err := repo.ReadMeta(ctx, db, repo.MetaLastExportMarker)
 	if err != nil {
 		return nil, err
 	}
 
-	sink := &fileSink{vaultPath: vaultPath, files: make(map[string]*os.File)}
+	sink := &fileSink{
+		vaultPath: vaultPath,
+		files:     make(map[string]*os.File),
+		seen:      make(map[string]map[string]bool),
+	}
 	defer sink.close()
 
 	res := &Result{}
@@ -73,30 +90,103 @@ func Export(ctx context.Context, db *sql.DB, vaultPath string) (*Result, error) 
 }
 
 // fileSink lazily opens append-mode handles for the per-table
-// per-month SQL files an Export pass writes to.
+// per-month SQL files an Export pass writes to. It dedupes byte-identical
+// lines: each target file's existing lines are loaded into seen[path] on
+// first touch, so a line that already exists in the file (e.g. a row
+// re-scanned under the inclusive marker) is skipped rather than appended.
 type fileSink struct {
 	vaultPath string
 	files     map[string]*os.File
+	seen      map[string]map[string]bool
 }
 
-func (fs *fileSink) appendLine(table, yearMonth, line string) error {
+// appendLine writes line to the table's monthly file unless an identical
+// line is already present. It returns whether a line was actually written
+// so callers can count only real writes.
+func (fs *fileSink) appendLine(table, yearMonth, line string) (bool, error) {
 	path := filepath.Join(fs.vaultPath, ChangelogDir, table, yearMonth+".sql")
 	f, ok := fs.files[path]
 	if !ok {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { //nolint:gosec // G301: changelog dir is meant to be world-readable when committed
-			return fmt.Errorf("changelog: mkdir %s: %w", filepath.Dir(path), err)
+			return false, fmt.Errorf("changelog: mkdir %s: %w", filepath.Dir(path), err)
+		}
+		if err := fs.loadSeen(path); err != nil {
+			return false, err
 		}
 		var err error
 		f, err = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644) //nolint:gosec // G302: changelog files are committed to git
 		if err != nil {
-			return fmt.Errorf("changelog: open %s: %w", path, err)
+			return false, fmt.Errorf("changelog: open %s: %w", path, err)
 		}
 		fs.files[path] = f
 	}
+	if fs.seen[path][line] {
+		return false, nil
+	}
 	if _, err := f.WriteString(line + "\n"); err != nil {
-		return fmt.Errorf("changelog: write %s: %w", path, err)
+		return false, fmt.Errorf("changelog: write %s: %w", path, err)
+	}
+	fs.seen[path][line] = true
+	return true, nil
+}
+
+// loadSeen reads the existing statements of path (if any) into seen[path]
+// so appendLine can skip duplicates. A missing file starts with an empty
+// set. Statements are split quote-aware, not by physical line: a row whose
+// value (e.g. a ticket description) contains a newline spans several
+// physical lines but is one statement, and must dedupe as a whole.
+func (fs *fileSink) loadSeen(path string) error {
+	set := make(map[string]bool)
+	fs.seen[path] = set
+	b, err := os.ReadFile(path) //nolint:gosec // G304: path is a resolved changelog file under the vault
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("changelog: read %s: %w", path, err)
+	}
+	for _, stmt := range splitStatements(string(b)) {
+		set[stmt] = true
 	}
 	return nil
+}
+
+// splitStatements breaks a changelog file into the individual SQL upsert
+// statements the exporter emitted. It splits on a `;` that falls outside a
+// single-quoted string literal (SQL escapes an embedded quote by doubling
+// it), so semicolons and newlines inside a value don't break a statement.
+// Each returned statement is whitespace-trimmed, matching the exact line
+// appendLine writes (which ends in `;` with no surrounding whitespace).
+func splitStatements(content string) []string {
+	var stmts []string
+	var b strings.Builder
+	inStr := false
+	for i := 0; i < len(content); i++ {
+		c := content[i]
+		if c == '\'' {
+			if inStr && i+1 < len(content) && content[i+1] == '\'' {
+				// Escaped quote ('') — stays inside the string literal.
+				b.WriteByte(c)
+				b.WriteByte(content[i+1])
+				i++
+				continue
+			}
+			inStr = !inStr
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte(c)
+		if c == ';' && !inStr {
+			if stmt := strings.TrimSpace(b.String()); stmt != "" {
+				stmts = append(stmts, stmt)
+			}
+			b.Reset()
+		}
+	}
+	if stmt := strings.TrimSpace(b.String()); stmt != "" {
+		stmts = append(stmts, stmt)
+	}
+	return stmts
 }
 
 func (fs *fileSink) close() {
@@ -123,7 +213,7 @@ func exportTickets(ctx context.Context, db *sql.DB, since string, sink *fileSink
 		       assigned_to, team, decision_ref,
 		       created_at, updated_at, deleted_at, hash, canonical_version
 		FROM tickets
-		WHERE updated_at > ?
+		WHERE updated_at >= ?
 		ORDER BY updated_at, hash
 	`, since)
 	if err != nil {
@@ -156,10 +246,13 @@ func exportTickets(ctx context.Context, db *sql.DB, since string, sink *fileSink
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
 		)
-		if err := sink.appendLine("tickets", ym, line); err != nil {
+		wrote, err := sink.appendLine("tickets", ym, line)
+		if err != nil {
 			return n, err
 		}
-		n++
+		if wrote {
+			n++
+		}
 	}
 	return n, rows.Err()
 }
@@ -169,7 +262,7 @@ func exportTicketDeps(ctx context.Context, db *sql.DB, since string, sink *fileS
 		SELECT blocker_id, blocked_id,
 		       created_at, updated_at, deleted_at, hash, canonical_version
 		FROM ticket_deps
-		WHERE updated_at > ?
+		WHERE updated_at >= ?
 		ORDER BY updated_at, hash
 	`, since)
 	if err != nil {
@@ -198,10 +291,13 @@ func exportTicketDeps(ctx context.Context, db *sql.DB, since string, sink *fileS
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
 		)
-		if err := sink.appendLine("ticket_deps", ym, line); err != nil {
+		wrote, err := sink.appendLine("ticket_deps", ym, line)
+		if err != nil {
 			return n, err
 		}
-		n++
+		if wrote {
+			n++
+		}
 	}
 	return n, rows.Err()
 }
@@ -211,7 +307,7 @@ func exportTicketLabels(ctx context.Context, db *sql.DB, since string, sink *fil
 		SELECT ticket_id, label,
 		       created_at, updated_at, deleted_at, hash, canonical_version
 		FROM ticket_labels
-		WHERE updated_at > ?
+		WHERE updated_at >= ?
 		ORDER BY updated_at, hash
 	`, since)
 	if err != nil {
@@ -240,10 +336,13 @@ func exportTicketLabels(ctx context.Context, db *sql.DB, since string, sink *fil
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
 		)
-		if err := sink.appendLine("ticket_labels", ym, line); err != nil {
+		wrote, err := sink.appendLine("ticket_labels", ym, line)
+		if err != nil {
 			return n, err
 		}
-		n++
+		if wrote {
+			n++
+		}
 	}
 	return n, rows.Err()
 }
@@ -259,7 +358,7 @@ func exportTicketHistory(ctx context.Context, db *sql.DB, since string, sink *fi
 		       changed_at, created_at, updated_at, deleted_at,
 		       hash, canonical_version
 		FROM ticket_history
-		WHERE updated_at > ?
+		WHERE updated_at >= ?
 		ORDER BY updated_at, hash
 	`, since)
 	if err != nil {
@@ -290,10 +389,13 @@ func exportTicketHistory(ctx context.Context, db *sql.DB, since string, sink *fi
 			sqlStr(changedAt), sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
 		)
-		if err := sink.appendLine("ticket_history", ym, line); err != nil {
+		wrote, err := sink.appendLine("ticket_history", ym, line)
+		if err != nil {
 			return n, err
 		}
-		n++
+		if wrote {
+			n++
+		}
 	}
 	return n, rows.Err()
 }

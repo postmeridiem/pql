@@ -91,6 +91,51 @@ func seedTicket(t *testing.T, db *sql.DB, id, updatedAt string) {
 	}
 }
 
+// TestExport_DedupesMultiLineStatementOnReExport guards the write-through
+// dedup against a row whose value spans multiple physical lines. A naive
+// line-based dedup re-appended such a statement on every re-scan (the
+// inclusive marker re-scans the boundary second; a reset marker re-scans
+// everything). The dedup must treat the whole multi-line statement as one
+// unit.
+func TestExport_DedupesMultiLineStatementOnReExport(t *testing.T) {
+	ctx := context.Background()
+	vault, db := setupVault(t)
+
+	// Embedded newline AND a single quote — the exact shape that broke
+	// line-based dedup.
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO tickets (id, type, title, description, status, priority, created_at, updated_at)
+		VALUES ('T-1','task','t','line one
+line two: it''s multi-line','backlog','medium','2025-05-08 11:00:00','2025-05-08 11:00:00')
+	`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := planning.RehashTicket(ctx, db, "T-1"); err != nil {
+		t.Fatalf("rehash: %v", err)
+	}
+
+	if _, err := Export(ctx, db, vault); err != nil {
+		t.Fatalf("export 1: %v", err)
+	}
+	// Simulate a behind/reset marker (post-rebuild, or write-through's
+	// inclusive re-scan): re-export against an empty marker WITHOUT
+	// truncating. Dedup must skip the already-present statement.
+	if err := repo.WriteMeta(ctx, db, repo.MetaLastExportMarker, ""); err != nil {
+		t.Fatalf("reset marker: %v", err)
+	}
+	if _, err := Export(ctx, db, vault); err != nil {
+		t.Fatalf("export 2: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(vault, ".pql", "changelog", "tickets", "2025-05.sql"))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if n := strings.Count(string(body), "INSERT INTO tickets"); n != 1 {
+		t.Fatalf("want exactly 1 INSERT after re-export (dedup), got %d:\n%s", n, body)
+	}
+}
+
 func TestExport_WritesPerTablePerMonthFiles(t *testing.T) {
 	ctx := context.Background()
 	vault, db := setupVault(t)

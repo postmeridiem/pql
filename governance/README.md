@@ -65,6 +65,7 @@ You might also want, project-permitting:
 - [D-20: Decision implementation tracked via initiative tickets, no coverage report](decisions/architecture.md#d-20-decision-implementation-tracked-via-initiative-tickets-no-coverage-report) — _architecture_
 - [D-21: DQR layout — `governance/` parent with per-type subdirectories](decisions/architecture.md#d-21-dqr-layout--governance-parent-with-per-type-subdirectories) — _architecture_
 - [D-22: Zero results returns exit 0, no distinct no-match code](decisions/architecture.md#d-22-zero-results-returns-exit-0-no-distinct-no-match-code) — _architecture_
+- [D-23: Write-through ticket mutations to the changelog](decisions/architecture.md#d-23-write-through-ticket-mutations-to-the-changelog) — _architecture_
 
 ## Open questions
 

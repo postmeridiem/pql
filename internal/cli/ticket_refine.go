@@ -230,6 +230,9 @@ so the caller can verify the write took.`,
 			if err := repo.UpdateTicket(ctx, pdb.SQL(), id, fields, ""); err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
 			}
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
+			}
 
 			tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
 			if err != nil {

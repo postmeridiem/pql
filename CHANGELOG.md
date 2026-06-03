@@ -11,6 +11,35 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.6.1]
+
+### Fixed
+
+- **Ticket mutations now write through to `.pql/changelog/` synchronously,
+  so a routine `git checkout` can no longer silently erase un-committed
+  planning work.** Previously mutations landed only in the gitignored
+  `pql.db`; the `post-checkout`/`post-rewrite` hooks run `pql plan rebuild`,
+  which truncates the replicated tables and replays the changelog from
+  disk — destroying any ticket created but not yet committed. Every ticket
+  mutation now flushes the affected rows to the changelog immediately
+  (D-23), and because the export marker is inclusive (`>=`) with
+  file-level line dedupe, rapid same-second bursts (e.g. building a ticket
+  tree) are no longer skipped. The `pre-commit` hook stages the whole
+  `.pql/changelog/` tree.
+
+### Added
+
+- **`pql ticket new --id-only`** prints just the new `T-NNN`, so
+  tree-creation scripts can capture the id without parsing JSON.
+
+### Changed
+
+- **Embedded skill (`internal/skill/SKILL.md`) durability section rewritten**
+  to match reality: `.pql/changelog/` is the git-tracked log of record,
+  written through automatically; the retired `pql-plan.json` JSON-snapshot
+  framing (and a non-existent pre-push hook) are gone. `pql plan export` is
+  documented as a manual catch-up that is normally a no-op.
+
 ## [1.6.0]
 
 ### Fixed

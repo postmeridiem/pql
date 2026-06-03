@@ -218,6 +218,9 @@ Output is the updated ticket row, so the caller can verify the append.`,
 			if err := repo.AppendDescription(ctx, pdb.SQL(), id, string(content), ""); err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
 			}
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
+			}
 
 			tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
 			if err != nil {
@@ -238,6 +241,7 @@ Output is the updated ticket row, so the caller can verify the append.`,
 
 func newTicketNewCmd() *cobra.Command {
 	var parentID, priority, decisionRef, team, assignedTo, description string
+	var idOnly bool
 	cmd := &cobra.Command{
 		Use:   "new <type> <title>",
 		Short: "Create a new ticket",
@@ -269,6 +273,20 @@ func newTicketNewCmd() *cobra.Command {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
 			}
 
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
+			}
+
+			// --id-only keeps tree-creation scripts simple: the bare
+			// T-NNN feeds straight into the next call's --parent/--by
+			// without a JSON parse.
+			if idOnly {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), id); err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				return nil
+			}
+
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
@@ -289,6 +307,7 @@ func newTicketNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&team, "team", "", "team name")
 	cmd.Flags().StringVar(&assignedTo, "assign", "", "assignee")
 	cmd.Flags().StringVar(&description, "description", "", "ticket description")
+	cmd.Flags().BoolVar(&idOnly, "id-only", false, "print only the new ticket id (T-NNN), no JSON")
 	return cmd
 }
 
@@ -483,6 +502,9 @@ Invalid transitions are rejected per ticket.`,
 				}
 			}
 
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
+			}
 			return renderTicketResults(cmd, results)
 		},
 	}
@@ -528,6 +550,9 @@ func newTicketAssignCmd() *cobra.Command {
 				}
 			}
 
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
+			}
 			return renderTicketResults(cmd, results)
 		},
 	}
@@ -577,6 +602,9 @@ func newTicketSetParentCmd() *cobra.Command {
 				}
 			}
 
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
+			}
 			return renderTicketResults(cmd, results)
 		},
 	}
@@ -615,6 +643,9 @@ func newTicketBlockCmd() *cobra.Command {
 			}
 			if err := planning.RehashTicketDep(ctx, pdb.SQL(), byID, args[0]); err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
+			}
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -667,6 +698,9 @@ func newTicketUnblockCmd() *cobra.Command {
 				if err := planning.RehashTicketDep(ctx, pdb.SQL(), fromID, args[0]); err != nil {
 					return &exitError{code: diag.DataErr, msg: err.Error()}
 				}
+			}
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -734,6 +768,9 @@ func newTicketTeamCmd() *cobra.Command {
 				results = append(results, *tk)
 			}
 
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
+			}
 			return renderTicketResults(cmd, results)
 		},
 	}
@@ -801,6 +838,10 @@ func newTicketLabelCmd() *cobra.Command {
 						}
 					}
 				}
+			}
+
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
 			}
 
 			type labelResult struct {

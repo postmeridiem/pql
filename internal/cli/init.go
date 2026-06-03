@@ -442,11 +442,14 @@ const pqlHookMarker = "# --- pql plan export ---"
 // it in. If the binary later moves, re-run `pql init` to refresh.
 func renderPreCommitHook(pqlPath string) string {
 	return `# --- pql plan export ---
-# Auto-installed by pql init. Exports planning state and stages the
-# snapshot so it lands in the same commit as the change that produced
-# it. The absolute pql path is baked in at install time — re-run
-# 'pql init' if the binary moves.
+# Auto-installed by pql init. Ticket mutations write through to
+# .pql/changelog/ synchronously (D-15/D-16), so the durable artifact
+# already exists at commit time. This runs a catch-up export and then
+# stages the whole changelog tree so it lands in the same commit as the
+# change that produced it. The absolute pql path is baked in at install
+# time — re-run 'pql init' if the binary moves.
 ` + shellQuote(pqlPath) + ` plan export --stage 2>/dev/null || true
+git add -A .pql/changelog 2>/dev/null || true
 # --- end pql ---
 `
 }
