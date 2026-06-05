@@ -38,7 +38,7 @@
 - **Context:** The extractor registry is designed for it — register by file pattern, produce structured output. No changes to store, connect, or query. The open question is priority and whether the tree-sitter cgo dependency is acceptable.
 
 ### Q-8: Occasional pql.db backups into git
-- **Status:** Resolved → [D-13](architecture.md#d-13-plan-export-and-plan-import)
+- **Status:** Resolved → [D-13](../decisions/architecture.md#d-13-plan-export-and-plan-import-for-versioned-planning-snapshots)
 - **Question:** How should users snapshot planning state (pql.db) into version control? What events trigger it, and what's the artifact shape?
 - **Context:** Resolved: `pql plan export` and `pql plan import` with a committed JSON artifact. Users wire the trigger (pre-push hook, sprint skill, manual) to their own workflow.
 
@@ -51,7 +51,7 @@
   - **Reservation + push-time canonicalisation.** `pql ticket new` mints `<replica>-r<n>` reservations; pre-push hook redeems against the existing canonical state, allocating the next free `T-N`. Whoever pushes first wins canonical numbering; later pushers rebase onto the new baseline. Cost: tentative refs in daily UX until push, plus markdown-rewrite churn for canonicalised names.
   - **Local master marker + atomic counter primitive.** One clone holds a gitignored `.pql/master` file designating it as canonicaliser. Generic mechanism: any caller asks for `+1` on a named counter, master returns and persists. Tentative IDs on non-master clones stored as pointers in a "bounce-link" table for later reconciliation. Atomic-counter primitive isn't ticket-specific — could serve any future sequential namespace.
   - **CI-hosted master.** Same atomic-counter + bounce-link pattern, but the master lives in GitHub Actions / Bitbucket Pipelines. Pipeline runs on push, redeems pending requests, commits canonical state back. No clone is anointed; the CI workflow is the authority.
-  
+
   The trade-off is *where* friction lives: daily UX (reservations), display ambiguity (replica-namespaced), occasional renames (drift), infrastructure (CI master), or per-clone config (local master). All approaches compose with D-15's changelog mechanism unchanged. Related to [Q-3](#q-3-multi-user-planning-db).
 
 ### Q-10: Soft-delete stub retention and purge

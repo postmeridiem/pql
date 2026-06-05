@@ -61,8 +61,8 @@ Core design constraints for pql.
 - **Decision:** Tickets live in pql.db only. No automatic markdown mirror. `pql ticket export` is the half-step toward a mirror when the merge-conflict story is solved.
 - **Rationale:** Shipping tickets without the mirror lets us deliver the feature now. The markdown mirror (auto-writing `tickets/T-NNN.md` on mutation) requires solving concurrent-edit conflicts, which is a separate problem.
 - **Cost:** Tickets are invisible to git until explicitly exported. Acceptable for single-user workflows.
-- **Raised by:** Planning locked decision. See [Q-1](questions.md#q-1-markdown-mirror-for-tickets).
-- **Amendment (2026-05-31):** `pql ticket export` was never built, and the merge-conflict problem this record was waiting on was since solved by the changelog replication design ([D-15](#d-15-per-table-monthly-sql-changelog-files-not-one-json-snapshot)/[D-16](#d-16-inline-lww-guards-make-changelog-replay-idempotent)) — tickets now travel in git via `.pql/changelog/`, not a markdown mirror. The load-bearing decision (tickets live in pql.db, no automatic `tickets/T-NNN.md` mirror) still holds; whether a markdown mirror is wanted at all is the live question (Q-1).
+- **Raised by:** Planning locked decision. See [Q-1](../questions/architecture.md#q-1-markdown-mirror-for-tickets).
+- **Amendment (2026-05-31):** `pql ticket export` was never built, and the merge-conflict problem this record was waiting on was since solved by the changelog replication design ([D-15](#d-15-replication-via-per-table-monthly-sql-changelog-files)/[D-16](#d-16-inline-lww-guards-plus-content-hash-plus-canonical-row-columns)) — tickets now travel in git via `.pql/changelog/`, not a markdown mirror. The load-bearing decision (tickets live in pql.db, no automatic `tickets/T-NNN.md` mirror) still holds; whether a markdown mirror is wanted at all is the live question (Q-1).
 
 ### D-9: One combined skill, not separate query/plan skills
 - **Date:** 2026-04-22
@@ -99,7 +99,7 @@ Core design constraints for pql.
 - **Decision:** `pql plan export` writes all planning state (decisions + tickets + refs + deps + labels + history) to a single JSON file at the vault root (default `pql-plan.json`). `pql plan import` restores from that file into pql.db. The artifact is committed to git; pql.db stays gitignored.
 - **Rationale:** Planning state is valuable enough to version but SQLite files don't belong in git. A JSON export is diffable, portable, and merge-friendly. The trigger is the user's choice — pre-push hook, sprint skill, manual — pql provides the verbs, not the policy.
 - **Cost:** Two representations of the same data (pql.db + export file) can drift. The export is a snapshot, not a live mirror. Users who want the export current must run `pql plan export` before committing.
-- **Raised by:** Resolved [Q-8](questions.md#q-8-occasional-pqldb-backups-into-git).
+- **Raised by:** Resolved [Q-8](../questions/architecture.md#q-8-occasional-pqldb-backups-into-git).
 
 ### D-14: No status transition enforcement in pql
 - **Date:** 2026-04-24
@@ -132,7 +132,7 @@ Core design constraints for pql.
 - **Date:** 2026-05-08
 - **Decision:** Deletions in planning tables are soft. Every table has a `deleted_at` column; deleting a row sets it to a timestamp. Read queries filter `WHERE deleted_at IS NULL` by default. The "stub" row remains in the database and the changelog so other replicas know the deletion is intentional rather than missing.
 - **Rationale:** Without stubs, a replica that hasn't seen the deletion would recreate the row on replay (no row → INSERT). Lotus Notes solved this in 1989 with deletion stubs; the same primitive applies to git-backed replication. Hard deletes can't be expressed in an upsert-only changelog without breaking the "every line is idempotent" invariant, which D-16 depends on.
-- **Cost:** Every table grows a `deleted_at` column; every read query needs the filter. Stubs accumulate indefinitely without a purge mechanism — long-running projects need a periodic GC pass. Purge mechanism, retention threshold, and how to ensure replicas converge on purge decisions are deferred to [Q-10](questions.md#q-10-soft-delete-stub-retention-and-purge).
+- **Cost:** Every table grows a `deleted_at` column; every read query needs the filter. Stubs accumulate indefinitely without a purge mechanism — long-running projects need a periodic GC pass. Purge mechanism, retention threshold, and how to ensure replicas converge on purge decisions are deferred to [Q-10](../questions/architecture.md#q-10-soft-delete-stub-retention-and-purge).
 - **Raised by:** Replication design — emerged from the need to express deletion in the changelog without breaking idempotent replay.
 
 ### D-18: Git lifecycle hook architecture for replication
