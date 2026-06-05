@@ -58,9 +58,17 @@ Thumbs.db
 # Claude Code user-specific settings
 .claude/settings.local.json
 
-# pql shims planted by `pql init` into git's hooks dir. The shim is
-# per-clone state (it bridges git's hooks dir to .pql/hooks/), and
-# the hook scripts it sources are also per-clone (see T-28). Both
-# get replanted on every `pql init`.
+# pql shims planted by `pql init` into git's hooks dir (the dir
+# `core.hooksPath` points at — `.githooks/` here). Each shim bridges
+# git's hooks dir to the matching body in `.pql/hooks/`. Both the shim
+# and the body are per-clone state, replanted on every `pql init`
+# (see T-28 / T-52): the bodies bake a per-developer absolute pql path,
+# and — the load-bearing reason — a contributor who doesn't use pql (or
+# clide) must be able to clone and work in this repo without pql's hook
+# machinery landing in their tree. `pre-push` is NOT listed here: it's
+# the project's own `make pre-push` CI gate, not a pql-tool shim, and is
+# tracked deliberately.
 .githooks/pre-commit
 .githooks/post-merge
+.githooks/post-checkout
+.githooks/post-rewrite

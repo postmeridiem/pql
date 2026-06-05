@@ -57,6 +57,8 @@ CI substance lives in `ci/{lint,test,release,eval}.sh`. GitHub Actions workflows
 
 **Pre-push hook.** Opt in once per clone with `git config core.hooksPath .githooks`. The hook runs `make pre-push`; a failing check aborts the push locally so nothing reaches the remote.
 
+**Hook setup ordering.** Only `.githooks/pre-push` is tracked. The replication shims (`pre-commit`, `post-merge`, `post-checkout`, `post-rewrite`) are per-clone and planted by `pql init` into whatever `core.hooksPath` resolves to (T-52). So set `core.hooksPath .githooks` **before** running `pql init` — otherwise init plants them into `.git/hooks/` and they never fire under the redirected path. A contributor who doesn't use pql can skip `pql init` entirely and the repo still works.
+
 ## Test infrastructure
 
 Three tiers (see `docs/structure/project-structure.md` for full details):
