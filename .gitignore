@@ -28,6 +28,10 @@ coverage.*
 .pql/*
 !.pql/changelog/
 
+# clean-house skill local working state (run history + skip ledger).
+# Per-clone, not shared — like the skip ledger of a linter cache.
+governance/decisions/.clean-house-state.md
+
 # SQLite index files should never land here, but defensive
 *.sqlite
 *.sqlite-journal
