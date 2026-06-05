@@ -55,6 +55,10 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# clide per-clone UI state (active sidebar/context tabs). Local
+# tooling state, not project-shared config — same posture as .pql/*.
+.clide/
+
 # Claude Code user-specific settings
 .claude/settings.local.json
 
