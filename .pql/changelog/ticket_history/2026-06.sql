@@ -5,3 +5,37 @@ INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, 
 INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-51', 'status', 'backlog', 'done', NULL, '2026-06-03 14:41:35', '2026-06-03 14:41:35', '2026-06-03 14:41:35', NULL, 'b7e0ee6dd3e8a1dcfbae0eba8648a383', 1) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-46', 'status', 'backlog', 'done', NULL, '2026-06-03 14:41:36', '2026-06-03 14:41:36', '2026-06-03 14:41:36', NULL, 'f5d902a1817adaccdc6132264fed066a', 1) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-52', 'status', 'backlog', 'in_progress', NULL, '2026-06-05 11:00:56', '2026-06-05 11:00:56', '2026-06-05 11:00:56', NULL, '0e1b254ac157d5a0d96f94d1d97e92cb', 1) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-52', 'description', 'The four pql replication hook shims in .githooks/ are tracked inconsistently:
+
+  - .githooks/post-checkout  -> TRACKED (git ls-files)
+  - .githooks/post-rewrite   -> TRACKED
+  - .githooks/pre-commit     -> gitignored (.gitignore L65)
+  - .githooks/post-merge     -> gitignored (.gitignore L66)
+
+All four are functionally identical static two-line shims (git rev-parse + source .pql/hooks/<name>); none bakes a per-developer path (that lives in the .pql/hooks/* bodies, correctly ignored under .pql/*). So the split is unintended drift, not a real distinction. (pre-push is legitimately tracked -- it is the hand-authored lint gate, not a replication shim.)
+
+History: T-28/T-38/T-39 settled that hook scripts + shims are per-clone, planted by ''pql init'', not tracked; T-39 git-rm''d .pql/hooks/ and dropped the !.pql/hooks/ exception. T-30 (cancelled) records that ensureGitHookShim is supposed to plant ALL FOUR .githooks/ shims and that post-checkout/post-rewrite were the ones being missed. The tracked post-checkout/post-rewrite shims are the leftover that escaped the T-39 cleanup, and .gitignore lacks matching ignore rules for them.
+
+Impact: latent. A fresh clone that only runs ''git config core.hooksPath .githooks'' (without ''pql init'') gets pre-push + the two tracked rebuild shims, but NOT pre-commit/post-merge -- so write-through staging and post-merge import silently don''t fire until init runs. The asymmetry also makes the per-clone-hooks invariant (T-28) ambiguous.
+
+Proposed resolution (align to the settled per-clone policy): git rm .githooks/post-checkout and .githooks/post-rewrite, add them to the .gitignore stanza alongside pre-commit/post-merge, and ensure ''pql init'' (ensureGitHookShim) reliably plants all four shims. Confirm a fresh clone + ''pql init'' + core.hooksPath=.githooks yields the full lifecycle with a clean tree. Alternatively, if committed shims are deemed desirable for zero-init clones, commit all four and document why -- but that contradicts T-28/T-39, so it would need a D-18 amendment.
+
+Surfaced 2026-06-05 while wiring core.hooksPath on the pql repo: pre-commit/post-merge were absent from the active hook set until ''pql init'' planted them.', 'The four pql replication hook shims in .githooks/ are tracked inconsistently:
+
+  - .githooks/post-checkout  -> TRACKED (git ls-files)
+  - .githooks/post-rewrite   -> TRACKED
+  - .githooks/pre-commit     -> gitignored (.gitignore L65)
+  - .githooks/post-merge     -> gitignored (.gitignore L66)
+
+All four are functionally identical static two-line shims (git rev-parse + source .pql/hooks/<name>); none bakes a per-developer path (that lives in the .pql/hooks/* bodies, correctly ignored under .pql/*). So the split is unintended drift, not a real distinction. (pre-push is legitimately tracked -- it is the hand-authored lint gate, not a replication shim.)
+
+History: T-28/T-38/T-39 settled that hook scripts + shims are per-clone, planted by ''pql init'', not tracked; T-39 git-rm''d .pql/hooks/ and dropped the !.pql/hooks/ exception. T-30 (cancelled) records that ensureGitHookShim is supposed to plant ALL FOUR .githooks/ shims and that post-checkout/post-rewrite were the ones being missed. The tracked post-checkout/post-rewrite shims are the leftover that escaped the T-39 cleanup, and .gitignore lacks matching ignore rules for them.
+
+Impact: latent. A fresh clone that only runs ''git config core.hooksPath .githooks'' (without ''pql init'') gets pre-push + the two tracked rebuild shims, but NOT pre-commit/post-merge -- so write-through staging and post-merge import silently don''t fire until init runs. The asymmetry also makes the per-clone-hooks invariant (T-28) ambiguous.
+
+Proposed resolution (align to the settled per-clone policy): git rm .githooks/post-checkout and .githooks/post-rewrite, add them to the .gitignore stanza alongside pre-commit/post-merge, and ensure ''pql init'' (ensureGitHookShim) reliably plants all four shims. Confirm a fresh clone + ''pql init'' + core.hooksPath=.githooks yields the full lifecycle with a clean tree. Alternatively, if committed shims are deemed desirable for zero-init clones, commit all four and document why -- but that contradicts T-28/T-39, so it would need a D-18 amendment.
+
+Surfaced 2026-06-05 while wiring core.hooksPath on the pql repo: pre-commit/post-merge were absent from the active hook set until ''pql init'' planted them.
+
+Resolved 2026-06-05. No code change needed: pql init''s ensureGitHookShim already plants all four shims into the resolved core.hooksPath dir. Fix was repo-state alignment: git rm --cached .githooks/post-checkout and post-rewrite, extended the .gitignore stanza to ignore all four replication shims (rationale: a non-pql contributor must be able to use the repo without pql hook machinery in their tree), and documented the set-hooksPath-before-init ordering in CLAUDE.md. pre-push stays tracked (project CI gate, not a pql shim). Verified end-to-end on a fresh clone: only pre-push tracked; after core.hooksPath=.githooks + pql init all four shims plant with a clean tree and the hooks fire. Committed in adf44e3.', NULL, '2026-06-05 11:15:00', '2026-06-05 11:15:00', '2026-06-05 11:15:00', NULL, '7fa4845d141a173271959ca7b5c1c042', 1) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('T-52', 'status', 'in_progress', 'done', NULL, '2026-06-05 11:15:00', '2026-06-05 11:15:00', '2026-06-05 11:15:00', NULL, 'e77950eb09e1ea3188279f455b6cc7d2', 1) ON CONFLICT(hash) DO NOTHING;
