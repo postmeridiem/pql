@@ -152,6 +152,12 @@ replays the changelog into a new `pql.db`. There is **no** `pql-plan.json`
 snapshot — that artifact is retired; `pql plan export` is now only a
 manual catch-up/reconcile.
 
+A ticket mutation (create / status transition / any write) leaves
+`.pql/changelog/` dirty by design — the `pre-commit` hook stages it onto
+the next `git commit`. This is expected, not a problem to flag. Don't
+narrate "the ticket won't persist until committed" on every edit; either
+fold the bookkeeping into a commit or trust the normal commit flow.
+
 ### Planning cookbook
 
 - **Sync and list confirmed** → `pql decisions sync && pql decisions list --type confirmed`

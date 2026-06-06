@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.6.1
-status: v1.6.1 — planning durability: ticket mutations write through to `.pql/changelog/` synchronously (D-23), so a routine `git checkout`/rebase can no longer silently erase un-committed tickets via the rebuild hooks. Also `ticket new --id-only` for tree-creation scripts, an accurate embedded skill (the changelog, not a JSON snapshot, is the durable artifact), and a clearer schema-mismatch recovery hint.
+version: 1.6.2
+status: v1.6.2 — embedded skill now tells agents not to narrate "the ticket won't persist until committed" after a ticket mutation: the dirty `.pql/changelog/` is by-design write-through, staged by the pre-commit hook (T-53).
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

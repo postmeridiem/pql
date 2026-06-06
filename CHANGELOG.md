@@ -11,6 +11,17 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.6.2]
+
+### Changed
+
+- **Embedded skill now instructs agents not to narrate "the ticket won't
+  persist until committed" after a ticket mutation.** A `pql ticket` write
+  leaves `.pql/changelog/` dirty by design — the `pre-commit` hook stages it
+  onto the next commit (write-through, D-23). The "Versioning planning state"
+  section now spells this out as expected behavior so consumers either fold
+  the bookkeeping into a commit or trust the normal commit flow (T-53).
+
 ## [1.6.1]
 
 ### Fixed
