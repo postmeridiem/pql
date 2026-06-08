@@ -19,6 +19,11 @@ import (
 type ImportResult struct {
 	FilesReplayed []string `json:"files_replayed"`
 	StatementsRun int      `json:"statements_run"`
+	// Collisions lists ticket ids claimed by more than one lineage in the
+	// changelog (T-54). Empty in the normal case; non-empty means the
+	// ON CONFLICT(id) upsert silently merged unrelated tickets and the
+	// maintainer should re-file one under a fresh id.
+	Collisions []TicketCollision `json:"collisions,omitempty"`
 }
 
 // Import replays every changelog file under <vault>/.pql/changelog/
@@ -118,6 +123,15 @@ func Import(ctx context.Context, db *sql.DB, vaultPath string) (*ImportResult, e
 			res.StatementsRun += countStatements(content)
 		}
 	}
+
+	// Collision detection scans the full tickets changelog (independent of
+	// the replay cutoff) so a colliding id is surfaced even on an
+	// incremental import whose new file is only one half of the collision.
+	collisions, err := detectTicketCollisions(root)
+	if err != nil {
+		return nil, err
+	}
+	res.Collisions = collisions
 
 	now := time.Now().UTC().Format(markerFormat)
 	if err := repo.WriteMeta(ctx, db, repo.MetaLastImportMarker, now); err != nil {

@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+// sqlNull is the SQL NULL keyword as it appears in serialised changelog
+// rows — both written (sqlNull*) and parsed back (unquoteSQL).
+const sqlNull = "NULL"
+
 // sqlStr renders a string as a single-quoted SQL literal, doubling
 // any embedded single quotes.
 func sqlStr(s string) string {
@@ -19,7 +23,7 @@ func sqlStr(s string) string {
 // the bare NULL keyword.
 func sqlNullStr(n sql.NullString) string {
 	if !n.Valid {
-		return "NULL"
+		return sqlNull
 	}
 	return sqlStr(n.String)
 }
@@ -27,7 +31,7 @@ func sqlNullStr(n sql.NullString) string {
 // sqlNullInt renders a sql.NullInt64 as decimal or NULL.
 func sqlNullInt(n sql.NullInt64) string {
 	if !n.Valid {
-		return "NULL"
+		return sqlNull
 	}
 	return strconv.FormatInt(n.Int64, 10)
 }

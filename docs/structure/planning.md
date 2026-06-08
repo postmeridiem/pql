@@ -219,8 +219,16 @@ anything the planning core needs to do without cobra lives under
 | `pql plan whatsnext` | The single next ticket to work on (class `active`, then the "ready" lane — the most-advanced `initial` status — unblocked) with full context bundle. |
 | `pql plan review` | The next ticket awaiting review, with full context bundle. |
 | `pql plan export [--stage]` | Append changed planning rows to `.pql/changelog/<table>/<YYYY-MM>.sql` (git-committed replication, D-15). `--stage` also `git add`s them. |
-| `pql plan rebuild` | Drop replicated tables and replay `.pql/changelog/` from scratch. |
-| `pql plan import [--legacy FILE]` | Replay `.pql/changelog/` into `pql.db` (or migrate a legacy `pql-plan.json`). |
+| `pql plan rebuild` | Drop replicated tables and replay `.pql/changelog/` from scratch. Warns (`changelog.ticket_id_collision`) when one ticket id is claimed by two lineages — see below (T-54). |
+| `pql plan import [--legacy FILE]` | Replay `.pql/changelog/` into `pql.db` (or migrate a legacy `pql-plan.json`). Also surfaces ticket-id collisions. |
+
+**Ticket-ID collision detection (T-54).** IDs are `max(existing)+1` against the
+local changelog, so cross-clone/branch filing between syncs can reuse a `T-NNN`.
+`tickets` replays with `ON CONFLICT(id) DO UPDATE`, which would silently merge
+two unrelated tickets. Since `created_at` is immutable across a ticket's update
+rows, replay flags any id carrying two distinct `created_at` lineages as a
+non-fatal warning (and in the result JSON's `collisions`), so the maintainer can
+re-file one under a fresh id rather than discover a wrong title later.
 
 (`pql plan search` is not built; cross-cutting FTS is part of Q-2.)
 

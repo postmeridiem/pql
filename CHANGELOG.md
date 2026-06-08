@@ -11,6 +11,23 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.8.0]
+
+### Added
+
+- **Ticket-ID collisions are surfaced loudly at changelog replay** (T-54).
+  Ticket IDs are allocated as `max(existing)+1` against the *local* changelog,
+  so two clones/branches/sessions that file between syncs can pick the same
+  `T-NNN` — an accepted cost of sequential IDs with no central authority. The
+  hazard was that `tickets` replays with `ON CONFLICT(id) DO UPDATE`, silently
+  merging two unrelated tickets into one row. `pql plan rebuild` and
+  `pql plan import` now scan the tickets changelog and detect any `id` claimed
+  by more than one lineage (distinct immutable `created_at`), emitting a
+  `changelog.ticket_id_collision` warning per collision on stderr and listing
+  them in the result JSON (`collisions`). Detection is non-fatal — it makes the
+  silent merge visible so the maintainer can re-file one ticket under a fresh
+  id. Healthy changelogs emit nothing.
+
 ## [1.7.0]
 
 ### Added

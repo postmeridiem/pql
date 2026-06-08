@@ -137,6 +137,7 @@ to any other — pql does not enforce a state machine.
 | `pql plan review` | Next ticket awaiting review with full context bundle |
 | `pql plan export [--stage]` | Append changed planning rows to `.pql/changelog/<table>/<YYYY-MM>.sql` (the git-tracked log of record); `--stage` also `git add`s them. Normally a no-op — mutations already write through |
 | `pql plan import [--legacy FILE]` | Replay `.pql/changelog/` into `pql.db` (or one-time `--legacy pql-plan.json` migration from the pre-D-15 snapshot) |
+| `pql plan rebuild` | Drop replicated tables and replay `.pql/changelog/` from scratch. Warns on stderr (`changelog.ticket_id_collision`) + lists `collisions` in the result if one ticket id was filed twice across clones |
 
 ### Versioning planning state
 

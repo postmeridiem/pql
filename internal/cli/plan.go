@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -353,6 +354,7 @@ with that command.
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
+			warnTicketCollisions(res.Collisions)
 
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
@@ -364,6 +366,24 @@ with that command.
 			}
 			return nil
 		},
+	}
+}
+
+// warnTicketCollisions emits one stderr warning per ticket-id collision
+// surfaced by replay (T-54). Non-fatal — the collisions also ride along in
+// the result JSON on stdout; this is the loud human-facing signal that the
+// ON CONFLICT(id) upsert merged unrelated tickets and one should be
+// re-filed under a fresh id.
+func warnTicketCollisions(collisions []changelog.TicketCollision) {
+	for _, c := range collisions {
+		parts := make([]string, 0, len(c.Lineages))
+		for _, l := range c.Lineages {
+			parts = append(parts, fmt.Sprintf("created_at %s %q (hash %s)", l.CreatedAt, l.Title, l.Hash))
+		}
+		diag.Warn("changelog.ticket_id_collision", fmt.Sprintf(
+			"ticket id %s is claimed by %d distinct lineages — replay merged them under one row via ON CONFLICT(id); re-file one under a fresh id to reconcile: %s",
+			c.ID, len(c.Lineages), strings.Join(parts, " vs "),
+		))
 	}
 }
 
@@ -409,6 +429,7 @@ old pql-plan.json; T-23 polishes this into an automatic migration.`,
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
+			warnTicketCollisions(res.Collisions)
 
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {

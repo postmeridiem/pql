@@ -13,6 +13,9 @@ type RebuildResult struct {
 	TablesCleared []string `json:"tables_cleared"`
 	FilesReplayed []string `json:"files_replayed"`
 	StatementsRun int      `json:"statements_run"`
+	// Collisions carries the ticket-id collisions surfaced by the replay
+	// (T-54); see ImportResult.Collisions.
+	Collisions []TicketCollision `json:"collisions,omitempty"`
 }
 
 // replicatedTables lists, in foreign-key-safe order for DELETE, the
@@ -65,5 +68,6 @@ func Rebuild(ctx context.Context, db *sql.DB, vaultPath string) (*RebuildResult,
 		TablesCleared: cleared,
 		FilesReplayed: imp.FilesReplayed,
 		StatementsRun: imp.StatementsRun,
+		Collisions:    imp.Collisions,
 	}, nil
 }
