@@ -167,7 +167,7 @@ func newPlanWhatsNextCmd() *cobra.Command {
 			defer func() { _ = pdb.Close() }()
 
 			db := pdb.SQL()
-			t, err := repo.WhatNext(ctx, db)
+			t, err := repo.WhatNext(ctx, db, statusSetFromConfig(cfg))
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
@@ -177,7 +177,7 @@ func newPlanWhatsNextCmd() *cobra.Command {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			if t == nil {
-				out.Message = "no actionable ticket — nothing in_progress or ready with all blockers cleared; check the board, unblock work, or flag backlog tickets ready"
+				out.Message = "no actionable ticket — nothing active or ready with all blockers cleared; check the board, unblock work, or advance a ticket into the ready lane"
 			}
 
 			return renderOne(cmd, out)
@@ -205,7 +205,7 @@ func newPlanReviewCmd() *cobra.Command {
 			defer func() { _ = pdb.Close() }()
 
 			db := pdb.SQL()
-			t, err := repo.NextReview(ctx, db)
+			t, err := repo.NextReview(ctx, db, statusSetFromConfig(cfg))
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}

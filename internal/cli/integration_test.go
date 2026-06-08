@@ -1026,3 +1026,91 @@ func TestIntegration_Outlinks_OnSessionOutcome(t *testing.T) {
 		}
 	}
 }
+
+// --- ticket statuslist (configurable status vocabulary, D-24) -------------
+
+func TestIntegration_StatusList_Default(t *testing.T) {
+	vault := t.TempDir()
+	stdout, stderr, code := run(t, vault, "ticket", "statuslist")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	wantNames := []string{"backlog", "ready", "in_progress", "review", "done", "cancelled"}
+	if len(rows) != len(wantNames) {
+		t.Fatalf("got %d statuses, want %d: %s", len(rows), len(wantNames), stdout)
+	}
+	for i, want := range wantNames {
+		if name, _ := rows[i]["name"].(string); name != want {
+			t.Errorf("row %d name = %q, want %q", i, name, want)
+		}
+		if order, _ := rows[i]["order"].(float64); int(order) != i {
+			t.Errorf("row %d order = %v, want %d", i, rows[i]["order"], i)
+		}
+	}
+	// backlog: initial + default; done: terminal.
+	if rows[0]["class"] != "initial" || rows[0]["is_default"] != true {
+		t.Errorf("backlog row = %#v, want initial/default", rows[0])
+	}
+	if rows[4]["class"] != "done" && rows[4]["is_terminal"] != true {
+		t.Errorf("done row = %#v, want is_terminal", rows[4])
+	}
+	if lbl, _ := rows[2]["label"].(string); lbl != "In Progress" {
+		t.Errorf("in_progress label = %q, want %q", lbl, "In Progress")
+	}
+}
+
+func TestIntegration_StatusList_CustomConfig(t *testing.T) {
+	vault := t.TempDir()
+	writeFileIT(t, filepath.Join(vault, ".pql", "config.yaml"), `
+ticket_statuses:
+  - { name: triage,  label: Triage, class: initial, is_default: true }
+  - { name: doing,   class: active }
+  - { name: shipped, class: terminal }
+`)
+	stdout, stderr, code := run(t, vault, "ticket", "statuslist")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("got %d statuses, want 3 (custom): %s", len(rows), stdout)
+	}
+	if rows[0]["name"] != "triage" || rows[0]["label"] != "Triage" || rows[0]["is_default"] != true {
+		t.Errorf("first custom status = %#v", rows[0])
+	}
+	if rows[2]["name"] != "shipped" || rows[2]["is_terminal"] != true {
+		t.Errorf("terminal custom status = %#v", rows[2])
+	}
+}
+
+func TestIntegration_StatusList_InvalidConfigRejected(t *testing.T) {
+	vault := t.TempDir()
+	// Two defaults — config validation must reject this.
+	writeFileIT(t, filepath.Join(vault, ".pql", "config.yaml"), `
+ticket_statuses:
+  - { name: a, class: initial, is_default: true }
+  - { name: b, class: initial, is_default: true }
+  - { name: c, class: terminal }
+`)
+	_, stderr, code := run(t, vault, "ticket", "statuslist")
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for invalid config, got 0\nstderr: %s", stderr)
+	}
+}
+
+func writeFileIT(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
