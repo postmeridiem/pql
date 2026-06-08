@@ -11,6 +11,35 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.7.0]
+
+### Added
+
+- **Ticket status set is now configurable per-vault** via `ticket_statuses` in
+  `.pql/config.yaml`, and discoverable via the new **`pql ticket statuslist`**
+  command. Each status declares a `name`, optional `label`, and a `class` — one
+  of `initial | active | review | terminal` — with exactly one `is_default`
+  (class `initial`). The engine reasons about classes, never literal names:
+  terminal statuses clear blockers and are excluded from refine/unblocked;
+  `pql plan whatsnext` surfaces `active` work then the most-advanced `initial`
+  status (the "ready" lane); `pql plan review` surfaces `review`-class statuses.
+  `statuslist` emits `{name, label, class, order, is_default, is_terminal}` in
+  board order so a UI (e.g. clide) can render columns without hardcoding. The
+  built-in default (`backlog, ready, in_progress, review, done, cancelled`)
+  reproduces prior behaviour exactly, so omitting the key changes nothing.
+  Transitions remain unrestricted (D-14) — only unknown statuses are rejected.
+  See [D-24](governance/decisions/architecture.md#d-24-ticket-status-set-is-configurable-modelled-as-four-classes).
+
+### Changed
+
+- **The tickets table no longer enumerates statuses in a SQL `CHECK`** —
+  validation moved to Go (`planning.StatusSet`) so the vocabulary is editable
+  without a schema migration. Per D-19 there is no in-place migration: an
+  existing `pql.db` built under the old constraint keeps it and would reject a
+  customised status set until rebuilt with `rm .pql/pql.db && pql plan rebuild`
+  (replays the committed changelog). `CanonicalVersion` is unchanged — row
+  hashing is unaffected.
+
 ## [1.6.2]
 
 ### Changed

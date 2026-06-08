@@ -106,9 +106,10 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | Command | Purpose |
 |---|---|
 | `pql ticket new <type> "title" [--decision D-NNN] [--priority P] [--id-only]` | Create (emits T-NNN; `--id-only` prints the bare id for tree-creation scripts) |
-| `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | List with filters. `--under` = recursive descendants of a ticket; `--leaf` = no children; `--unblocked` = blockers all done/cancelled |
+| `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | List with filters. `--under` = recursive descendants of a ticket; `--leaf` = no children; `--unblocked` = blockers all reached a terminal status |
 | `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Show one or more (comma-batch → array of show-trees). `--with-children` = direct children; `--tree` = nested descendant subtree + direct parent (cap with `--depth N`) |
 | `pql ticket status <id> <new-status>` | Change status (any valid status accepted) |
+| `pql ticket statuslist` | List the configured status vocabulary (name, label, class, order, is_default, is_terminal) — what a UI reads to render columns |
 | `pql ticket assign <id> <agent>` | Set assignee |
 | `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description (blank-line separated); never round-trips existing text |
 | `pql ticket block <id> --by <other>` | Add blocker |
@@ -121,15 +122,18 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | `pql ticket refine write <id> <json\|--file\|--stdin>` | Patch writable fields (title, description, priority, type) |
 
 Ticket types: initiative, epic, story, task, bug.
-Valid statuses: backlog, ready, in_progress, review, done, cancelled.
-Any status can transition to any other — pql does not enforce a state machine.
+Statuses are a per-vault vocabulary (`ticket_statuses` in `.pql/config.yaml`),
+defaulting to: backlog, ready, in_progress, review, done, cancelled. Each status
+has a class — initial, active, review, terminal — that the engine reasons about.
+Run `pql ticket statuslist` to discover the live set. Any status can transition
+to any other — pql does not enforce a state machine.
 
 ### Plan subcommands
 
 | Command | Purpose |
 |---|---|
 | `pql plan status` | Dashboard: decision counts, open Qs, ticket summary, coverage gaps |
-| `pql plan whatsnext` | Next ticket to work on (in_progress or ready) with full context bundle |
+| `pql plan whatsnext` | Next ticket to work on (active work, then the "ready" lane) with full context bundle |
 | `pql plan review` | Next ticket awaiting review with full context bundle |
 | `pql plan export [--stage]` | Append changed planning rows to `.pql/changelog/<table>/<YYYY-MM>.sql` (the git-tracked log of record); `--stage` also `git add`s them. Normally a no-op — mutations already write through |
 | `pql plan import [--legacy FILE]` | Replay `.pql/changelog/` into `pql.db` (or one-time `--legacy pql-plan.json` migration from the pre-D-15 snapshot) |
@@ -171,7 +175,7 @@ fold the bookkeeping into a commit or trust the normal commit flow.
 - **Refine next ticket** → `pql ticket refine next --pretty`, then `pql ticket refine write T-N '{"description":"..."}'`
 - **Append a note** → `pql ticket append T-5 "benchmarked; TTL now 5m"` — blank-line separated, never overwrites; use `--file note.md` or `--stdin` for longer content
 - **Subtree of an epic** → `pql ticket show T-2 --tree --pretty` — nested `subtree` + direct parent in `ancestors`; add `--depth N` to cap levels
-- **Ready leaf work under an epic** → `pql ticket list --under T-2 --leaf --unblocked` — leaf tickets beneath T-2 whose blockers are all done/cancelled; the batch complement to `plan whatsnext`
+- **Ready leaf work under an epic** → `pql ticket list --under T-2 --leaf --unblocked` — leaf tickets beneath T-2 whose blockers have all reached a terminal status; the batch complement to `plan whatsnext`
 - **What's next?** → `pql plan whatsnext --pretty`
 - **Review queue** → `pql plan review --pretty`
 - **Coverage gaps** → `pql decisions coverage`

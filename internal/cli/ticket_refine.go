@@ -50,8 +50,9 @@ func newTicketRefineListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List tickets with an empty description",
 		Long: `Lists tickets whose description is NULL or whitespace-only,
-excluding done and cancelled. Sorted by status priority
-(in_progress > review > ready > backlog) then numeric ID.`,
+excluding terminal statuses. Sorted by how in-flight the work is
+(active, then review, then the most-advanced initial status first) then
+numeric ID.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -65,7 +66,7 @@ excluding done and cancelled. Sorted by status priority
 			}
 			defer func() { _ = pdb.Close() }()
 
-			tks, err := repo.ListTickets(ctx, pdb.SQL(), repo.TicketFilter{Unrefined: true})
+			tks, err := repo.ListTickets(ctx, pdb.SQL(), repo.TicketFilter{Unrefined: true, Statuses: statusSetFromConfig(cfg)})
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
@@ -128,7 +129,7 @@ mutating any state.`,
 			}
 			defer func() { _ = pdb.Close() }()
 
-			tks, err := repo.ListTickets(ctx, pdb.SQL(), repo.TicketFilter{Unrefined: true})
+			tks, err := repo.ListTickets(ctx, pdb.SQL(), repo.TicketFilter{Unrefined: true, Statuses: statusSetFromConfig(cfg)})
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}

@@ -15,11 +15,10 @@ import (
 // constraints. Hiding them behind constants would obscure the
 // schema's surface area more than it would dedupe.
 //
-//nolint:goconst // schema enum values
-var validStatuses = map[string]bool{
-	"backlog": true, "ready": true, "in_progress": true,
-	"review": true, "done": true, "cancelled": true,
-}
+// Ticket *status* is the exception: it is no longer a fixed enum but a
+// per-vault vocabulary (planning.StatusSet, from .pql/config.yaml). The
+// status-aware functions below take an optional StatusSet and fall back
+// to planning.DefaultStatusSet() (the historical six) when none is given.
 
 //nolint:goconst // schema enum values
 var validTypes = map[string]bool{
@@ -30,6 +29,76 @@ var validTypes = map[string]bool{
 //nolint:goconst // schema enum values
 var validPriorities = map[string]bool{
 	"critical": true, "high": true, "medium": true, "low": true,
+}
+
+// priorityRank is the shared ORDER BY fragment ranking tickets by
+// priority (critical first). Literal — no bound args.
+const priorityRank = `CASE priority
+		WHEN 'critical' THEN 0
+		WHEN 'high' THEN 1
+		WHEN 'medium' THEN 2
+		WHEN 'low' THEN 3
+	END`
+
+// resolveStatusSet returns the caller-supplied status vocabulary, or the
+// built-in default when none (or the zero value) was passed.
+func resolveStatusSet(ss []planning.StatusSet) planning.StatusSet {
+	if len(ss) > 0 && !ss[0].IsZero() {
+		return ss[0]
+	}
+	return planning.DefaultStatusSet()
+}
+
+// statusInClause builds a "?, ?, …" placeholder list plus the matching
+// bind args for an IN (…) over status names. Returns ("", nil) for an
+// empty name list so callers can omit the clause.
+func statusInClause(names []string) (clause string, args []any) {
+	if len(names) == 0 {
+		return "", nil
+	}
+	ph := make([]string, len(names))
+	args = make([]any, len(names))
+	for i, n := range names {
+		ph[i] = "?"
+		args[i] = n
+	}
+	return strings.Join(ph, ", "), args
+}
+
+// refineOrderCase builds the ORDER BY fragment that ranks unrefined
+// tickets by how in-flight they are: active statuses first, then review,
+// then initial statuses with the most-advanced (the "ready" lane) first.
+// Terminal statuses are excluded from the unrefined list and sort last if
+// they appear. Returns the CASE expression plus its bound status args.
+func refineOrderCase(ss planning.StatusSet) (clause string, args []any) {
+	var active, review, initial []string
+	for _, d := range ss.All() {
+		switch d.Class {
+		case planning.StatusClassActive:
+			active = append(active, d.Name)
+		case planning.StatusClassReview:
+			review = append(review, d.Name)
+		case planning.StatusClassInitial:
+			initial = append(initial, d.Name)
+		}
+	}
+	// Initial statuses: most-advanced first (ready before backlog).
+	for i, j := 0, len(initial)-1; i < j; i, j = i+1, j-1 {
+		initial[i], initial[j] = initial[j], initial[i]
+	}
+	ranked := append(append(active, review...), initial...)
+	if len(ranked) == 0 {
+		return "0", nil
+	}
+	var b strings.Builder
+	b.WriteString("CASE status")
+	args = make([]any, 0, len(ranked))
+	for i, name := range ranked {
+		fmt.Fprintf(&b, " WHEN ? THEN %d", i)
+		args = append(args, name)
+	}
+	fmt.Fprintf(&b, " ELSE %d END", len(ranked))
+	return b.String(), args
 }
 
 
@@ -59,6 +128,11 @@ type NewTicketOpts struct {
 	DecisionRef string
 	Team        string
 	AssignedTo  string
+	// DefaultStatus is the status a new ticket starts in. Empty falls
+	// back to the built-in default (planning.DefaultStatusSet().Default(),
+	// i.e. "backlog"); callers with a configured vocabulary set it to
+	// StatusSet.Default().
+	DefaultStatus string
 }
 
 // CreateTicket inserts a new ticket and returns its ID.
@@ -71,6 +145,10 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 	}
 	if !validPriorities[opts.Priority] {
 		return "", fmt.Errorf("repo: invalid priority %q", opts.Priority)
+	}
+	status := opts.DefaultStatus
+	if status == "" {
+		status = planning.DefaultStatusSet().Default()
 	}
 
 	id, err := nextTicketID(ctx, db)
@@ -87,11 +165,12 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO tickets (id, type, parent_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, datetime('now'), datetime('now'))
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
 	`, id, opts.Type,
 		nullIfEmpty(opts.ParentID),
 		opts.Title,
 		nullIfEmpty(opts.Description),
+		status,
 		opts.Priority,
 		nullIfEmpty(opts.AssignedTo),
 		nullIfEmpty(opts.Team),
@@ -138,23 +217,38 @@ type TicketFilter struct {
 	// still open (a blocker counts as cleared once done or cancelled).
 	Unblocked bool
 	// Unrefined, when true, restricts to tickets with an empty
-	// description (NULL or whitespace) and excludes done/cancelled.
+	// description (NULL or whitespace) and excludes terminal statuses,
+	// ordering by how in-flight the work is (active, review, then the
+	// most-advanced initial status first).
 	Unrefined bool
+	// Statuses supplies the configured status vocabulary used by the
+	// Unblocked and Unrefined logic (terminal set + refine ordering). The
+	// zero value falls back to planning.DefaultStatusSet().
+	Statuses planning.StatusSet
 }
 
 // unblockedClause restricts a ticket query to rows with no live blocker
-// still open — a blocker counts as cleared once it is done or cancelled.
-// Correlates on tickets.id, so the surrounding query must select FROM
-// tickets unaliased. Shared by ListTickets (--unblocked) and WhatNext so
-// "what can I pick up" and "what's next" agree on what blocked means.
-const unblockedClause = ` AND NOT EXISTS (
+// still open — a blocker counts as cleared once it reaches a terminal
+// status (class terminal in the configured StatusSet; done/cancelled by
+// default). Correlates on tickets.id, so the surrounding query must select
+// FROM tickets unaliased. Shared by ListTickets (--unblocked) and WhatNext
+// so "what can I pick up" and "what's next" agree on what blocked means.
+// Returns the SQL fragment plus the terminal-status bind args.
+func unblockedClause(ss planning.StatusSet) (clause string, args []any) {
+	notTerminal := ""
+	var inClause string
+	inClause, args = statusInClause(ss.Terminal())
+	if inClause != "" {
+		notTerminal = " AND b.status NOT IN (" + inClause + ")"
+	}
+	return ` AND NOT EXISTS (
 		SELECT 1 FROM ticket_deps d
 		JOIN tickets b ON b.id = d.blocker_id
 		WHERE d.blocked_id = tickets.id
 		  AND d.deleted_at IS NULL
-		  AND b.deleted_at IS NULL
-		  AND b.status NOT IN ('done', 'cancelled')
-	)`
+		  AND b.deleted_at IS NULL` + notTerminal + `
+	)`, args
+}
 
 // ListTickets returns tickets matching the filter. Soft-deleted rows
 // (deleted_at IS NOT NULL) are excluded by default per D-17.
@@ -214,21 +308,23 @@ func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, err
 			WHERE c.parent_id = tickets.id AND c.deleted_at IS NULL
 		)`
 	}
+	ss := resolveStatusSet([]planning.StatusSet{f.Statuses})
 	if f.Unblocked {
-		query += unblockedClause
+		clause, cargs := unblockedClause(ss)
+		query += clause
+		params = append(params, cargs...)
 	}
 	if f.Unrefined {
 		query += " AND (description IS NULL OR TRIM(description) = '')"
-		query += " AND status NOT IN ('done', 'cancelled')"
-		query += ` ORDER BY
-			CASE status
-				WHEN 'in_progress' THEN 0
-				WHEN 'review' THEN 1
-				WHEN 'ready' THEN 2
-				WHEN 'backlog' THEN 3
-				ELSE 4
-			END,
-			CAST(SUBSTR(id, 3) AS INTEGER)`
+		if termIn, termArgs := statusInClause(ss.Terminal()); termIn != "" {
+			//nolint:gosec // G202: termIn is a "?"-placeholder fragment; statuses bind via params.
+			query += " AND status NOT IN (" + termIn + ")"
+			params = append(params, termArgs...)
+		}
+		rankCase, rankArgs := refineOrderCase(ss)
+		//nolint:gosec // G202: rankCase is a CASE over "?"-placeholders; statuses bind via params.
+		query += " ORDER BY " + rankCase + ", CAST(SUBSTR(id, 3) AS INTEGER)"
+		params = append(params, rankArgs...)
 	} else {
 		query += " ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)"
 	}
@@ -262,8 +358,11 @@ func GetTicket(ctx context.Context, db *sql.DB, id string) (*Ticket, error) {
 }
 
 // SetStatus changes a ticket's status. Records the change in ticket_history.
-func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string) error {
-	if !validStatuses[newStatus] {
+// The optional StatusSet supplies the valid vocabulary; when omitted it
+// falls back to planning.DefaultStatusSet(). Transitions are unrestricted
+// (D-14) — only the target status must be a known status.
+func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string, ss ...planning.StatusSet) error {
+	if !resolveStatusSet(ss).IsValid(newStatus) {
 		return fmt.Errorf("repo: invalid status %q", newStatus)
 	}
 
@@ -583,30 +682,51 @@ func nestDescendants(rootID string, ds []Descendant) []TreeNode {
 }
 
 // WhatNext returns the single best ticket to work on, or nil when
-// nothing is actionable. Selection order: in_progress (finish current
-// work), then ready (pick up new work), each bucket sorted by priority.
-// Tickets with an open blocker are excluded — recommending work you
-// can't start isn't actionable (shares unblockedClause with the
-// ListTickets --unblocked filter). Review tickets are deliberately
-// excluded too — the author context should not review its own work.
-func WhatNext(ctx context.Context, db *sql.DB) (*Ticket, error) {
-	rows, err := db.QueryContext(ctx, `
+// nothing is actionable. Selection order: active statuses (finish current
+// work), then the "ready" lane — the most-advanced initial status — to
+// pick up new work, each bucket sorted by priority. Earlier initial
+// statuses (e.g. backlog) are not actionable. Tickets with an open blocker
+// are excluded — recommending work you can't start isn't actionable
+// (shares unblockedClause with the ListTickets --unblocked filter). Review
+// statuses are deliberately excluded too — the author context should not
+// review its own work. The optional StatusSet supplies the vocabulary;
+// when omitted it falls back to planning.DefaultStatusSet().
+func WhatNext(ctx context.Context, db *sql.DB, ss ...planning.StatusSet) (*Ticket, error) {
+	set := resolveStatusSet(ss)
+	active := set.Active()
+	candidates := append([]string{}, active...)
+	if ready := set.ReadyLane(); ready != "" {
+		candidates = append(candidates, ready)
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	candIn, args := statusInClause(candidates)
+	unblocked, unblockedArgs := unblockedClause(set)
+	args = append(args, unblockedArgs...)
+
+	// Rank active statuses ahead of the ready lane. With no active
+	// statuses every candidate is the ready lane → constant rank.
+	rankExpr := "0"
+	if activeIn, activeArgs := statusInClause(active); activeIn != "" {
+		rankExpr = "CASE WHEN status IN (" + activeIn + ") THEN 0 ELSE 1 END"
+		args = append(args, activeArgs...)
+	}
+
+	//nolint:gosec // G202: candIn/unblocked/rankExpr are "?"-placeholder fragments and
+	// the trusted priorityRank const; every status value binds via args.
+	query := `
 		SELECT id, type, parent_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at
 		FROM tickets
-		WHERE status IN ('in_progress', 'ready') AND deleted_at IS NULL`+
-		unblockedClause+`
-		ORDER BY
-			CASE status WHEN 'in_progress' THEN 0 ELSE 1 END,
-			CASE priority
-				WHEN 'critical' THEN 0
-				WHEN 'high' THEN 1
-				WHEN 'medium' THEN 2
-				WHEN 'low' THEN 3
-			END,
+		WHERE status IN (` + candIn + `) AND deleted_at IS NULL` +
+		unblocked + `
+		ORDER BY ` + rankExpr + `, ` + priorityRank + `,
 			CAST(SUBSTR(id, 3) AS INTEGER)
 		LIMIT 1
-	`)
+	`
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("repo: whatnext query: %w", err)
 	}
@@ -622,24 +742,27 @@ func WhatNext(ctx context.Context, db *sql.DB) (*Ticket, error) {
 	return &tickets[0], nil
 }
 
-// NextReview returns the highest-priority ticket in review status,
-// or nil when nothing needs review.
-func NextReview(ctx context.Context, db *sql.DB) (*Ticket, error) {
-	rows, err := db.QueryContext(ctx, `
+// NextReview returns the highest-priority ticket in a review status,
+// or nil when nothing needs review (incl. when the vocabulary has no
+// review-class status). The optional StatusSet supplies the vocabulary;
+// when omitted it falls back to planning.DefaultStatusSet().
+func NextReview(ctx context.Context, db *sql.DB, ss ...planning.StatusSet) (*Ticket, error) {
+	reviewIn, args := statusInClause(resolveStatusSet(ss).Review())
+	if reviewIn == "" {
+		return nil, nil
+	}
+	//nolint:gosec // G202: reviewIn is a "?"-placeholder fragment and priorityRank is a
+	// trusted const; every status value binds via args.
+	query := `
 		SELECT id, type, parent_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at
 		FROM tickets
-		WHERE status = 'review' AND deleted_at IS NULL
-		ORDER BY
-			CASE priority
-				WHEN 'critical' THEN 0
-				WHEN 'high' THEN 1
-				WHEN 'medium' THEN 2
-				WHEN 'low' THEN 3
-			END,
+		WHERE status IN (` + reviewIn + `) AND deleted_at IS NULL
+		ORDER BY ` + priorityRank + `,
 			CAST(SUBSTR(id, 3) AS INTEGER)
 		LIMIT 1
-	`)
+	`
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("repo: next review query: %w", err)
 	}

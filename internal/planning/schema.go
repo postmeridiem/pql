@@ -54,8 +54,12 @@ CREATE TABLE IF NOT EXISTS tickets (
     parent_id         TEXT REFERENCES tickets(id),
     title             TEXT NOT NULL,
     description       TEXT,
-    status            TEXT NOT NULL DEFAULT 'backlog'
-                          CHECK(status IN ('backlog','ready','in_progress','review','done','cancelled')),
+    -- No CHECK enumeration: the ticket status vocabulary is per-vault
+    -- configurable (ticket_statuses in .pql/config.yaml). Validation lives
+    -- in Go (planning.StatusSet), so adding/renaming statuses needs no
+    -- schema change. The DEFAULT is a harmless fallback — CreateTicket
+    -- always inserts the configured default explicitly.
+    status            TEXT NOT NULL DEFAULT 'backlog',
     priority          TEXT DEFAULT 'medium'
                           CHECK(priority IN ('critical','high','medium','low')),
     assigned_to       TEXT,

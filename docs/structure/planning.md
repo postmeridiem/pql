@@ -94,8 +94,11 @@ CREATE TABLE tickets (
     parent_id    TEXT REFERENCES tickets(id),
     title        TEXT NOT NULL,
     description  TEXT,
-    status       TEXT NOT NULL DEFAULT 'backlog'
-                    CHECK(status IN ('backlog','ready','in_progress','review','done','cancelled')),
+    status       TEXT NOT NULL DEFAULT 'backlog',
+                    -- No CHECK enumeration: the status vocabulary is per-vault
+                    -- configurable (ticket_statuses in .pql/config.yaml, four
+                    -- classes initial/active/review/terminal). Validation lives
+                    -- in Go (planning.StatusSet). See D-24.
     priority     TEXT DEFAULT 'medium'
                     CHECK(priority IN ('critical','high','medium','low')),
     assigned_to  TEXT,
@@ -193,16 +196,17 @@ anything the planning core needs to do without cobra lives under
 | command | behaviour |
 |---|---|
 | `pql ticket new <type> "title" [--parent T-NNN] [--priority P] [--decision D-NNN] [--team T]` | Create. Emits the new `T-NNN`. |
-| `pql ticket list [--status S] [--team T] [--assigned A] [--decision D] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | Columnar list; `--output json`. `--under` restricts to recursive descendants of a ticket; `--leaf` to childless tickets; `--unblocked` to tickets whose blockers are all done/cancelled. Composed (`--under E --leaf --unblocked`), they are the batch complement to `pql plan whatsnext`. |
+| `pql ticket list [--status S] [--team T] [--assigned A] [--decision D] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | Columnar list; `--output json`. `--under` restricts to recursive descendants of a ticket; `--leaf` to childless tickets; `--unblocked` to tickets whose blockers have all reached a terminal status. Composed (`--under E --leaf --unblocked`), they are the batch complement to `pql plan whatsnext`. |
 | `pql ticket show <id> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Ticket body + optional joins. `--with-children` lists direct children only; `--tree` nests the full descendant subtree (cap with `--depth N`) and includes the direct parent for context. `--with-context` pulls the full ancestor spine to the root plus linked decisions. `--with-blockers` walks `ticket_deps`. |
-| `pql ticket status <id[,id,…]> <new-status>` | Transition (any status → any status; pql does **not** enforce a state machine). Records in `ticket_history`. Comma-batch supported. |
+| `pql ticket status <id[,id,…]> <new-status>` | Transition (any status → any status; pql does **not** enforce a state machine, D-14). Status set is the configured vocabulary (D-24); only unknown statuses are rejected. Records in `ticket_history`. Comma-batch supported. |
+| `pql ticket statuslist` | Emit the configured status vocabulary (D-24) in board order: `name, label, class, order, is_default, is_terminal`. The discovery surface for UIs (e.g. clide). |
 | `pql ticket assign <id> <agent>` | Set `assigned_to`. |
 | `pql ticket setparent <id[,id,…]> <parent-id\|none>` | Set or clear a ticket's parent. |
 | `pql ticket append <id> [text] [--file F] [--stdin]` | Append text to the description, separated from existing content by a blank line. Unlike `refine write` (replace-from-JSON-patch), never round-trips the existing text. Records a `description` history row. |
 | `pql ticket block <id> --by <other>` / `pql ticket unblock <id> --from <other>` | Maintain `ticket_deps`. |
 | `pql ticket team <id> <team>` | Set `team`. |
 | `pql ticket label <id> add\|rm <label>` | Manage `ticket_labels`. |
-| `pql ticket board [--team T]` | Print kanban columns (`backlog`/`ready`/`in_progress`/`review`/`done`/`cancelled`) as JSON. |
+| `pql ticket board [--team T]` | Print kanban columns as JSON, one per configured status in board order (default `backlog`/`ready`/`in_progress`/`review`/`done`/`cancelled`; see `ticket_statuses`). |
 | `pql ticket refine list\|next\|write` | Triage tickets with empty descriptions: `list` the queue, `next [--skip N]` zooms in with a full show-tree, `write <id> <json\|--file\|--stdin>` patches writable fields. |
 
 (`pql ticket search` (FTS, Q-2) and `pql ticket export`/markdown mirror (Q-1) are not yet built — see the open questions.)
@@ -212,7 +216,7 @@ anything the planning core needs to do without cobra lives under
 | command | behaviour |
 |---|---|
 | `pql plan status` | Dashboard: decision counts (by type, open Qs) + ticket counts by status. |
-| `pql plan whatsnext` | The single next ticket to work on (in_progress/ready, unblocked) with full context bundle. |
+| `pql plan whatsnext` | The single next ticket to work on (class `active`, then the "ready" lane — the most-advanced `initial` status — unblocked) with full context bundle. |
 | `pql plan review` | The next ticket awaiting review, with full context bundle. |
 | `pql plan export [--stage]` | Append changed planning rows to `.pql/changelog/<table>/<YYYY-MM>.sql` (git-committed replication, D-15). `--stage` also `git add`s them. |
 | `pql plan rebuild` | Drop replicated tables and replay `.pql/changelog/` from scratch. |

@@ -162,6 +162,7 @@ func newTicketCmd() *cobra.Command {
 	cmd.AddCommand(newTicketListCmd())
 	cmd.AddCommand(newTicketShowCmd())
 	cmd.AddCommand(newTicketStatusCmd())
+	cmd.AddCommand(newTicketStatusListCmd())
 	cmd.AddCommand(newTicketAssignCmd())
 	cmd.AddCommand(newTicketSetParentCmd())
 	cmd.AddCommand(newTicketBlockCmd())
@@ -260,14 +261,15 @@ func newTicketNewCmd() *cobra.Command {
 			defer func() { _ = pdb.Close() }()
 
 			id, err := repo.CreateTicket(ctx, pdb.SQL(), repo.NewTicketOpts{
-				Type:        args[0],
-				Title:       args[1],
-				Description: description,
-				ParentID:    parentID,
-				Priority:    priority,
-				DecisionRef: decisionRef,
-				Team:        team,
-				AssignedTo:  assignedTo,
+				Type:          args[0],
+				Title:         args[1],
+				Description:   description,
+				ParentID:      parentID,
+				Priority:      priority,
+				DecisionRef:   decisionRef,
+				Team:          team,
+				AssignedTo:    assignedTo,
+				DefaultStatus: statusSetFromConfig(cfg).Default(),
 			})
 			if err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
@@ -325,9 +327,9 @@ func newTicketListCmd() *cobra.Command {
   pql ticket list --under T-2 --leaf --unblocked
 
 --under restricts to the recursive descendants of a ticket; --leaf to
-tickets with no children; --unblocked to tickets whose blockers are all
-done or cancelled. Composed, they answer "what leaf work under this epic
-is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`" + `.`,
+tickets with no children; --unblocked to tickets whose blockers have all
+reached a terminal status. Composed, they answer "what leaf work under this
+epic is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`" + `.`,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -350,6 +352,7 @@ is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`" + `.
 				Under:       underFlag,
 				Leaf:        leafFlag,
 				Unblocked:   unblockedFlag,
+				Statuses:    statusSetFromConfig(cfg),
 			})
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
@@ -373,7 +376,7 @@ is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`" + `.
 	cmd.Flags().StringVar(&labelFlag, "label", "", "filter by label")
 	cmd.Flags().StringVar(&underFlag, "under", "", "restrict to recursive descendants of this ticket")
 	cmd.Flags().BoolVar(&leafFlag, "leaf", false, "restrict to tickets with no children")
-	cmd.Flags().BoolVar(&unblockedFlag, "unblocked", false, "restrict to tickets whose blockers are all done/cancelled")
+	cmd.Flags().BoolVar(&unblockedFlag, "unblocked", false, "restrict to tickets whose blockers have all reached a terminal status")
 	return cmd
 }
 
@@ -470,8 +473,9 @@ func newTicketStatusCmd() *cobra.Command {
   pql ticket status T-001 done
   pql ticket status T-001,T-002,T-003 done
 
-Status flow: backlog → ready → in_progress → review → done (also cancelled).
-Invalid transitions are rejected per ticket.`,
+The status vocabulary is per-vault (see ticket_statuses in .pql/config.yaml);
+run "pql ticket statuslist" to see it. Transitions are unrestricted (D-14) —
+any configured status may follow any other; only unknown statuses are rejected.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -488,9 +492,10 @@ Invalid transitions are rejected per ticket.`,
 			}
 			defer func() { _ = pdb.Close() }()
 
+			ss := statusSetFromConfig(cfg)
 			var results []repo.Ticket
 			for _, id := range ids {
-				if err := repo.SetStatus(ctx, pdb.SQL(), id, newStatus, ""); err != nil {
+				if err := repo.SetStatus(ctx, pdb.SQL(), id, newStatus, "", ss); err != nil {
 					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
 				}
 				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
@@ -506,6 +511,36 @@ Invalid transitions are rejected per ticket.`,
 				return err
 			}
 			return renderTicketResults(cmd, results)
+		},
+	}
+}
+
+// --- statuslist ---
+
+func newTicketStatusListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "statuslist",
+		Short: "List the configured ticket status vocabulary",
+		Long: `Emit the per-vault ticket status vocabulary (ticket_statuses in
+.pql/config.yaml, or the built-in default when unset), in board order. Each
+entry carries name, label, class (initial|active|review|terminal), order,
+is_default and is_terminal — enough for a consumer (e.g. clide) to drive its
+UI without hardcoding the statuses.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			rOpts, err := renderOptsFromFlags(cmd)
+			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			rOpts.Out = cmd.OutOrStdout()
+			if _, err := render.Render(statusSetFromConfig(cfg).All(), rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			return nil
 		},
 	}
 }
@@ -882,16 +917,16 @@ func newTicketBoardCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			tks, err := repo.ListTickets(ctx, pdb.SQL(), repo.TicketFilter{Team: teamFlag})
+			ss := statusSetFromConfig(cfg)
+			tks, err := repo.ListTickets(ctx, pdb.SQL(), repo.TicketFilter{Team: teamFlag, Statuses: ss})
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
 			type column struct {
-				Status  string             `json:"status"`
+				Status  string               `json:"status"`
 				Tickets []repo.TicketSummary `json:"tickets"`
 			}
-			statuses := []string{"backlog", "ready", "in_progress", "review", "done", "cancelled"}
 			byStatus := make(map[string][]repo.TicketSummary)
 			for _, tk := range tks {
 				byStatus[tk.Status] = append(byStatus[tk.Status], repo.TicketSummary{
@@ -901,7 +936,7 @@ func newTicketBoardCmd() *cobra.Command {
 			}
 
 			var board []column
-			for _, s := range statuses {
+			for _, s := range ss.Names() {
 				if len(byStatus[s]) > 0 {
 					board = append(board, column{Status: s, Tickets: byStatus[s]})
 				}
@@ -947,4 +982,22 @@ func loadConfig(cmd *cobra.Command) (*config.Config, error) {
 		return nil, &exitError{code: diag.NoInput, msg: err.Error()}
 	}
 	return cfg, nil
+}
+
+// statusSetFromConfig adapts the resolved config's ticket status
+// vocabulary into a planning.StatusSet. This is the one bridge between
+// the two packages: config cannot import planning (planning imports
+// config), so the CLI translates here. Config has already validated the
+// statuses (config.validate), so NewStatusSet just stamps order/labels.
+func statusSetFromConfig(cfg *config.Config) planning.StatusSet {
+	defs := make([]planning.StatusDef, len(cfg.TicketStatuses))
+	for i, s := range cfg.TicketStatuses {
+		defs[i] = planning.StatusDef{
+			Name:      s.Name,
+			Label:     s.Label,
+			Class:     s.Class,
+			IsDefault: s.IsDefault,
+		}
+	}
+	return planning.NewStatusSet(defs)
 }

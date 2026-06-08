@@ -128,6 +128,86 @@ func TestLoad_NoFile_AppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestLoad_TicketStatusesDefault(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := Load(LoadOpts{VaultFlag: dir, HomeDir: t.TempDir(), CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"backlog", "ready", "in_progress", "review", "done", "cancelled"}
+	if len(cfg.TicketStatuses) != len(want) {
+		t.Fatalf("default ticket_statuses = %d entries, want %d", len(cfg.TicketStatuses), len(want))
+	}
+	for i, name := range want {
+		if cfg.TicketStatuses[i].Name != name {
+			t.Errorf("ticket_statuses[%d] = %q, want %q", i, cfg.TicketStatuses[i].Name, name)
+		}
+	}
+	if !cfg.TicketStatuses[0].IsDefault || cfg.TicketStatuses[0].Class != StatusClassInitial {
+		t.Errorf("backlog should be the default initial status, got %+v", cfg.TicketStatuses[0])
+	}
+}
+
+func TestLoad_TicketStatusesCustom(t *testing.T) {
+	vault := t.TempDir()
+	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), `
+ticket_statuses:
+  - { name: triage,  class: initial, is_default: true }
+  - { name: doing,   class: active }
+  - { name: shipped, class: terminal }
+`)
+	cfg, err := Load(LoadOpts{VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.TicketStatuses) != 3 {
+		t.Fatalf("custom ticket_statuses = %d entries, want 3 (slice should replace, not merge)", len(cfg.TicketStatuses))
+	}
+	if cfg.TicketStatuses[0].Name != "triage" || !cfg.TicketStatuses[0].IsDefault {
+		t.Errorf("first status = %+v, want triage/default", cfg.TicketStatuses[0])
+	}
+}
+
+func TestLoad_TicketStatusesValidation(t *testing.T) {
+	cases := map[string]string{
+		"no default": `
+ticket_statuses:
+  - { name: a, class: initial }
+  - { name: b, class: terminal }`,
+		"two defaults": `
+ticket_statuses:
+  - { name: a, class: initial, is_default: true }
+  - { name: b, class: initial, is_default: true }
+  - { name: c, class: terminal }`,
+		"default not initial": `
+ticket_statuses:
+  - { name: a, class: active, is_default: true }
+  - { name: b, class: terminal }`,
+		"no terminal": `
+ticket_statuses:
+  - { name: a, class: initial, is_default: true }`,
+		"bad class": `
+ticket_statuses:
+  - { name: a, class: bogus, is_default: true }
+  - { name: b, class: terminal }`,
+		"duplicate name": `
+ticket_statuses:
+  - { name: a, class: initial, is_default: true }
+  - { name: a, class: terminal }`,
+		"empty list": `ticket_statuses: []`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			vault := t.TempDir()
+			writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), body)
+			_, err := Load(LoadOpts{VaultFlag: vault, HomeDir: t.TempDir(), CacheDir: t.TempDir()})
+			if err == nil {
+				t.Fatalf("expected validation error for %q, got nil", name)
+			}
+		})
+	}
+}
+
 func TestLoad_LocalConfigOverridesDefaults(t *testing.T) {
 	vault := t.TempDir()
 	writeFile(t, filepath.Join(vault, ".pql", "config.yaml"), `

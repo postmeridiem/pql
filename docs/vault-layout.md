@@ -91,6 +91,46 @@ aliases:
   members: "type = 'council-member'"
 ```
 
+### `ticket_statuses` — the ticket status vocabulary
+
+Optional. Defines the per-vault ticket status set, in board order. When
+omitted, the built-in default is used (`backlog`, `ready`, `in_progress`,
+`review`, `done`, `cancelled`), reproducing pql's historical behaviour. Each
+status declares a `name`, optional `label` (derived from the name when empty,
+e.g. `in_progress` → "In Progress"), and a `class`. Exactly one status must set
+`is_default: true`, and it must be class `initial`.
+
+The four classes are what the planning engine reasons about — never the literal
+names (see [D-24](../governance/decisions/architecture.md#d-24-ticket-status-set-is-configurable-modelled-as-four-classes)):
+
+| Class | Role |
+|---|---|
+| `initial` | not started; holds the default status. `what-next` treats the most-advanced (last) initial status as the "ready" lane. |
+| `active` | work in flight; surfaced first by `pql plan whatsnext`. |
+| `review` | awaiting review; surfaced by `pql plan review`, and excluded from `whatsnext`. |
+| `terminal` | closed; clears blockers and is excluded from refine/unblocked. |
+
+At least one `initial` and one `terminal` status are required. This is a
+*vocabulary*, not a state machine — transitions stay unrestricted (D-14); only
+unknown statuses are rejected. Run `pql ticket statuslist` to see the resolved
+set (with `name, label, class, order, is_default, is_terminal`) — this is the
+discovery surface a UI such as clide reads to render columns without hardcoding.
+
+```yaml
+ticket_statuses:
+  - { name: backlog,     class: initial,  is_default: true }
+  - { name: ready,       class: initial }
+  - { name: in_progress, class: active }
+  - { name: review,      class: review }
+  - { name: done,        class: terminal }
+  - { name: cancelled,   class: terminal }
+```
+
+Note: because the tickets-table schema no longer enumerates statuses in a SQL
+`CHECK`, an existing `pql.db` built under the old constraint must be rebuilt to
+accept a customised set — `rm .pql/pql.db && pql plan rebuild` (replays the
+committed changelog). Per D-19 there is no in-place migration.
+
 ## Resolution at startup
 
 A single `pql` invocation, in order:

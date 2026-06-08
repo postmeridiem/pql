@@ -38,9 +38,33 @@ const (
 	TagSourceFrontmatter = "frontmatter"
 )
 
+// Ticket status classes. Each configured status maps to exactly one
+// class; the planning engine reasons about classes, not literal names.
+// These mirror the planning.StatusClass* constants — config cannot import
+// planning (planning imports config), so the values are kept in sync by
+// the adapter in internal/cli and the shared docs.
+const (
+	StatusClassInitial  = "initial"
+	StatusClassActive   = "active"
+	StatusClassReview   = "review"
+	StatusClassTerminal = "terminal"
+)
+
 // TagsConfig holds the tag-extraction policy.
 type TagsConfig struct {
 	Sources []string `yaml:"sources"`
+}
+
+// TicketStatus is one entry in the per-vault ticket status vocabulary
+// (ticket_statuses in .pql/config.yaml). Order is implied by position in
+// the list. Exactly one status must set is_default, and it must be class
+// initial. Label is optional; when empty the planning layer derives it
+// from the name ("in_progress" → "In Progress").
+type TicketStatus struct {
+	Name      string `yaml:"name"`
+	Label     string `yaml:"label"`
+	Class     string `yaml:"class"`
+	IsDefault bool   `yaml:"is_default"`
 }
 
 // Config is the resolved view that the rest of the binary reads from.
@@ -82,6 +106,13 @@ type Config struct {
 	// each containing one markdown file per domain. The $PQL_DQR_DIR
 	// env var overrides this value (env > file > default).
 	DQRDir string `yaml:"dqr_dir"`
+
+	// TicketStatuses is the per-vault ticket status vocabulary, in board
+	// order. When omitted, the built-in six (backlog, ready, in_progress,
+	// review, done, cancelled) are used, reproducing pql's historical
+	// behaviour. `pql ticket statuslist` surfaces the resolved set so
+	// consumers (e.g. clide) can adapt their UI. Validated in validate().
+	TicketStatuses []TicketStatus `yaml:"ticket_statuses"`
 }
 
 // LoadOpts feeds Load. All Flag/Env fields can be empty; Load applies the
@@ -195,6 +226,14 @@ func defaults() *Config {
 		GitMetadata: false,
 		FTS:         false,
 		DQRDir:      "governance",
+		TicketStatuses: []TicketStatus{
+			{Name: "backlog", Class: StatusClassInitial, IsDefault: true},
+			{Name: "ready", Class: StatusClassInitial},
+			{Name: "in_progress", Class: StatusClassActive},
+			{Name: "review", Class: StatusClassReview},
+			{Name: "done", Class: StatusClassTerminal},
+			{Name: "cancelled", Class: StatusClassTerminal},
+		},
 	}
 }
 
@@ -223,6 +262,55 @@ func (c *Config) validate() error {
 		if !slices.Contains([]string{TagSourceInline, TagSourceFrontmatter}, src) {
 			return fmt.Errorf("config: invalid tag source %q (want inline|frontmatter)", src)
 		}
+	}
+	if err := validateTicketStatuses(c.TicketStatuses); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateTicketStatuses enforces the ticket status vocabulary rules:
+// non-empty; unique names; valid class; exactly one is_default and it is
+// class initial; at least one initial and one terminal status.
+func validateTicketStatuses(statuses []TicketStatus) error {
+	if len(statuses) == 0 {
+		return fmt.Errorf("config: ticket_statuses must list at least one status")
+	}
+	classes := []string{StatusClassInitial, StatusClassActive, StatusClassReview, StatusClassTerminal}
+	seen := map[string]bool{}
+	var defaults, initials, terminals int
+	for _, s := range statuses {
+		if s.Name == "" {
+			return fmt.Errorf("config: ticket_statuses has an entry with an empty name")
+		}
+		if seen[s.Name] {
+			return fmt.Errorf("config: duplicate ticket status %q", s.Name)
+		}
+		seen[s.Name] = true
+		if !slices.Contains(classes, s.Class) {
+			return fmt.Errorf("config: ticket status %q has invalid class %q (want initial|active|review|terminal)", s.Name, s.Class)
+		}
+		switch s.Class {
+		case StatusClassInitial:
+			initials++
+		case StatusClassTerminal:
+			terminals++
+		}
+		if s.IsDefault {
+			defaults++
+			if s.Class != StatusClassInitial {
+				return fmt.Errorf("config: default ticket status %q must be class initial, not %q", s.Name, s.Class)
+			}
+		}
+	}
+	if defaults != 1 {
+		return fmt.Errorf("config: ticket_statuses must have exactly one is_default status (found %d)", defaults)
+	}
+	if initials == 0 {
+		return fmt.Errorf("config: ticket_statuses must include at least one initial status")
+	}
+	if terminals == 0 {
+		return fmt.Errorf("config: ticket_statuses must include at least one terminal status")
 	}
 	return nil
 }
