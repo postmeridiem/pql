@@ -11,7 +11,7 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
-## [1.9.0]
+## [1.9.0] - 2026-06-09
 
 ### Added
 
@@ -25,7 +25,7 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   tickets, and changelog replay are unaffected; this is a tree-integrity guard,
   not a workflow state machine (D-14 still holds).
 
-## [1.8.0]
+## [1.8.0] - 2026-06-09
 
 ### Added
 
@@ -42,7 +42,7 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   silent merge visible so the maintainer can re-file one ticket under a fresh
   id. Healthy changelogs emit nothing.
 
-## [1.7.0]
+## [1.7.0] - 2026-06-08
 
 ### Added
 
@@ -71,7 +71,7 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   (replays the committed changelog). `CanonicalVersion` is unchanged — row
   hashing is unaffected.
 
-## [1.6.2]
+## [1.6.2] - 2026-06-08
 
 ### Changed
 
@@ -82,7 +82,7 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   section now spells this out as expected behavior so consumers either fold
   the bookkeeping into a commit or trust the normal commit flow (T-53).
 
-## [1.6.1]
+## [1.6.1] - 2026-06-06
 
 ### Fixed
 
@@ -121,7 +121,7 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   framing (and a non-existent pre-push hook) are gone. `pql plan export` is
   documented as a manual catch-up that is normally a no-op.
 
-## [1.6.0]
+## [1.6.0] - 2026-06-03
 
 ### Fixed
 
