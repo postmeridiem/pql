@@ -1175,3 +1175,64 @@ func TestIntegration_Rebuild_NoCollisionNoWarning(t *testing.T) {
 		t.Errorf("clean result should omit collisions field:\n%s", stdout)
 	}
 }
+
+// --- child-completeness guard + --force cascade (D-25) --------------------
+
+func TestIntegration_Status_BlocksCloseWithOpenChildren(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "epic", "parent epic", "--id-only")   // T-1
+	pqlIT(t, vault, "ticket", "new", "task", "child task", "--parent", "T-1", "--id-only") // T-2
+
+	_, stderr, code := run(t, vault, "ticket", "status", "T-1", "done")
+	if code == 0 {
+		t.Fatalf("closing a parent with an open child should fail, got exit 0")
+	}
+	if !strings.Contains(string(stderr), "T-2") || !strings.Contains(string(stderr), "--force") {
+		t.Errorf("error should name the open child and mention --force:\n%s", stderr)
+	}
+}
+
+func TestIntegration_Status_ForceCascadesToSubtree(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "epic", "epic", "--id-only")                      // T-1
+	pqlIT(t, vault, "ticket", "new", "story", "story", "--parent", "T-1", "--id-only") // T-2
+	pqlIT(t, vault, "ticket", "new", "task", "deep task", "--parent", "T-2", "--id-only") // T-3
+
+	stdout, stderr, code := run(t, vault, "ticket", "status", "T-1", "cancelled", "--force")
+	if code != 0 {
+		t.Fatalf("force close exit=%d\nstderr: %s", code, stderr)
+	}
+	// Output lists every closed ticket (the whole subtree).
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
+	}
+	got := map[string]string{}
+	for _, r := range rows {
+		id, _ := r["id"].(string)
+		status, _ := r["status"].(string)
+		got[id] = status
+	}
+	for _, id := range []string{"T-1", "T-2", "T-3"} {
+		if got[id] != "cancelled" {
+			t.Errorf("%s = %q after force cascade, want cancelled (full output: %v)", id, got[id], got)
+		}
+	}
+}
+
+// initVaultIT returns a fresh vault; pql.db is created lazily by the first
+// ticket write, so no explicit init is needed.
+func initVaultIT(t *testing.T) string {
+	t.Helper()
+	return t.TempDir()
+}
+
+// pqlIT runs pql against vault and fails the test on a non-zero exit.
+func pqlIT(t *testing.T, vault string, args ...string) string {
+	t.Helper()
+	stdout, stderr, code := run(t, vault, args...)
+	if code != 0 {
+		t.Fatalf("pql %v exit=%d\nstderr: %s", args, code, stderr)
+	}
+	return string(stdout)
+}

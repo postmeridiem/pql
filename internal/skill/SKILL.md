@@ -108,7 +108,7 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | `pql ticket new <type> "title" [--decision D-NNN] [--priority P] [--id-only]` | Create (emits T-NNN; `--id-only` prints the bare id for tree-creation scripts) |
 | `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | List with filters. `--under` = recursive descendants of a ticket; `--leaf` = no children; `--unblocked` = blockers all reached a terminal status |
 | `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Show one or more (comma-batch → array of show-trees). `--with-children` = direct children; `--tree` = nested descendant subtree + direct parent (cap with `--depth N`) |
-| `pql ticket status <id> <new-status>` | Change status (any valid status accepted) |
+| `pql ticket status <id> <new-status> [--force]` | Change status. Closing (terminal status) is blocked while the ticket has open children; `--force` cascades that status to all not-yet-closed descendants and lists them |
 | `pql ticket statuslist` | List the configured status vocabulary (name, label, class, order, is_default, is_terminal) — what a UI reads to render columns |
 | `pql ticket assign <id> <agent>` | Set assignee |
 | `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description (blank-line separated); never round-trips existing text |
@@ -126,7 +126,9 @@ Statuses are a per-vault vocabulary (`ticket_statuses` in `.pql/config.yaml`),
 defaulting to: backlog, ready, in_progress, review, done, cancelled. Each status
 has a class — initial, active, review, terminal — that the engine reasons about.
 Run `pql ticket statuslist` to discover the live set. Any status can transition
-to any other — pql does not enforce a state machine.
+to any other — pql does not enforce a state machine — except that a ticket
+cannot reach a terminal status while it has open children (use `--force` to
+cascade the close down the subtree).
 
 ### Plan subcommands
 

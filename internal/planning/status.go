@@ -142,6 +142,17 @@ func (s StatusSet) OrderRank(name string) int {
 // Terminal returns the names of terminal (closed) statuses, in order.
 func (s StatusSet) Terminal() []string { return s.byClass(StatusClassTerminal) }
 
+// IsTerminal reports whether name is a terminal (closed) status. An
+// unknown name is not terminal.
+func (s StatusSet) IsTerminal(name string) bool {
+	for _, d := range s.defs {
+		if d.Name == name {
+			return d.IsTerminal
+		}
+	}
+	return false
+}
+
 // Active returns the names of active (in-flight) statuses, in order.
 func (s StatusSet) Active() []string { return s.byClass(StatusClassActive) }
 

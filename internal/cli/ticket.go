@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -465,7 +466,8 @@ to the root plus linked decisions.`,
 // --- status ---
 
 func newTicketStatusCmd() *cobra.Command {
-	return &cobra.Command{
+	var forceFlag bool
+	cmd := &cobra.Command{
 		Use:   "status <id[,id,...]> <new-status>",
 		Short: "Transition one or more tickets to a new status",
 		Long: `Transition tickets to a new status. Use commas to batch:
@@ -474,8 +476,17 @@ func newTicketStatusCmd() *cobra.Command {
   pql ticket status T-001,T-002,T-003 done
 
 The status vocabulary is per-vault (see ticket_statuses in .pql/config.yaml);
-run "pql ticket statuslist" to see it. Transitions are unrestricted (D-14) —
-any configured status may follow any other; only unknown statuses are rejected.`,
+run "pql ticket statuslist" to see it. Transitions are otherwise unrestricted
+(D-14) — any configured status may follow any other.
+
+A ticket cannot be moved to a terminal (closed) status while it still has
+open child tickets (D-25) — close the children first, or pass --force.
+--force cascades the SAME terminal status down the subtree: every not-yet-
+closed descendant is set to <new-status> bottom-up, then the ticket itself.
+Already-closed descendants are left untouched. The command lists every
+ticket it closed.
+
+  pql ticket status E-1 cancelled --force   # closes E-1 and its open subtree`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -492,18 +503,33 @@ any configured status may follow any other; only unknown statuses are rejected.`
 			}
 			defer func() { _ = pdb.Close() }()
 
+			db := pdb.SQL()
 			ss := statusSetFromConfig(cfg)
 			var results []repo.Ticket
+			seen := map[string]bool{}
 			for _, id := range ids {
-				if err := repo.SetStatus(ctx, pdb.SQL(), id, newStatus, "", ss); err != nil {
+				closedIDs, err := applyTicketStatus(ctx, db, id, newStatus, ss, forceFlag)
+				if err != nil {
+					var ice *repo.IncompleteChildrenError
+					if errors.As(err, &ice) {
+						return &exitError{code: diag.DataErr, msg: fmt.Sprintf(
+							"%v — close them first, or re-run with --force to cascade %q to the whole open subtree",
+							err, newStatus)}
+					}
 					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
 				}
-				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
-				if err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
-				if tk != nil {
-					results = append(results, *tk)
+				for _, cid := range closedIDs {
+					if seen[cid] {
+						continue
+					}
+					seen[cid] = true
+					tk, err := repo.GetTicket(ctx, db, cid)
+					if err != nil {
+						return &exitError{code: diag.Software, msg: err.Error()}
+					}
+					if tk != nil {
+						results = append(results, *tk)
+					}
 				}
 			}
 
@@ -513,6 +539,46 @@ any configured status may follow any other; only unknown statuses are rejected.`
 			return renderTicketResults(cmd, results)
 		},
 	}
+	cmd.Flags().BoolVar(&forceFlag, "force", false,
+		"when closing a ticket with open children, cascade the status to every not-yet-closed descendant")
+	return cmd
+}
+
+// applyTicketStatus sets newStatus on id and returns every ticket id it
+// closed. Without --force it is a single transition (the repo guards a
+// terminal move against open children, returning *IncompleteChildrenError).
+// With --force on a terminal status it cascades: every not-yet-closed
+// descendant is closed bottom-up (deepest first) so each close satisfies the
+// child-completeness guard, then the ticket itself.
+func applyTicketStatus(ctx context.Context, db *sql.DB, id, newStatus string, ss planning.StatusSet, force bool) ([]string, error) {
+	if !force || !ss.IsTerminal(newStatus) {
+		if err := repo.SetStatus(ctx, db, id, newStatus, "", ss); err != nil {
+			return nil, err
+		}
+		return []string{id}, nil
+	}
+
+	// DescendantsOf is ordered parent-before-child (depth ascending); walk it
+	// in reverse so children are closed before their parents.
+	descs, err := repo.DescendantsOf(ctx, db, id, 0)
+	if err != nil {
+		return nil, err
+	}
+	var closed []string
+	for i := len(descs) - 1; i >= 0; i-- {
+		d := descs[i]
+		if ss.IsTerminal(d.Status) {
+			continue // already closed — leave it as-is
+		}
+		if err := repo.SetStatus(ctx, db, d.ID, newStatus, "", ss); err != nil {
+			return nil, err
+		}
+		closed = append(closed, d.ID)
+	}
+	if err := repo.SetStatus(ctx, db, id, newStatus, "", ss); err != nil {
+		return nil, err
+	}
+	return append(closed, id), nil
 }
 
 // --- statuslist ---

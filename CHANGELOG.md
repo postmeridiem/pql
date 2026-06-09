@@ -11,6 +11,20 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.9.0]
+
+### Added
+
+- **A ticket can no longer be closed while it has open children** (D-25). Moving
+  a ticket to a terminal status (`done`/`cancelled`, or any class-`terminal`
+  status) is rejected while it has a live child that isn't itself closed; the
+  error names the open children. Pass **`--force`** to `pql ticket status` to
+  close the whole subtree: it cascades the same terminal status to every
+  not-yet-closed descendant (bottom-up), leaves already-closed ones untouched,
+  and lists every ticket it closed. Non-terminal transitions, childless
+  tickets, and changelog replay are unaffected; this is a tree-integrity guard,
+  not a workflow state machine (D-14 still holds).
+
 ## [1.8.0]
 
 ### Added

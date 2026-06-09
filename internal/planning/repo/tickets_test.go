@@ -717,9 +717,13 @@ func TestListTickets_Unblocked(t *testing.T) {
 		t.Errorf("unblocked tickets missing: %v", got)
 	}
 
-	// Resolving the blocker clears the block.
-	if err := SetStatus(ctx, db, "T-2", "done", ""); err != nil {
-		t.Fatalf("set status: %v", err)
+	// Resolving the blocker clears the block. T-2 has a child subtree
+	// (T-4 → T-5), and a terminal move is now guarded against open children
+	// (D-25), so close the subtree bottom-up.
+	for _, id := range []string{"T-5", "T-4", "T-2"} {
+		if err := SetStatus(ctx, db, id, "done", ""); err != nil {
+			t.Fatalf("set status %s: %v", id, err)
+		}
 	}
 	got = blocked(TicketFilter{Unblocked: true})
 	if !got["T-3"] {

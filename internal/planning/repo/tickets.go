@@ -357,12 +357,38 @@ func GetTicket(ctx context.Context, db *sql.DB, id string) (*Ticket, error) {
 	return &t, nil
 }
 
+// IncompleteChildrenError is returned by SetStatus when a ticket is moved
+// to a terminal status while it still has live, non-terminal children
+// (D-25). It is a tree-integrity guard, not a workflow state machine —
+// D-14 (any status → any status) still holds for non-terminal targets and
+// for tickets without open children. Callers that genuinely want to close
+// an unfinished subtree (e.g. abandon an epic) resolve the children first;
+// the CLI's `--force` does this by cascading the status down the subtree.
+type IncompleteChildrenError struct {
+	TicketID  string
+	NewStatus string
+	Children  []TicketSummary // the live, non-terminal direct children
+}
+
+func (e *IncompleteChildrenError) Error() string {
+	ids := make([]string, len(e.Children))
+	for i, c := range e.Children {
+		ids[i] = c.ID
+	}
+	return fmt.Sprintf(
+		"repo: cannot set %s to %q while %d child ticket(s) are not yet closed: %s",
+		e.TicketID, e.NewStatus, len(e.Children), strings.Join(ids, ", "))
+}
+
 // SetStatus changes a ticket's status. Records the change in ticket_history.
 // The optional StatusSet supplies the valid vocabulary; when omitted it
 // falls back to planning.DefaultStatusSet(). Transitions are unrestricted
-// (D-14) — only the target status must be a known status.
+// (D-14) — only the target status must be a known status — with one
+// exception: a ticket cannot move to a terminal status while it has live,
+// non-terminal direct children (D-25), which returns *IncompleteChildrenError.
 func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string, ss ...planning.StatusSet) error {
-	if !resolveStatusSet(ss).IsValid(newStatus) {
+	set := resolveStatusSet(ss)
+	if !set.IsValid(newStatus) {
 		return fmt.Errorf("repo: invalid status %q", newStatus)
 	}
 
@@ -372,6 +398,22 @@ func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string,
 	}
 	if t == nil {
 		return fmt.Errorf("repo: ticket %s not found", id)
+	}
+
+	if set.IsTerminal(newStatus) {
+		children, err := ChildrenOf(ctx, db, id)
+		if err != nil {
+			return err
+		}
+		var open []TicketSummary
+		for _, c := range children {
+			if !set.IsTerminal(c.Status) {
+				open = append(open, c)
+			}
+		}
+		if len(open) > 0 {
+			return &IncompleteChildrenError{TicketID: id, NewStatus: newStatus, Children: open}
+		}
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
