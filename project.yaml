@@ -15,7 +15,7 @@
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
 version: 1.9.0
-status: v1.6.2 — embedded skill now tells agents not to narrate "the ticket won't persist until committed" after a ticket mutation: the dirty `.pql/changelog/` is by-design write-through, staged by the pre-commit hook (T-53).
+status: v1.9.0 — a ticket can no longer be closed while it has open children (D-25); `pql ticket status --force` cascades a terminal status down the whole open subtree. Builds on the configurable per-vault status vocabulary (1.7.0) and loud ticket-ID collision detection at changelog replay (1.8.0).
 
 repository: https://github.com/postmeridiem/pql
 license: MIT
