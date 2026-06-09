@@ -1,12 +1,26 @@
 name: release
 
+# Publishes a GitHub Release with cross-platform binaries (via goreleaser).
+# Two entry points, one builder:
+#   - push of a v* tag  -> release that exact tag (explicit / manual)
+#   - push to main      -> if project.yaml's version: has no matching tag
+#                          yet, cut vX.Y.Z and release it (auto, on bump)
+#
+# project.yaml is the single source of truth for the version (see its
+# header). A version bump that lands on main therefore becomes a published
+# release with no manual tagging.
+#
+# No PAT needed: the tag we push from this job uses the built-in
+# GITHUB_TOKEN, and GitHub does not re-trigger workflows for such pushes,
+# so the v*-tag trigger above does not fire a second, duplicate release.
 on:
   push:
     tags: ['v*']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write   # required to publish GitHub Releases
+  contents: write   # create the tag and publish GitHub Releases
   packages: write
   id-token: write   # for keyless cosign signing once enabled
 
@@ -16,12 +30,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # goreleaser needs full history for changelog
+          fetch-depth: 0   # goreleaser needs full history; tag lookup needs tags
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          set -euo pipefail
+          # Tag push: release exactly what was pushed.
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Branch push / manual dispatch: derive the tag from project.yaml.
+          version="$(sed -n 's/^version:[[:space:]]*//p' project.yaml | head -1 | tr -d '[:space:]')"
+          if [[ -z "$version" ]]; then
+            echo "::error::could not read 'version:' from project.yaml"; exit 1
+          fi
+          tag="v${version}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "tag ${tag} already exists — nothing to release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "${tag}" -m "${tag}"
+          git push origin "${tag}"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-go@v5
+        if: steps.tag.outputs.release == 'true'
         with:
           go-version-file: go.mod
           cache: true
+
       - name: goreleaser release
+        if: steps.tag.outputs.release == 'true'
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
