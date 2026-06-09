@@ -99,7 +99,7 @@ func detectTicketCollisions(root string) ([]TicketCollision, error) {
 		}
 	}
 
-	var out []TicketCollision
+	var out []TicketCollision //nolint:prealloc // collisions are rare; sizing to len(states) would over-allocate for the common healthy case.
 	for id, st := range states {
 		if len(st.order) < 2 {
 			continue
