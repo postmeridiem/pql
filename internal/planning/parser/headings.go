@@ -21,7 +21,7 @@ type Heading struct {
 // appending -1, -2, ... in occurrence order — the same convention
 // GitHub-flavored renderers (and Obsidian) use.
 func ExtractHeadings(body string) []Heading {
-	var headings []Heading
+	var headings []Heading //nolint:prealloc // headings are a sparse subset of lines; count isn't known without a pre-scan.
 	seen := map[string]int{}
 	inFence := false
 	for _, line := range strings.Split(body, "\n") {
