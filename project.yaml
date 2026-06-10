@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.9.0
-status: v1.9.0 — a ticket can no longer be closed while it has open children (D-25); `pql ticket status --force` cascades a terminal status down the whole open subtree. Builds on the configurable per-vault status vocabulary (1.7.0) and loud ticket-ID collision detection at changelog replay (1.8.0).
+version: 1.10.0
+status: v1.10.0 — ticket identity split (D-26): a collision-proof underwater record_id is the real identity, T-NNN is a reconcilable friendly label in ticket_idmap. Public surface unchanged (still T-NNN). `pql ticket relabel` reconciles a duplicate label. Requires a one-time changelog migration (CanonicalVersion 1->2).
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

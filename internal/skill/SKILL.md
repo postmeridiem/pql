@@ -110,6 +110,7 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Show one or more (comma-batch → array of show-trees). `--with-children` = direct children; `--tree` = nested descendant subtree + direct parent (cap with `--depth N`) |
 | `pql ticket status <id> <new-status> [--force]` | Change status. Closing (terminal status) is blocked while the ticket has open children; `--force` cascades that status to all not-yet-closed descendants and lists them |
 | `pql ticket statuslist` | List the configured status vocabulary (name, label, class, order, is_default, is_terminal) — what a UI reads to render columns |
+| `pql ticket relabel <id\|record_id> [--new-label T-NNN] [--fix-prose]` | Reassign a ticket's friendly T-NNN label (reconcile a duplicate-label collision). Identity (record_id) and the structural graph are untouched; only the label moves. `--fix-prose` rewrites stale T-NNN mentions in DQR markdown |
 | `pql ticket assign <id> <agent>` | Set assignee |
 | `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description (blank-line separated); never round-trips existing text |
 | `pql ticket block <id> --by <other>` | Add blocker |
@@ -122,6 +123,9 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | `pql ticket refine write <id> <json\|--file\|--stdin>` | Patch writable fields (title, description, priority, type) |
 
 Ticket types: initiative, epic, story, task, bug.
+The `id` you type and see (T-NNN) is a friendly label backed by a stable
+underwater `record_id` (also in output); two clones never collide on identity,
+and a duplicate label is fixed with `pql ticket relabel` (D-26).
 Statuses are a per-vault vocabulary (`ticket_statuses` in `.pql/config.yaml`),
 defaulting to: backlog, ready, in_progress, review, done, cancelled. Each status
 has a class — initial, active, review, terminal — that the engine reasons about.

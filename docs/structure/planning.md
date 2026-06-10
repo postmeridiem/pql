@@ -88,13 +88,16 @@ CREATE TABLE decision_refs (
     PRIMARY KEY (source_id, target_id, ref_type)
 );
 
+-- Identity split (D-26): record_id (a ULID) is the stable underwater
+-- identity and the target of every reference; the friendly T-NNN label
+-- lives in ticket_idmap and is reconcilable. CanonicalVersion is 2.
 CREATE TABLE tickets (
-    id           TEXT PRIMARY KEY,          -- 'T-042'
-    type         TEXT NOT NULL CHECK(type IN ('initiative','epic','story','task','bug')),
-    parent_id    TEXT REFERENCES tickets(id),
-    title        TEXT NOT NULL,
-    description  TEXT,
-    status       TEXT NOT NULL DEFAULT 'backlog',
+    record_id        TEXT PRIMARY KEY,        -- ULID, collision-proof
+    type             TEXT NOT NULL CHECK(type IN ('initiative','epic','story','task','bug')),
+    parent_record_id TEXT REFERENCES tickets(record_id),
+    title            TEXT NOT NULL,
+    description      TEXT,
+    status           TEXT NOT NULL DEFAULT 'backlog',
                     -- No CHECK enumeration: the status vocabulary is per-vault
                     -- configurable (ticket_statuses in .pql/config.yaml, four
                     -- classes initial/active/review/terminal). Validation lives
@@ -108,14 +111,19 @@ CREATE TABLE tickets (
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE ticket_idmap (             -- record_id <-> friendly T-NNN label
+    record_id    TEXT PRIMARY KEY REFERENCES tickets(record_id),
+    ticket_id    TEXT NOT NULL           -- NOT globally unique; a dup is a collision
+);
+
 CREATE TABLE ticket_deps (
-    blocker_id   TEXT NOT NULL REFERENCES tickets(id),
-    blocked_id   TEXT NOT NULL REFERENCES tickets(id),
-    PRIMARY KEY (blocker_id, blocked_id)
+    blocker_record_id TEXT NOT NULL REFERENCES tickets(record_id),
+    blocked_record_id TEXT NOT NULL REFERENCES tickets(record_id),
+    PRIMARY KEY (blocker_record_id, blocked_record_id)
 );
 
 CREATE TABLE ticket_history (
-    ticket_id    TEXT NOT NULL REFERENCES tickets(id),
+    ticket_record_id TEXT NOT NULL REFERENCES tickets(record_id),
     field        TEXT NOT NULL,
     old_value    TEXT,
     new_value    TEXT,
@@ -124,9 +132,9 @@ CREATE TABLE ticket_history (
 );
 
 CREATE TABLE ticket_labels (
-    ticket_id    TEXT NOT NULL REFERENCES tickets(id),
+    ticket_record_id TEXT NOT NULL REFERENCES tickets(record_id),
     label        TEXT NOT NULL,
-    PRIMARY KEY (ticket_id, label)
+    PRIMARY KEY (ticket_record_id, label)
 );
 
 CREATE INDEX idx_tickets_status        ON tickets(status);
@@ -200,6 +208,7 @@ anything the planning core needs to do without cobra lives under
 | `pql ticket show <id> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Ticket body + optional joins. `--with-children` lists direct children only; `--tree` nests the full descendant subtree (cap with `--depth N`) and includes the direct parent for context. `--with-context` pulls the full ancestor spine to the root plus linked decisions. `--with-blockers` walks `ticket_deps`. |
 | `pql ticket status <id[,id,…]> <new-status> [--force]` | Transition (any status → any status; pql does **not** enforce a state machine, D-14). Status set is the configured vocabulary (D-24); unknown statuses are rejected. A move to a terminal status is blocked while the ticket has open children (D-25); `--force` cascades that terminal status to every not-yet-closed descendant and lists them. Records in `ticket_history`. Comma-batch supported. |
 | `pql ticket statuslist` | Emit the configured status vocabulary (D-24) in board order: `name, label, class, order, is_default, is_terminal`. The discovery surface for UIs (e.g. clide). |
+| `pql ticket relabel <id\|record_id> [--new-label] [--fix-prose]` | Reassign a ticket's friendly T-NNN label to reconcile a duplicate-label collision (D-26). Updates only the `ticket_idmap` row (identity `record_id` and the structural graph are untouched); reports/optionally rewrites stale T-NNN prose in the DQR tree. |
 | `pql ticket assign <id> <agent>` | Set `assigned_to`. |
 | `pql ticket setparent <id[,id,…]> <parent-id\|none>` | Set or clear a ticket's parent. |
 | `pql ticket append <id> [text] [--file F] [--stdin]` | Append text to the description, separated from existing content by a blank line. Unlike `refine write` (replace-from-JSON-patch), never round-trips the existing text. Records a `description` history row. |

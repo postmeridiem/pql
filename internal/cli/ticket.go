@@ -5,6 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -164,6 +168,7 @@ func newTicketCmd() *cobra.Command {
 	cmd.AddCommand(newTicketShowCmd())
 	cmd.AddCommand(newTicketStatusCmd())
 	cmd.AddCommand(newTicketStatusListCmd())
+	cmd.AddCommand(newTicketRelabelCmd())
 	cmd.AddCommand(newTicketAssignCmd())
 	cmd.AddCommand(newTicketSetParentCmd())
 	cmd.AddCommand(newTicketBlockCmd())
@@ -331,7 +336,7 @@ func newTicketListCmd() *cobra.Command {
 tickets with no children; --unblocked to tickets whose blockers have all
 reached a terminal status. Composed, they answer "what leaf work under this
 epic is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`" + `.`,
-		Args:  cobra.NoArgs,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			cfg, err := loadConfig(cmd)
@@ -609,6 +614,136 @@ UI without hardcoding the statuses.`,
 			return nil
 		},
 	}
+}
+
+// --- relabel ---
+
+// proseMatch reports a DQR markdown file that mentions a relabeled ticket id.
+type proseMatch struct {
+	File  string `json:"file"`
+	Count int    `json:"count"`
+	Fixed bool   `json:"fixed"`
+}
+
+type relabelResult struct {
+	RecordID     string       `json:"record_id"`
+	OldLabel     string       `json:"old_label"`
+	NewLabel     string       `json:"new_label"`
+	ProseMatches []proseMatch `json:"prose_matches,omitempty"`
+}
+
+func newTicketRelabelCmd() *cobra.Command {
+	var newLabel string
+	var fixProse bool
+	cmd := &cobra.Command{
+		Use:   "relabel <id|record_id>",
+		Short: "Reassign a ticket's friendly id (reconcile a duplicate label)",
+		Long: `Change a ticket's friendly T-NNN label without touching its stable
+record_id (D-26). The structural graph (parent, blockers, labels, history) keys
+on record_id, so it is unaffected — only this mapping moves. Use this to
+reconcile a duplicate-label collision surfaced at replay: pass the record_id
+(the collision warning prints both) so the right ticket is picked.
+
+  pql ticket relabel T-52 --new-label T-60      # rename a unique label
+  pql ticket relabel <record_id> --new-label T-60   # disambiguate a collision
+
+Without --new-label a fresh T-NNN is allocated. The old label may still be
+referenced as prose in the DQR tree; those files are reported, and --fix-prose
+rewrites the whole-word mentions in place.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			if newLabel == "" {
+				newLabel, err = repo.NextTicketID(ctx, pdb.SQL())
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+			}
+
+			oldLabel, recordID, err := repo.Relabel(ctx, pdb.SQL(), args[0], newLabel)
+			if err != nil {
+				return &exitError{code: diag.DataErr, msg: err.Error()}
+			}
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
+			}
+
+			matches, err := scanDQRForLabel(decisionsDir(cfg), oldLabel, newLabel, fixProse)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
+			rOpts, err := renderOptsFromFlags(cmd)
+			if err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			rOpts.Out = cmd.OutOrStdout()
+			res := &relabelResult{RecordID: recordID, OldLabel: oldLabel, NewLabel: newLabel, ProseMatches: matches}
+			if _, err := render.One(res, rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			if len(matches) > 0 && !fixProse {
+				diag.Warn("ticket.relabel.prose", fmt.Sprintf(
+					"%s is still referenced as prose in %d DQR file(s); re-run with --fix-prose to rewrite them",
+					oldLabel, len(matches)))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&newLabel, "new-label", "", "new T-NNN label (default: allocate the next free one)")
+	cmd.Flags().BoolVar(&fixProse, "fix-prose", false, "rewrite whole-word mentions of the old label in DQR markdown")
+	return cmd
+}
+
+// scanDQRForLabel finds (and optionally rewrites) whole-word mentions of
+// oldLabel in the markdown files under the DQR root. Structural references are
+// untouched (they key on record_id); this is purely the human-readable prose.
+func scanDQRForLabel(dqrRoot, oldLabel, newLabel string, fix bool) ([]proseMatch, error) {
+	re := regexp.MustCompile(`\b` + regexp.QuoteMeta(oldLabel) + `\b`)
+	var matches []proseMatch
+	err := filepath.WalkDir(dqrRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil // no DQR tree → nothing to scan
+			}
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		b, err := os.ReadFile(path) //nolint:gosec // G304: path comes from walking the resolved DQR root
+		if err != nil {
+			return err
+		}
+		locs := re.FindAllIndex(b, -1)
+		if len(locs) == 0 {
+			return nil
+		}
+		rel, _ := filepath.Rel(dqrRoot, path)
+		m := proseMatch{File: rel, Count: len(locs)}
+		if fix {
+			if err := os.WriteFile(path, re.ReplaceAll(b, []byte(newLabel)), 0o644); err != nil { //nolint:gosec // G306: markdown is meant to be world-readable
+				return err
+			}
+			m.Fixed = true
+		}
+		matches = append(matches, m)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan DQR for %s: %w", oldLabel, err)
+	}
+	return matches, nil
 }
 
 // --- assign ---

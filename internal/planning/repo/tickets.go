@@ -140,6 +140,76 @@ func ResolveRecordID(ctx context.Context, db *sql.DB, ticketID string) (string, 
 	return resolveRecordID(ctx, db, ticketID)
 }
 
+// Relabel changes the friendly ticket_id of a record (D-26 reconcile). The
+// target is identified by record_id (unambiguous — preferred for resolving a
+// duplicate label) or by a unique current label. newLabel must be non-empty
+// and not already in use by a *different* record (which would just create a
+// new collision). Returns the previous label and the resolved record_id.
+// The structural graph (parent/deps/labels/history) is untouched — it keys on
+// record_id — so only this one mapping row and any prose references move.
+func Relabel(ctx context.Context, db *sql.DB, target, newLabel string) (oldLabel, recordID string, err error) {
+	if strings.TrimSpace(newLabel) == "" {
+		return "", "", fmt.Errorf("repo: new label cannot be empty")
+	}
+	// Resolve target: a record_id if it names a live ticket, else a label.
+	var exists int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM tickets WHERE record_id = ? AND deleted_at IS NULL`, target,
+	).Scan(&exists); err != nil {
+		return "", "", fmt.Errorf("repo: relabel resolve: %w", err)
+	}
+	if exists > 0 {
+		recordID = target
+	} else {
+		recordID, err = resolveRecordID(ctx, db, target)
+		if err != nil {
+			return "", "", err
+		}
+		if recordID == "" {
+			return "", "", fmt.Errorf("repo: ticket %s not found", target)
+		}
+	}
+
+	if err := db.QueryRowContext(ctx,
+		`SELECT ticket_id FROM ticket_idmap WHERE record_id = ? AND deleted_at IS NULL`, recordID,
+	).Scan(&oldLabel); err != nil {
+		return "", "", fmt.Errorf("repo: relabel read current label: %w", err)
+	}
+	if oldLabel == newLabel {
+		return oldLabel, recordID, nil // no-op
+	}
+	// Refuse to relabel onto a label already held by a different record.
+	var clash int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM ticket_idmap WHERE ticket_id = ? AND record_id != ? AND deleted_at IS NULL`,
+		newLabel, recordID,
+	).Scan(&clash); err != nil {
+		return "", "", fmt.Errorf("repo: relabel clash check: %w", err)
+	}
+	if clash > 0 {
+		return "", "", fmt.Errorf("repo: label %s is already in use by another record", newLabel)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("repo: begin relabel: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE ticket_idmap SET ticket_id = ?, updated_at = datetime('now') WHERE record_id = ?`,
+		newLabel, recordID,
+	); err != nil {
+		return "", "", fmt.Errorf("repo: relabel update: %w", err)
+	}
+	if err := planning.RehashTicketIDMap(ctx, tx, recordID); err != nil {
+		return "", "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", "", fmt.Errorf("repo: commit relabel: %w", err)
+	}
+	return oldLabel, recordID, nil
+}
+
 // resolveRecordID maps a friendly ticket_id (T-NNN) to its record_id.
 // Returns ("", nil) when the label is unknown. When a label is claimed by
 // more than one record (an unreconciled collision), it returns an error so
@@ -269,6 +339,12 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 		return "", fmt.Errorf("repo: commit create ticket: %w", err)
 	}
 	return label, nil
+}
+
+// NextTicketID exposes the next free friendly label for consumers (e.g. the
+// CLI relabel command allocating a fresh id).
+func NextTicketID(ctx context.Context, db *sql.DB) (string, error) {
+	return nextTicketID(ctx, db)
 }
 
 // nextTicketID allocates the next friendly T-NNN label as max+1 over the

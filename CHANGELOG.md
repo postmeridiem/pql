@@ -11,6 +11,29 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.10.0]
+
+### Changed
+
+- **Ticket identity is now a collision-proof `record_id`; `T-NNN` is a
+  reconcilable label** (D-26). Internally every ticket has a stable ULID
+  `record_id` (the primary key and the target of all parent/blocker/label/
+  history references); the friendly `T-NNN` lives in a `ticket_idmap` mapping
+  table. Two clones can no longer corrupt each other's tickets by minting the
+  same `T-NNN` — distinct records never collide, so replay's `ON CONFLICT` can't
+  silently merge unrelated tickets. **The public surface is unchanged**: you
+  still type and see `T-NNN` (output gains a `record_id` field). A duplicate
+  label (two records sharing a `T-NNN`) is detected at replay and fixed with the
+  new **`pql ticket relabel <id|record_id> [--new-label] [--fix-prose]`** — a
+  one-row mapping change that optionally rewrites stale `T-NNN` prose in the DQR
+  tree (structural references move automatically).
+- **ACTION REQUIRED on upgrade:** the `tickets` schema and canonical hash
+  projection changed (`CanonicalVersion` 1→2), so an existing `.pql/changelog/`
+  must be migrated to the new format. There is no shipped migration command
+  (D-19); a one-off local `cmd/migrate-ids` rewrites a vault's changelog. After
+  the changelog is migrated and pulled, recover the DB with
+  `rm .pql/pql.db && pql plan rebuild`.
+
 ## [1.9.0] - 2026-06-09
 
 ### Added
