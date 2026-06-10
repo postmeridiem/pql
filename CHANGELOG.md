@@ -11,6 +11,20 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.10.2] - 2026-06-10
+
+### Fixed
+
+- **Concurrent `pql` invocations no longer fail with `SQLITE_BUSY` (exit 69).**
+  `busy_timeout = 5000` was set via `PRAGMA` on one connection, but the
+  `database/sql` pool was unbounded — a write that landed on a different pooled
+  connection had `busy_timeout = 0` and failed immediately when another process
+  (e.g. a git hook firing `pql` while a command runs) held the write lock. Both
+  the planning DB (`pql.db`) and the index cache (`index.db`) now cap the pool
+  at one connection, so the busy_timeout-bearing connection is authoritative and
+  concurrent writers wait instead of erroring. Pure connection-pool fix — no data
+  or schema change. (Surfaced by clide's concurrent real-pql tests.)
+
 ## [1.10.1] - 2026-06-10
 
 ### Fixed

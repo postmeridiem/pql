@@ -44,6 +44,16 @@ func OpenPath(ctx context.Context, path string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("planning: open %q: %w", path, err)
 	}
+	// Single connection so the busy_timeout PRAGMA below actually governs
+	// every write: database/sql pools connections, and a PRAGMA set via
+	// ExecContext binds only to the connection it ran on — a write that lands
+	// on a fresh pooled connection would have busy_timeout=0 and fail at once
+	// with SQLITE_BUSY (exit 69) when another process (e.g. a git hook firing
+	// pql) holds the write lock. Capping at one connection makes the
+	// pragma-bearing connection authoritative. pql.db access is short and
+	// sequential (result sets are drained before any write), so a single
+	// connection introduces no self-deadlock. See the 1.10.2 fix.
+	db.SetMaxOpenConns(1)
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("planning: ping %q: %w", path, err)

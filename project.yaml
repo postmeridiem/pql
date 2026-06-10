@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.10.1
-status: v1.10.1 — fix the decisions->tickets join (`decisions show --with-tickets`), which still selected the dropped tickets.id column after the D-26 record_id rename; it now joins ticket_idmap for the label. Pure binary fix, no data/schema change.
+version: 1.10.2
+status: v1.10.2 — fix SQLITE_BUSY (exit 69) under concurrent pql writes: busy_timeout was set per-connection but the pool was unbounded, so writes on fresh connections didn't wait. Cap the planning + index DBs at one connection. Pure binary fix, no data/schema change.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

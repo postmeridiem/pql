@@ -41,6 +41,12 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("store: open %q: %w", path, err)
 	}
+	// One connection so the busy_timeout PRAGMA governs every statement
+	// (a pooled connection that never ran the PRAGMA has busy_timeout=0 and
+	// fails immediately with SQLITE_BUSY under concurrent access). Safe here:
+	// pql is single-goroutine per invocation and never holds a result set
+	// open across another query on this store. See the 1.10.2 fix.
+	db.SetMaxOpenConns(1)
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: ping %q: %w", path, err)
