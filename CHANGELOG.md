@@ -11,6 +11,20 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.10.1] - 2026-06-10
+
+### Fixed
+
+- **`pql decisions show --with-tickets` no longer errors after the D-26
+  rename.** The decisions→tickets join (`TicketsForDecision`) still selected
+  the dropped `tickets.id` column instead of joining `ticket_idmap` for the
+  `T-NNN` label, so listing a decision's linked tickets failed with
+  `no such column: id`. Now joined correctly. Pure read-path fix — no data or
+  schema change; just reinstall the 1.10.1 binary (no changelog migration).
+  A unit regression test (`TestTicketsForDecision`) now guards the join — the
+  bug shipped because that path had no test and the integration suite is
+  outside the pre-push gate.
+
 ## [1.10.0] - 2026-06-10
 
 ### Changed

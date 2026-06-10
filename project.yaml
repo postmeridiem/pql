@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.10.0
-status: v1.10.0 — ticket identity split (D-26): a collision-proof underwater record_id is the real identity, T-NNN is a reconcilable friendly label in ticket_idmap. Public surface unchanged (still T-NNN). `pql ticket relabel` reconciles a duplicate label. Requires a one-time changelog migration (CanonicalVersion 1->2).
+version: 1.10.1
+status: v1.10.1 — fix the decisions->tickets join (`decisions show --with-tickets`), which still selected the dropped tickets.id column after the D-26 record_id rename; it now joins ticket_idmap for the label. Pure binary fix, no data/schema change.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

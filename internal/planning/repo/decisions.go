@@ -284,10 +284,11 @@ type TicketSummary struct {
 // decision_ref. Soft-deleted tickets are excluded.
 func TicketsForDecision(ctx context.Context, db *sql.DB, decisionID string) ([]TicketSummary, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, type, title, status, priority
-		FROM tickets
-		WHERE decision_ref = ? AND deleted_at IS NULL
-		ORDER BY SUBSTR(id, 1, 1), CAST(SUBSTR(id, 3) AS INTEGER)
+		SELECT m.ticket_id, t.type, t.title, t.status, t.priority
+		FROM tickets t
+		JOIN ticket_idmap m ON m.record_id = t.record_id AND m.deleted_at IS NULL
+		WHERE t.decision_ref = ? AND t.deleted_at IS NULL
+		ORDER BY SUBSTR(m.ticket_id, 1, 1), CAST(SUBSTR(m.ticket_id, 3) AS INTEGER)
 	`, decisionID)
 	if err != nil {
 		return nil, fmt.Errorf("repo: tickets for %s: %w", decisionID, err)

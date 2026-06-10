@@ -160,3 +160,28 @@ func TestListDecisions_Filters(t *testing.T) {
 		t.Errorf("filter domain=arch: got %d records, want 2", len(decs))
 	}
 }
+
+// TestTicketsForDecision is the regression guard for the D-26 follow-up bug
+// (pql 1.10.0 → 1.10.1): the decisions↔tickets join (`decisions show
+// --with-tickets`) still selected the dropped `tickets.id` column instead of
+// joining ticket_idmap for the label. SQL lives in a string literal so it
+// compiled clean and shipped; only a runtime test that links a ticket to a
+// decision and reads it back catches the "no such column: id" failure.
+func TestTicketsForDecision(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO decisions (id, type, domain, title, file_path) VALUES ('D-1','confirmed','x','x','x.md')`); err != nil {
+		t.Fatalf("seed decision: %v", err)
+	}
+	linked, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "linked", DecisionRef: "D-1"})
+	_, _ = CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "unlinked"})
+
+	tks, err := TicketsForDecision(ctx, db, "D-1")
+	if err != nil {
+		t.Fatalf("TicketsForDecision: %v", err)
+	}
+	if len(tks) != 1 || tks[0].ID != linked {
+		t.Fatalf("got %+v, want exactly the linked ticket %s (with its T-NNN label)", tks, linked)
+	}
+}
