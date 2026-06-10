@@ -11,6 +11,19 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.10.3] - 2026-06-10
+
+### Fixed
+
+- **The embedded skill now documents ticket parent/child linking.** The skill
+  listed no way to set a ticket's parent — only `block`/`unblock` (dependencies)
+  — so a consuming agent reached for a blocker, then guessed a non-existent
+  `--parent` flag on `setparent`. The skill now documents `pql ticket setparent
+  <id> <parent-id | none>` (positional), the `--parent` flag on `pql ticket
+  new`, and a cookbook line for filing under an epic, and calls out that
+  hierarchy (`setparent`/`--parent`) is distinct from blockers (`block`). Run
+  `pql skill install` to pick up the refreshed copy.
+
 ## [1.10.2] - 2026-06-10
 
 ### Fixed

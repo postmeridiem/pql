@@ -105,15 +105,16 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 
 | Command | Purpose |
 |---|---|
-| `pql ticket new <type> "title" [--decision D-NNN] [--priority P] [--id-only]` | Create (emits T-NNN; `--id-only` prints the bare id for tree-creation scripts) |
+| `pql ticket new <type> "title" [--parent T-NNN] [--decision D-NNN] [--priority P] [--id-only]` | Create (emits T-NNN; `--parent` files it under an epic/story in one step; `--id-only` prints the bare id for tree-creation scripts) |
 | `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | List with filters. `--under` = recursive descendants of a ticket; `--leaf` = no children; `--unblocked` = blockers all reached a terminal status |
 | `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Show one or more (comma-batch → array of show-trees). `--with-children` = direct children; `--tree` = nested descendant subtree + direct parent (cap with `--depth N`) |
 | `pql ticket status <id> <new-status> [--force]` | Change status. Closing (terminal status) is blocked while the ticket has open children; `--force` cascades that status to all not-yet-closed descendants and lists them |
 | `pql ticket statuslist` | List the configured status vocabulary (name, label, class, order, is_default, is_terminal) — what a UI reads to render columns |
 | `pql ticket relabel <id\|record_id> [--new-label T-NNN] [--fix-prose]` | Reassign a ticket's friendly T-NNN label (reconcile a duplicate-label collision). Identity (record_id) and the structural graph are untouched; only the label moves. `--fix-prose` rewrites stale T-NNN mentions in DQR markdown |
 | `pql ticket assign <id> <agent>` | Set assignee |
+| `pql ticket setparent <id[,id,...]> <parent-id \| none>` | Set (or clear with `none`) a ticket's **parent** — the hierarchy link (epic→story→task). Positional, not a flag. This is the parent/child relationship, distinct from blockers |
 | `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description (blank-line separated); never round-trips existing text |
-| `pql ticket block <id> --by <other>` | Add blocker |
+| `pql ticket block <id> --by <other>` | Add a **blocker** (a dependency: <id> can't start until <other> is done) — NOT a parent/child link; use `setparent` or `new --parent` for hierarchy |
 | `pql ticket unblock <id> --from <other>` | Remove blocker |
 | `pql ticket team <id> <team>` | Set team |
 | `pql ticket label <id> add\|rm <label>` | Manage labels |
@@ -176,6 +177,7 @@ fold the bookkeeping into a commit or trust the normal commit flow.
 - **Read full body** → `pql decisions read D-5`
 - **Create ticket** → `pql ticket new task "implement X" --decision D-5`
 - **Create ticket, capture id for a script** → `id=$(pql ticket new task "implement X" --id-only)` — prints just `T-NNN`
+- **File a ticket under an epic** → `pql ticket new bug "fix X" --parent T-276` (one step), or reparent an existing one → `pql ticket setparent T-9 T-276` (clear with `none`). Parent = hierarchy; use `block` only for blocking dependencies
 - **Batch close** → `pql ticket status T-1,T-2,T-3 done`
 - **Full context** → `pql ticket show T-5 --with-context --pretty`
 - **Batch show** → `pql ticket show T-1,T-2,T-3 --pretty`

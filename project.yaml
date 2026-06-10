@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.10.2
-status: v1.10.2 — fix SQLITE_BUSY (exit 69) under concurrent pql writes: busy_timeout was set per-connection but the pool was unbounded, so writes on fresh connections didn't wait. Cap the planning + index DBs at one connection. Pure binary fix, no data/schema change.
+version: 1.10.3
+status: v1.10.3 — embedded skill now documents ticket parent/child linking (`ticket setparent`, `ticket new --parent`) and distinguishes it from blockers; a gap that led a consuming agent to guess the wrong command. Skill-doc fix; reinstall via `pql skill install`.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT
