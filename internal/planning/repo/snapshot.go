@@ -11,13 +11,13 @@ import (
 
 // Snapshot is the portable JSON shape for plan export/import.
 type Snapshot struct {
-	ExportedAt   string           `json:"exported_at"`
-	Decisions    []Decision       `json:"decisions"`
-	DecisionRefs []DecisionRef    `json:"decision_refs"`
-	Tickets      []Ticket         `json:"tickets"`
-	TicketDeps   []TicketDep      `json:"ticket_deps"`
-	TicketLabels []TicketLabel    `json:"ticket_labels"`
-	History      []HistoryEntry   `json:"history"`
+	ExportedAt   string         `json:"exported_at"`
+	Decisions    []Decision     `json:"decisions"`
+	DecisionRefs []DecisionRef  `json:"decision_refs"`
+	Tickets      []Ticket       `json:"tickets"`
+	TicketDeps   []TicketDep    `json:"ticket_deps"`
+	TicketLabels []TicketLabel  `json:"ticket_labels"`
+	History      []HistoryEntry `json:"history"`
 }
 
 // TicketDep is a row from ticket_deps.
@@ -145,21 +145,43 @@ func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 		}
 	}
 
+	// Map labels → record_ids so a parent referenced by label resolves to
+	// its record_id (D-26). Deferred FKs let tickets insert in array order.
+	labelToRecord := make(map[string]string, len(snap.Tickets))
 	for _, t := range snap.Tickets {
+		labelToRecord[t.ID] = t.RecordID
+	}
+	for _, t := range snap.Tickets {
+		var parentRec *string
+		if t.ParentID != nil {
+			if rec, ok := labelToRecord[*t.ParentID]; ok {
+				parentRec = &rec
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO tickets (id, type, parent_id, title, description, status, priority,
+			INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority,
 				assigned_to, team, decision_ref, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(id) DO UPDATE SET
-				type=excluded.type, parent_id=excluded.parent_id, title=excluded.title,
+			ON CONFLICT(record_id) DO UPDATE SET
+				type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title,
 				description=excluded.description, status=excluded.status, priority=excluded.priority,
 				assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref,
 				updated_at=datetime('now')
-		`, t.ID, t.Type, t.ParentID, t.Title, t.Description, t.Status, t.Priority,
+		`, t.RecordID, t.Type, parentRec, t.Title, t.Description, t.Status, t.Priority,
 			t.AssignedTo, t.Team, t.DecisionRef, t.CreatedAt, t.UpdatedAt); err != nil {
 			return fmt.Errorf("import ticket %s: %w", t.ID, err)
 		}
-		if err := planning.RehashTicket(ctx, tx, t.ID); err != nil {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at)
+			VALUES (?, ?, datetime('now'), datetime('now'))
+			ON CONFLICT(record_id) DO UPDATE SET ticket_id=excluded.ticket_id, updated_at=datetime('now')
+		`, t.RecordID, t.ID); err != nil {
+			return fmt.Errorf("import ticket idmap %s: %w", t.ID, err)
+		}
+		if err := planning.RehashTicket(ctx, tx, t.RecordID); err != nil {
+			return err
+		}
+		if err := planning.RehashTicketIDMap(ctx, tx, t.RecordID); err != nil {
 			return err
 		}
 	}
@@ -169,7 +191,7 @@ func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 	}
 	for _, d := range snap.TicketDeps {
 		res, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
+			INSERT OR IGNORE INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at)
 			VALUES (?, ?, datetime('now'), datetime('now'))
 		`, d.BlockerID, d.BlockedID)
 		if err != nil {
@@ -187,7 +209,7 @@ func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 	}
 	for _, l := range snap.TicketLabels {
 		res, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO ticket_labels (ticket_id, label, created_at, updated_at)
+			INSERT OR IGNORE INTO ticket_labels (ticket_record_id, label, created_at, updated_at)
 			VALUES (?, ?, datetime('now'), datetime('now'))
 		`, l.TicketID, l.Label)
 		if err != nil {
@@ -205,7 +227,7 @@ func Import(ctx context.Context, db *sql.DB, snap *Snapshot) error {
 	}
 	for _, h := range snap.History {
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+			INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
 				changed_at, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		`, h.TicketID, h.Field, h.OldValue, h.NewValue, h.ChangedBy,
@@ -247,7 +269,7 @@ func allDecisionRefs(ctx context.Context, db *sql.DB) ([]DecisionRef, error) {
 
 func allTicketDeps(ctx context.Context, db *sql.DB) ([]TicketDep, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT blocker_id, blocked_id FROM ticket_deps ORDER BY blocker_id, blocked_id
+		SELECT blocker_record_id, blocked_record_id FROM ticket_deps ORDER BY blocker_record_id, blocked_record_id
 	`)
 	if err != nil {
 		return nil, err
@@ -266,7 +288,7 @@ func allTicketDeps(ctx context.Context, db *sql.DB) ([]TicketDep, error) {
 
 func allTicketLabels(ctx context.Context, db *sql.DB) ([]TicketLabel, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT ticket_id, label FROM ticket_labels ORDER BY ticket_id, label
+		SELECT ticket_record_id, label FROM ticket_labels ORDER BY ticket_record_id, label
 	`)
 	if err != nil {
 		return nil, err
@@ -285,8 +307,8 @@ func allTicketLabels(ctx context.Context, db *sql.DB) ([]TicketLabel, error) {
 
 func allHistory(ctx context.Context, db *sql.DB) ([]HistoryEntry, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT ticket_id, field, old_value, new_value, changed_by, changed_at
-		FROM ticket_history ORDER BY changed_at, ticket_id
+		SELECT ticket_record_id, field, old_value, new_value, changed_by, changed_at
+		FROM ticket_history ORDER BY changed_at, ticket_record_id
 	`)
 	if err != nil {
 		return nil, err

@@ -75,19 +75,30 @@ func TestMonthOf_RejectsShort(t *testing.T) {
 	}
 }
 
-// seedTicket inserts a ticket with explicit timestamps and computes
-// the hash so the row matches what the exporter will read.
+// seedTicket inserts a ticket with explicit timestamps and computes the
+// hash so the row matches what the exporter will read. For test simplicity
+// the record_id equals the friendly label (id), and an idmap row maps it to
+// itself; this exercises the same joins as production without minting ULIDs.
 func seedTicket(t *testing.T, db *sql.DB, id, updatedAt string) {
 	t.Helper()
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx, `
-		INSERT INTO tickets (id, type, title, status, priority, created_at, updated_at)
+		INSERT INTO tickets (record_id, type, title, status, priority, created_at, updated_at)
 		VALUES (?, 'task', ?, 'backlog', 'medium', ?, ?)
 	`, id, "title-"+id, updatedAt, updatedAt); err != nil {
 		t.Fatalf("seed %s: %v", id, err)
 	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, id, id, updatedAt, updatedAt); err != nil {
+		t.Fatalf("seed idmap %s: %v", id, err)
+	}
 	if err := planning.RehashTicket(ctx, db, id); err != nil {
 		t.Fatalf("rehash %s: %v", id, err)
+	}
+	if err := planning.RehashTicketIDMap(ctx, db, id); err != nil {
+		t.Fatalf("rehash idmap %s: %v", id, err)
 	}
 }
 
@@ -104,11 +115,17 @@ func TestExport_DedupesMultiLineStatementOnReExport(t *testing.T) {
 	// Embedded newline AND a single quote — the exact shape that broke
 	// line-based dedup.
 	if _, err := db.ExecContext(ctx, `
-		INSERT INTO tickets (id, type, title, description, status, priority, created_at, updated_at)
+		INSERT INTO tickets (record_id, type, title, description, status, priority, created_at, updated_at)
 		VALUES ('T-1','task','t','line one
 line two: it''s multi-line','backlog','medium','2025-05-08 11:00:00','2025-05-08 11:00:00')
 	`); err != nil {
 		t.Fatalf("seed: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at)
+		VALUES ('T-1','T-1','2025-05-08 11:00:00','2025-05-08 11:00:00')
+	`); err != nil {
+		t.Fatalf("seed idmap: %v", err)
 	}
 	if err := planning.RehashTicket(ctx, db, "T-1"); err != nil {
 		t.Fatalf("rehash: %v", err)
@@ -148,10 +165,14 @@ func TestExport_WritesPerTablePerMonthFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export: %v", err)
 	}
-	if res.RowsWritten != 3 {
-		t.Errorf("rows = %d, want 3", res.RowsWritten)
+	// 3 tickets + 3 idmap rows (D-26): each seeded ticket also writes its
+	// record_id↔label mapping.
+	if res.RowsWritten != 6 {
+		t.Errorf("rows = %d, want 6", res.RowsWritten)
 	}
 	want := []string{
+		filepath.Join(vault, ".pql", "changelog", "ticket_idmap", "2025-04.sql"),
+		filepath.Join(vault, ".pql", "changelog", "ticket_idmap", "2025-05.sql"),
 		filepath.Join(vault, ".pql", "changelog", "tickets", "2025-04.sql"),
 		filepath.Join(vault, ".pql", "changelog", "tickets", "2025-05.sql"),
 	}
@@ -301,7 +322,7 @@ func TestExport_IncludesSoftDeletedRows(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `
 		UPDATE tickets SET deleted_at = '2025-05-08 12:00:00',
 		                   updated_at = '2025-05-08 12:00:00'
-		WHERE id = 'T-1'
+		WHERE record_id = 'T-1'
 	`); err != nil {
 		t.Fatalf("soft delete: %v", err)
 	}

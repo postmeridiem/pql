@@ -133,8 +133,8 @@ func TestUnblocked_CustomTerminal(t *testing.T) {
 	blocked, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "blocked", DefaultStatus: ss.Default()})
 	blocker, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "blocker", DefaultStatus: ss.Default()})
 	if _, err := db.ExecContext(ctx, `
-		INSERT INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
-		VALUES (?, ?, datetime('now'), datetime('now'))
+		INSERT INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at)
+		VALUES ((SELECT record_id FROM ticket_idmap WHERE ticket_id = ?), (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?), datetime('now'), datetime('now'))
 	`, blocker, blocked); err != nil {
 		t.Fatalf("insert dep: %v", err)
 	}

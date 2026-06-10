@@ -1115,40 +1115,37 @@ func writeFileIT(t *testing.T, path, body string) {
 	}
 }
 
-// --- ticket-id collision detection at replay (T-54) -----------------------
+// --- duplicate-label collision detection at replay (D-26) -----------------
 
-// ticketInsertLine renders a tickets changelog INSERT in the exact shape the
-// exporter writes, so the collision detector's prefix match fires.
-func ticketInsertLine(id, title, createdAt, hash string) string {
-	return "INSERT INTO tickets (id, type, parent_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (" +
-		"'" + id + "', 'task', NULL, '" + title + "', NULL, 'backlog', 'medium', NULL, NULL, NULL, '" +
-		createdAt + "', '" + createdAt + "', NULL, '" + hash + "', 1) " +
-		"ON CONFLICT(id) DO UPDATE SET type=excluded.type, parent_id=excluded.parent_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version " +
-		"WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);\n"
+// ticketChangelogRow / idmapChangelogRow render minimal new-format changelog
+// INSERTs (rebuild truncates first, so plain INSERTs replay cleanly). A
+// duplicate label is two idmap rows with distinct record_ids but one ticket_id.
+func ticketChangelogRow(recordID, title string) string {
+	return fmt.Sprintf("INSERT INTO tickets (record_id, type, title, status, priority, created_at, updated_at, canonical_version) VALUES ('%s','task','%s','backlog','medium','2025-05-01 10:00:00','2025-05-01 10:00:00',2);\n", recordID, title)
+}
+
+func idmapChangelogRow(recordID, label string) string {
+	return fmt.Sprintf("INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at, canonical_version) VALUES ('%s','%s','2025-05-01 10:00:00','2025-05-01 10:00:00',2);\n", recordID, label)
 }
 
 func TestIntegration_Rebuild_WarnsOnTicketIdCollision(t *testing.T) {
 	vault := t.TempDir()
-	// Two unrelated lineages of T-9, in separate month files (different
-	// created_at = different lineage). Replay would merge them silently;
-	// T-54 makes it loud.
+	// Two distinct records both labelled T-9 (the cross-clone clash, D-26).
 	writeFileIT(t, filepath.Join(vault, ".pql", "changelog", "tickets", "2025-05.sql"),
-		ticketInsertLine("T-9", "Alpha lineage", "2025-05-01 10:00:00", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
-	writeFileIT(t, filepath.Join(vault, ".pql", "changelog", "tickets", "2025-06.sql"),
-		ticketInsertLine("T-9", "Beta lineage", "2025-06-01 10:00:00", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+		ticketChangelogRow("rec-a", "Alpha")+ticketChangelogRow("rec-b", "Beta"))
+	writeFileIT(t, filepath.Join(vault, ".pql", "changelog", "ticket_idmap", "2025-05.sql"),
+		idmapChangelogRow("rec-a", "T-9")+idmapChangelogRow("rec-b", "T-9"))
 
 	stdout, stderr, code := run(t, vault, "plan", "rebuild")
 	if code != 0 {
 		t.Fatalf("rebuild exit=%d\nstderr: %s", code, stderr)
 	}
-	// Warning on stderr, structured as a diagnostic.
 	if !strings.Contains(string(stderr), "changelog.ticket_id_collision") {
 		t.Errorf("stderr missing collision warning code:\n%s", stderr)
 	}
 	if !strings.Contains(string(stderr), "T-9") {
 		t.Errorf("stderr warning should name T-9:\n%s", stderr)
 	}
-	// Collisions also ride along in the result JSON on stdout.
 	var res map[string]any
 	if err := json.Unmarshal(stdout, &res); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
@@ -1162,7 +1159,9 @@ func TestIntegration_Rebuild_WarnsOnTicketIdCollision(t *testing.T) {
 func TestIntegration_Rebuild_NoCollisionNoWarning(t *testing.T) {
 	vault := t.TempDir()
 	writeFileIT(t, filepath.Join(vault, ".pql", "changelog", "tickets", "2025-05.sql"),
-		ticketInsertLine("T-1", "Only ticket", "2025-05-01 10:00:00", "cccccccccccccccccccccccccccccccc"))
+		ticketChangelogRow("rec-1", "Only ticket"))
+	writeFileIT(t, filepath.Join(vault, ".pql", "changelog", "ticket_idmap", "2025-05.sql"),
+		idmapChangelogRow("rec-1", "T-1"))
 
 	stdout, stderr, code := run(t, vault, "plan", "rebuild")
 	if code != 0 {

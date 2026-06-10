@@ -731,18 +731,22 @@ func newTicketBlockCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
+			blockerRec, blockedRec, err := resolveDepRecords(ctx, pdb.SQL(), byID, args[0])
+			if err != nil {
+				return err
+			}
 			// Insert-or-resurrect: if a previous unblock soft-deleted
 			// the (blocker, blocked) row, this clears deleted_at and
 			// bumps updated_at so the row is live again.
 			if _, err := pdb.SQL().ExecContext(ctx, `
-				INSERT INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
+				INSERT INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at)
 				VALUES (?, ?, datetime('now'), datetime('now'))
-				ON CONFLICT(blocker_id, blocked_id) DO UPDATE SET
+				ON CONFLICT(blocker_record_id, blocked_record_id) DO UPDATE SET
 					deleted_at = NULL, updated_at = datetime('now')
-			`, byID, args[0]); err != nil {
+			`, blockerRec, blockedRec); err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
 			}
-			if err := planning.RehashTicketDep(ctx, pdb.SQL(), byID, args[0]); err != nil {
+			if err := planning.RehashTicketDep(ctx, pdb.SQL(), blockerRec, blockedRec); err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
 			}
 			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
@@ -787,16 +791,20 @@ func newTicketUnblockCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
+			blockerRec, blockedRec, err := resolveDepRecords(ctx, pdb.SQL(), fromID, args[0])
+			if err != nil {
+				return err
+			}
 			res, err := pdb.SQL().ExecContext(ctx, `
 				UPDATE ticket_deps
 				SET deleted_at = datetime('now'), updated_at = datetime('now')
-				WHERE blocker_id = ? AND blocked_id = ? AND deleted_at IS NULL
-			`, fromID, args[0])
+				WHERE blocker_record_id = ? AND blocked_record_id = ? AND deleted_at IS NULL
+			`, blockerRec, blockedRec)
 			if err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
 			}
 			if n, _ := res.RowsAffected(); n > 0 {
-				if err := planning.RehashTicketDep(ctx, pdb.SQL(), fromID, args[0]); err != nil {
+				if err := planning.RehashTicketDep(ctx, pdb.SQL(), blockerRec, blockedRec); err != nil {
 					return &exitError{code: diag.DataErr, msg: err.Error()}
 				}
 			}
@@ -851,12 +859,16 @@ func newTicketTeamCmd() *cobra.Command {
 
 			var results []repo.Ticket
 			for _, id := range ids {
+				rec, err := resolveTicketRecord(ctx, pdb.SQL(), id)
+				if err != nil {
+					return err
+				}
 				if _, err := pdb.SQL().ExecContext(ctx, `
-					UPDATE tickets SET team = ?, updated_at = datetime('now') WHERE id = ?
-				`, team, id); err != nil {
+					UPDATE tickets SET team = ?, updated_at = datetime('now') WHERE record_id = ?
+				`, team, rec); err != nil {
 					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
 				}
-				if err := planning.RehashTicket(ctx, pdb.SQL(), id); err != nil {
+				if err := planning.RehashTicket(ctx, pdb.SQL(), rec); err != nil {
 					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
 				}
 				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
@@ -908,33 +920,37 @@ func newTicketLabelCmd() *cobra.Command {
 				if action != "add" && action != "rm" {
 					return &exitError{code: diag.Usage, msg: fmt.Sprintf("unknown label action %q (use add or rm)", action)}
 				}
+				rec, err := resolveTicketRecord(ctx, pdb.SQL(), id)
+				if err != nil {
+					return err
+				}
 				switch action {
 				case "add":
 					// Insert-or-resurrect: a previously rm'd label gets
 					// its deleted_at cleared so the changelog records
 					// the re-attachment as a state change.
 					if _, addErr := pdb.SQL().ExecContext(ctx, `
-						INSERT INTO ticket_labels (ticket_id, label, created_at, updated_at)
+						INSERT INTO ticket_labels (ticket_record_id, label, created_at, updated_at)
 						VALUES (?, ?, datetime('now'), datetime('now'))
-						ON CONFLICT(ticket_id, label) DO UPDATE SET
+						ON CONFLICT(ticket_record_id, label) DO UPDATE SET
 							deleted_at = NULL, updated_at = datetime('now')
-					`, id, label); addErr != nil {
+					`, rec, label); addErr != nil {
 						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, addErr)}
 					}
-					if rehashErr := planning.RehashTicketLabel(ctx, pdb.SQL(), id, label); rehashErr != nil {
+					if rehashErr := planning.RehashTicketLabel(ctx, pdb.SQL(), rec, label); rehashErr != nil {
 						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, rehashErr)}
 					}
 				case "rm":
 					res, rmErr := pdb.SQL().ExecContext(ctx, `
 						UPDATE ticket_labels
 						SET deleted_at = datetime('now'), updated_at = datetime('now')
-						WHERE ticket_id = ? AND label = ? AND deleted_at IS NULL
-					`, id, label)
+						WHERE ticket_record_id = ? AND label = ? AND deleted_at IS NULL
+					`, rec, label)
 					if rmErr != nil {
 						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, rmErr)}
 					}
 					if n, _ := res.RowsAffected(); n > 0 {
-						if rehashErr := planning.RehashTicketLabel(ctx, pdb.SQL(), id, label); rehashErr != nil {
+						if rehashErr := planning.RehashTicketLabel(ctx, pdb.SQL(), rec, label); rehashErr != nil {
 							return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, rehashErr)}
 						}
 					}
@@ -1055,6 +1071,30 @@ func loadConfig(cmd *cobra.Command) (*config.Config, error) {
 // the two packages: config cannot import planning (planning imports
 // config), so the CLI translates here. Config has already validated the
 // statuses (config.validate), so NewStatusSet just stamps order/labels.
+// resolveTicketRecord maps a friendly label to its record_id, returning a
+// clean not-found exit error when the label is unknown.
+func resolveTicketRecord(ctx context.Context, db *sql.DB, label string) (string, error) {
+	rec, err := repo.ResolveRecordID(ctx, db, label)
+	if err != nil {
+		return "", &exitError{code: diag.DataErr, msg: err.Error()}
+	}
+	if rec == "" {
+		return "", &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", label)}
+	}
+	return rec, nil
+}
+
+// resolveDepRecords resolves both ends of a dependency to record_ids.
+func resolveDepRecords(ctx context.Context, db *sql.DB, blockerLabel, blockedLabel string) (blockerRec, blockedRec string, err error) {
+	if blockerRec, err = resolveTicketRecord(ctx, db, blockerLabel); err != nil {
+		return "", "", err
+	}
+	if blockedRec, err = resolveTicketRecord(ctx, db, blockedLabel); err != nil {
+		return "", "", err
+	}
+	return blockerRec, blockedRec, nil
+}
+
 func statusSetFromConfig(cfg *config.Config) planning.StatusSet {
 	defs := make([]planning.StatusDef, len(cfg.TicketStatuses))
 	for i, s := range cfg.TicketStatuses {

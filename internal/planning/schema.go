@@ -48,10 +48,15 @@ CREATE TABLE IF NOT EXISTS decision_refs (
     PRIMARY KEY (source_id, target_id, ref_type)
 );
 
+-- Identity split (D-26): a ticket's stable, collision-proof identity is its
+-- record_id (a locally-generated ULID, planning.NewRecordID); the friendly
+-- T-NNN label lives in ticket_idmap and may be reconciled. Every structural
+-- reference (parent, deps, history, labels) targets record_id, so a label
+-- clash never corrupts the graph — only ticket_idmap needs a relabel.
 CREATE TABLE IF NOT EXISTS tickets (
-    id                TEXT PRIMARY KEY,
+    record_id         TEXT PRIMARY KEY,
     type              TEXT NOT NULL CHECK(type IN ('initiative','epic','story','task','bug')),
-    parent_id         TEXT REFERENCES tickets(id),
+    parent_record_id  TEXT REFERENCES tickets(record_id),
     title             TEXT NOT NULL,
     description       TEXT,
     -- No CHECK enumeration: the ticket status vocabulary is per-vault
@@ -72,19 +77,33 @@ CREATE TABLE IF NOT EXISTS tickets (
     canonical_version INTEGER
 );
 
+-- ticket_idmap maps a record_id to its current friendly label (T-NNN).
+-- ticket_id is intentionally NOT globally unique: two uncoordinated clones
+-- can mint the same label, which surfaces as a duplicate-label collision
+-- (detected at replay) and is fixed with "pql ticket relabel".
+CREATE TABLE IF NOT EXISTS ticket_idmap (
+    record_id         TEXT PRIMARY KEY REFERENCES tickets(record_id),
+    ticket_id         TEXT NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    deleted_at        TEXT,
+    hash              TEXT,
+    canonical_version INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS ticket_deps (
-    blocker_id        TEXT NOT NULL REFERENCES tickets(id),
-    blocked_id        TEXT NOT NULL REFERENCES tickets(id),
+    blocker_record_id TEXT NOT NULL REFERENCES tickets(record_id),
+    blocked_record_id TEXT NOT NULL REFERENCES tickets(record_id),
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
     deleted_at        TEXT,
     hash              TEXT,
     canonical_version INTEGER,
-    PRIMARY KEY (blocker_id, blocked_id)
+    PRIMARY KEY (blocker_record_id, blocked_record_id)
 );
 
 CREATE TABLE IF NOT EXISTS ticket_history (
-    ticket_id         TEXT NOT NULL REFERENCES tickets(id),
+    ticket_record_id  TEXT NOT NULL REFERENCES tickets(record_id),
     field             TEXT NOT NULL,
     old_value         TEXT,
     new_value         TEXT,
@@ -98,14 +117,14 @@ CREATE TABLE IF NOT EXISTS ticket_history (
 );
 
 CREATE TABLE IF NOT EXISTS ticket_labels (
-    ticket_id         TEXT NOT NULL REFERENCES tickets(id),
+    ticket_record_id  TEXT NOT NULL REFERENCES tickets(record_id),
     label             TEXT NOT NULL,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
     deleted_at        TEXT,
     hash              TEXT,
     canonical_version INTEGER,
-    PRIMARY KEY (ticket_id, label)
+    PRIMARY KEY (ticket_record_id, label)
 );
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -113,11 +132,19 @@ CREATE TABLE IF NOT EXISTS meta (
     value      TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+`
 
+// planningIndexes is created after verifySchema so that an out-of-date
+// pql.db (missing a renamed column) surfaces the friendly schema-mismatch
+// error from verifySchema, rather than a raw "no such column" failure when
+// an index references a column the old shape lacks (e.g. parent_record_id).
+const planningIndexes = `
 CREATE INDEX IF NOT EXISTS idx_tickets_status        ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_team          ON tickets(team);
 CREATE INDEX IF NOT EXISTS idx_tickets_decision_ref  ON tickets(decision_ref);
 CREATE INDEX IF NOT EXISTS idx_tickets_assigned      ON tickets(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_tickets_parent        ON tickets(parent_record_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_idmap_label    ON ticket_idmap(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_decisions_domain      ON decisions(domain);
 CREATE INDEX IF NOT EXISTS idx_decisions_type        ON decisions(type);
 CREATE INDEX IF NOT EXISTS idx_decision_refs_target  ON decision_refs(target_id);
@@ -138,9 +165,10 @@ var replicationColumns = []string{
 // state (export/import markers) that doesn't participate in
 // replication, so it doesn't need the replication-column conventions.
 //
-//nolint:goconst // schema column names — extracting each as a constant
 // would obscure the schema's surface area for no real benefit; this
 // matches the existing pattern in repo/tickets.go for status enums.
+//
+//nolint:goconst // schema column names — extracting each as a constant
 var expectedColumns = map[string][]string{
 	"decisions": append(
 		[]string{"id", "type", "domain", "title", "status", "date", "file_path", "synced_at"},
@@ -151,27 +179,31 @@ var expectedColumns = map[string][]string{
 		replicationColumns...,
 	),
 	"tickets": append(
-		[]string{"id", "type", "parent_id", "title", "description", "status", "priority",
+		[]string{"record_id", "type", "parent_record_id", "title", "description", "status", "priority",
 			"assigned_to", "team", "decision_ref"},
 		replicationColumns...,
 	),
+	"ticket_idmap": append(
+		[]string{"record_id", "ticket_id"},
+		replicationColumns...,
+	),
 	"ticket_deps": append(
-		[]string{"blocker_id", "blocked_id"},
+		[]string{"blocker_record_id", "blocked_record_id"},
 		replicationColumns...,
 	),
 	"ticket_history": append(
-		[]string{"ticket_id", "field", "old_value", "new_value", "changed_by", "changed_at"},
+		[]string{"ticket_record_id", "field", "old_value", "new_value", "changed_by", "changed_at"},
 		replicationColumns...,
 	),
 	"ticket_labels": append(
-		[]string{"ticket_id", "label"},
+		[]string{"ticket_record_id", "label"},
 		replicationColumns...,
 	),
 }
 
 // Schema returns the full planning schema as SQL for callers that
 // need to embed it (e.g. pql init seeding .pql/changelog/<table>/0000-schema.sql).
-func Schema() string { return planningSchema }
+func Schema() string { return planningSchema + planningIndexes }
 
 // Migrate ensures the planning schema exists and matches the current
 // expected shape. Per D-19, there is no migration framework — Migrate
@@ -182,7 +214,16 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, planningSchema); err != nil {
 		return fmt.Errorf("planning: create schema: %w", err)
 	}
-	return verifySchema(ctx, db)
+	// Verify column shape before creating indexes: an out-of-date pql.db
+	// would otherwise fail on an index over a renamed column with a raw
+	// SQLite error instead of the friendly recovery hint.
+	if err := verifySchema(ctx, db); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, planningIndexes); err != nil {
+		return fmt.Errorf("planning: create indexes: %w", err)
+	}
+	return nil
 }
 
 func verifySchema(ctx context.Context, db *sql.DB) error {

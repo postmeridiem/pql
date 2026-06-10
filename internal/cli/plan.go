@@ -369,20 +369,20 @@ with that command.
 	}
 }
 
-// warnTicketCollisions emits one stderr warning per ticket-id collision
-// surfaced by replay (T-54). Non-fatal — the collisions also ride along in
-// the result JSON on stdout; this is the loud human-facing signal that the
-// ON CONFLICT(id) upsert merged unrelated tickets and one should be
-// re-filed under a fresh id.
+// warnTicketCollisions emits one stderr warning per duplicate-label
+// collision surfaced by replay (D-26): a friendly ticket_id claimed by more
+// than one record. Non-fatal — the collisions also ride along in the result
+// JSON on stdout. Identity is collision-proof (record_id), so the graph is
+// intact; this is the signal to reconcile the label with `pql ticket relabel`.
 func warnTicketCollisions(collisions []changelog.TicketCollision) {
 	for _, c := range collisions {
-		parts := make([]string, 0, len(c.Lineages))
-		for _, l := range c.Lineages {
-			parts = append(parts, fmt.Sprintf("created_at %s %q (hash %s)", l.CreatedAt, l.Title, l.Hash))
+		parts := make([]string, 0, len(c.Records))
+		for _, r := range c.Records {
+			parts = append(parts, fmt.Sprintf("%s %q", r.RecordID, r.Title))
 		}
 		diag.Warn("changelog.ticket_id_collision", fmt.Sprintf(
-			"ticket id %s is claimed by %d distinct lineages — replay merged them under one row via ON CONFLICT(id); re-file one under a fresh id to reconcile: %s",
-			c.ID, len(c.Lineages), strings.Join(parts, " vs "),
+			"ticket id %s is claimed by %d records — identity is intact (record_id), but the label is ambiguous; run `pql ticket relabel %s` to reconcile: %s",
+			c.TicketID, len(c.Records), c.TicketID, strings.Join(parts, " vs "),
 		))
 	}
 }

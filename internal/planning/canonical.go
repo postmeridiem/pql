@@ -13,7 +13,7 @@ import (
 // row records the version it was hashed under, so re-hashing under a new
 // version can be done lazily without invalidating other rows in the
 // transition window.
-const CanonicalVersion = 1
+const CanonicalVersion = 2
 
 // Canonical encoding sentinels. fieldSep separates field values; the
 // leading 0x00 byte in nullSentinel cannot appear in a SQLite TEXT

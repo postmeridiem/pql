@@ -101,10 +101,13 @@ func refineOrderCase(ss planning.StatusSet) (clause string, args []any) {
 	return b.String(), args
 }
 
-
-// Ticket is a row from the tickets table.
+// Ticket is a row from the tickets table joined to its friendly label.
+// ID is the public T-NNN label (ticket_idmap.ticket_id); RecordID is the
+// stable underwater identity (tickets.record_id). ParentID is the parent's
+// label. See D-26.
 type Ticket struct {
 	ID          string  `json:"id"`
+	RecordID    string  `json:"record_id"`
 	Type        string  `json:"type"`
 	ParentID    *string `json:"parent_id,omitempty"`
 	Title       string  `json:"title"`
@@ -116,6 +119,60 @@ type Ticket struct {
 	DecisionRef *string `json:"decision_ref,omitempty"`
 	CreatedAt   string  `json:"created_at"`
 	UpdatedAt   string  `json:"updated_at"`
+}
+
+// ticketReadSQL is the shared SELECT that presents a ticket in its public
+// shape: m.ticket_id as the id, the parent's label via a self-join on the
+// idmap, and the underlying record_id. Callers append WHERE/ORDER clauses
+// (the tickets table is aliased t, its idmap m, the parent's idmap pm).
+const ticketReadSQL = `
+	SELECT m.ticket_id, t.record_id, t.type, pm.ticket_id, t.title, t.description,
+	       t.status, t.priority, t.assigned_to, t.team, t.decision_ref,
+	       t.created_at, t.updated_at
+	FROM tickets t
+	JOIN ticket_idmap m ON m.record_id = t.record_id AND m.deleted_at IS NULL
+	LEFT JOIN ticket_idmap pm ON pm.record_id = t.parent_record_id AND pm.deleted_at IS NULL`
+
+// ResolveRecordID maps a friendly ticket_id label to its record_id for
+// consumers outside the repo package (e.g. the CLI's dep/label commands).
+// Returns ("", nil) for an unknown label.
+func ResolveRecordID(ctx context.Context, db *sql.DB, ticketID string) (string, error) {
+	return resolveRecordID(ctx, db, ticketID)
+}
+
+// resolveRecordID maps a friendly ticket_id (T-NNN) to its record_id.
+// Returns ("", nil) when the label is unknown. When a label is claimed by
+// more than one record (an unreconciled collision), it returns an error so
+// callers don't silently act on the wrong ticket.
+func resolveRecordID(ctx context.Context, db *sql.DB, ticketID string) (string, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT m.record_id FROM ticket_idmap m
+		JOIN tickets t ON t.record_id = m.record_id AND t.deleted_at IS NULL
+		WHERE m.ticket_id = ? AND m.deleted_at IS NULL
+	`, ticketID)
+	if err != nil {
+		return "", fmt.Errorf("repo: resolve %s: %w", ticketID, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return "", fmt.Errorf("repo: resolve %s: scan: %w", ticketID, err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	switch len(ids) {
+	case 0:
+		return "", nil
+	case 1:
+		return ids[0], nil
+	default:
+		return "", fmt.Errorf("repo: ticket id %s is claimed by %d records; run `pql ticket relabel` to reconcile", ticketID, len(ids))
+	}
 }
 
 // NewTicketOpts are the parameters for creating a ticket.
@@ -151,7 +208,25 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 		status = planning.DefaultStatusSet().Default()
 	}
 
-	id, err := nextTicketID(ctx, db)
+	// Resolve an optional parent label to its record_id before we open the
+	// write transaction.
+	var parentRecID string
+	if opts.ParentID != "" {
+		rec, err := resolveRecordID(ctx, db, opts.ParentID)
+		if err != nil {
+			return "", err
+		}
+		if rec == "" {
+			return "", fmt.Errorf("repo: parent ticket %s not found", opts.ParentID)
+		}
+		parentRecID = rec
+	}
+
+	label, err := nextTicketID(ctx, db)
+	if err != nil {
+		return "", err
+	}
+	recordID, err := planning.NewRecordID()
 	if err != nil {
 		return "", err
 	}
@@ -163,11 +238,11 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO tickets (id, type, parent_id, title, description, status, priority,
+		INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-	`, id, opts.Type,
-		nullIfEmpty(opts.ParentID),
+	`, recordID, opts.Type,
+		nullIfEmpty(parentRecID),
 		opts.Title,
 		nullIfEmpty(opts.Description),
 		status,
@@ -178,20 +253,32 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 	); err != nil {
 		return "", fmt.Errorf("repo: create ticket: %w", err)
 	}
-	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at)
+		VALUES (?, ?, datetime('now'), datetime('now'))
+	`, recordID, label); err != nil {
+		return "", fmt.Errorf("repo: create ticket idmap: %w", err)
+	}
+	if err := planning.RehashTicket(ctx, tx, recordID); err != nil {
+		return "", err
+	}
+	if err := planning.RehashTicketIDMap(ctx, tx, recordID); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("repo: commit create ticket: %w", err)
 	}
-	return id, nil
+	return label, nil
 }
 
+// nextTicketID allocates the next friendly T-NNN label as max+1 over the
+// labels in ticket_idmap (local-only; cross-clone duplicates are reconciled
+// via relabel, D-26).
 func nextTicketID(ctx context.Context, db *sql.DB) (string, error) {
 	var maxNum int
 	err := db.QueryRowContext(ctx, `
-		SELECT COALESCE(MAX(CAST(SUBSTR(id, 3) AS INTEGER)), 0)
-		FROM tickets WHERE id LIKE 'T-%'
+		SELECT COALESCE(MAX(CAST(SUBSTR(ticket_id, 3) AS INTEGER)), 0)
+		FROM ticket_idmap WHERE ticket_id LIKE 'T-%'
 	`).Scan(&maxNum)
 	if err != nil {
 		return "", fmt.Errorf("repo: next ticket id: %w", err)
@@ -243,8 +330,8 @@ func unblockedClause(ss planning.StatusSet) (clause string, args []any) {
 	}
 	return ` AND NOT EXISTS (
 		SELECT 1 FROM ticket_deps d
-		JOIN tickets b ON b.id = d.blocker_id
-		WHERE d.blocked_id = tickets.id
+		JOIN tickets b ON b.record_id = d.blocker_record_id
+		WHERE d.blocked_record_id = t.record_id
 		  AND d.deleted_at IS NULL
 		  AND b.deleted_at IS NULL` + notTerminal + `
 	)`, args
@@ -253,33 +340,38 @@ func unblockedClause(ss planning.StatusSet) (clause string, args []any) {
 // ListTickets returns tickets matching the filter. Soft-deleted rows
 // (deleted_at IS NOT NULL) are excluded by default per D-17.
 func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, error) {
-	query := `SELECT id, type, parent_id, title, description, status, priority,
-		assigned_to, team, decision_ref, created_at, updated_at
-		FROM tickets WHERE deleted_at IS NULL`
+	query := ticketReadSQL + ` WHERE t.deleted_at IS NULL`
 	var params []any
 	if f.Status != "" {
-		query += " AND status = ?"
+		query += " AND t.status = ?"
 		params = append(params, f.Status)
 	}
 	if f.Team != "" {
-		query += " AND team = ?"
+		query += " AND t.team = ?"
 		params = append(params, f.Team)
 	}
 	if f.AssignedTo != "" {
-		query += " AND assigned_to = ?"
+		query += " AND t.assigned_to = ?"
 		params = append(params, f.AssignedTo)
 	}
 	if f.DecisionRef != "" {
-		query += " AND decision_ref = ?"
+		query += " AND t.decision_ref = ?"
 		params = append(params, f.DecisionRef)
 	}
 	if f.ParentID != "" {
-		query += " AND parent_id = ?"
-		params = append(params, f.ParentID)
+		parentRecID, err := resolveRecordID(ctx, db, f.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		if parentRecID == "" {
+			return nil, nil // unknown parent → nothing matches
+		}
+		query += " AND t.parent_record_id = ?"
+		params = append(params, parentRecID)
 	}
 	if f.Label != "" {
-		query += ` AND id IN (
-			SELECT ticket_id FROM ticket_labels
+		query += ` AND t.record_id IN (
+			SELECT ticket_record_id FROM ticket_labels
 			WHERE label = ? AND deleted_at IS NULL
 		)`
 		params = append(params, f.Label)
@@ -291,21 +383,21 @@ func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, err
 		}
 		if len(ds) == 0 {
 			// No descendants → nothing can match. Short-circuit rather
-			// than emit an invalid empty `id IN ()`.
+			// than emit an invalid empty `IN ()`.
 			return nil, nil
 		}
 		placeholders := make([]string, len(ds))
 		for i, d := range ds {
 			placeholders[i] = "?"
-			params = append(params, d.ID)
+			params = append(params, d.RecordID)
 		}
-		//nolint:gosec // G202: the joined fragment is only "?" placeholders; the descendant IDs bind via params
-		query += " AND id IN (" + strings.Join(placeholders, ", ") + ")"
+		//nolint:gosec // G202: the joined fragment is only "?" placeholders; the descendant record_ids bind via params
+		query += " AND t.record_id IN (" + strings.Join(placeholders, ", ") + ")"
 	}
 	if f.Leaf {
 		query += ` AND NOT EXISTS (
 			SELECT 1 FROM tickets c
-			WHERE c.parent_id = tickets.id AND c.deleted_at IS NULL
+			WHERE c.parent_record_id = t.record_id AND c.deleted_at IS NULL
 		)`
 	}
 	ss := resolveStatusSet([]planning.StatusSet{f.Statuses})
@@ -315,18 +407,18 @@ func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, err
 		params = append(params, cargs...)
 	}
 	if f.Unrefined {
-		query += " AND (description IS NULL OR TRIM(description) = '')"
+		query += " AND (t.description IS NULL OR TRIM(t.description) = '')"
 		if termIn, termArgs := statusInClause(ss.Terminal()); termIn != "" {
 			//nolint:gosec // G202: termIn is a "?"-placeholder fragment; statuses bind via params.
-			query += " AND status NOT IN (" + termIn + ")"
+			query += " AND t.status NOT IN (" + termIn + ")"
 			params = append(params, termArgs...)
 		}
 		rankCase, rankArgs := refineOrderCase(ss)
 		//nolint:gosec // G202: rankCase is a CASE over "?"-placeholders; statuses bind via params.
-		query += " ORDER BY " + rankCase + ", CAST(SUBSTR(id, 3) AS INTEGER)"
+		query += " ORDER BY " + rankCase + ", CAST(SUBSTR(m.ticket_id, 3) AS INTEGER)"
 		params = append(params, rankArgs...)
 	} else {
-		query += " ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)"
+		query += " ORDER BY CAST(SUBSTR(m.ticket_id, 3) AS INTEGER)"
 	}
 
 	rows, err := db.QueryContext(ctx, query, params...)
@@ -337,24 +429,39 @@ func ListTickets(ctx context.Context, db *sql.DB, f TicketFilter) ([]Ticket, err
 	return scanTickets(rows)
 }
 
-// GetTicket returns a single ticket by ID, or nil if not found.
-// Soft-deleted rows (deleted_at IS NOT NULL) are treated as absent.
+// GetTicket returns a single ticket by its friendly label, or nil if not
+// found. Soft-deleted rows (deleted_at IS NOT NULL) are treated as absent.
 func GetTicket(ctx context.Context, db *sql.DB, id string) (*Ticket, error) {
-	var t Ticket
-	err := db.QueryRowContext(ctx, `
-		SELECT id, type, parent_id, title, description, status, priority,
-			assigned_to, team, decision_ref, created_at, updated_at
-		FROM tickets WHERE id = ? AND deleted_at IS NULL
-	`, id).Scan(&t.ID, &t.Type, &t.ParentID, &t.Title, &t.Description,
-		&t.Status, &t.Priority, &t.AssignedTo, &t.Team, &t.DecisionRef,
-		&t.CreatedAt, &t.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	rows, err := db.QueryContext(ctx, ticketReadSQL+` WHERE m.ticket_id = ? AND t.deleted_at IS NULL`, id)
 	if err != nil {
 		return nil, fmt.Errorf("repo: get ticket %s: %w", id, err)
 	}
-	return &t, nil
+	defer func() { _ = rows.Close() }()
+	ts, err := scanTickets(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(ts) == 0 {
+		return nil, nil
+	}
+	return &ts[0], nil
+}
+
+// GetTicketByRecordID returns a single ticket by its stable record_id.
+func GetTicketByRecordID(ctx context.Context, db *sql.DB, recordID string) (*Ticket, error) {
+	rows, err := db.QueryContext(ctx, ticketReadSQL+` WHERE t.record_id = ? AND t.deleted_at IS NULL`, recordID)
+	if err != nil {
+		return nil, fmt.Errorf("repo: get ticket record %s: %w", recordID, err)
+	}
+	defer func() { _ = rows.Close() }()
+	ts, err := scanTickets(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(ts) == 0 {
+		return nil, nil
+	}
+	return &ts[0], nil
 }
 
 // IncompleteChildrenError is returned by SetStatus when a ticket is moved
@@ -401,7 +508,7 @@ func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string,
 	}
 
 	if set.IsTerminal(newStatus) {
-		children, err := ChildrenOf(ctx, db, id)
+		children, err := ChildrenOf(ctx, db, t.RecordID)
 		if err != nil {
 			return err
 		}
@@ -423,19 +530,19 @@ func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string,
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE tickets SET status = ?, updated_at = datetime('now') WHERE id = ?
-	`, newStatus, id); err != nil {
+		UPDATE tickets SET status = ?, updated_at = datetime('now') WHERE record_id = ?
+	`, newStatus, t.RecordID); err != nil {
 		return fmt.Errorf("repo: update status: %w", err)
 	}
-	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+	if err := planning.RehashTicket(ctx, tx, t.RecordID); err != nil {
 		return err
 	}
 
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+		INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
 			created_at, updated_at)
 		VALUES (?, 'status', ?, ?, ?, datetime('now'), datetime('now'))
-	`, id, t.Status, newStatus, nullIfEmpty(changedBy))
+	`, t.RecordID, t.Status, newStatus, nullIfEmpty(changedBy))
 	if err != nil {
 		return fmt.Errorf("repo: record history: %w", err)
 	}
@@ -468,19 +575,19 @@ func Assign(ctx context.Context, db *sql.DB, id, agent, changedBy string) error 
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE tickets SET assigned_to = ?, updated_at = datetime('now') WHERE id = ?
-	`, agent, id); err != nil {
+		UPDATE tickets SET assigned_to = ?, updated_at = datetime('now') WHERE record_id = ?
+	`, agent, t.RecordID); err != nil {
 		return fmt.Errorf("repo: update assigned_to: %w", err)
 	}
-	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+	if err := planning.RehashTicket(ctx, tx, t.RecordID); err != nil {
 		return err
 	}
 
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+		INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
 			created_at, updated_at)
 		VALUES (?, 'assigned_to', ?, ?, ?, datetime('now'), datetime('now'))
-	`, id, nullIfEmpty(oldVal), agent, nullIfEmpty(changedBy))
+	`, t.RecordID, nullIfEmpty(oldVal), agent, nullIfEmpty(changedBy))
 	if err != nil {
 		return fmt.Errorf("repo: record assign history: %w", err)
 	}
@@ -511,6 +618,7 @@ func SetParent(ctx context.Context, db *sql.DB, id, parentID, changedBy string) 
 		return nil
 	}
 
+	var parentRecID string
 	if parentID != "" {
 		if parentID == id {
 			return fmt.Errorf("repo: ticket %s cannot be its own parent", id)
@@ -522,6 +630,7 @@ func SetParent(ctx context.Context, db *sql.DB, id, parentID, changedBy string) 
 		if p == nil {
 			return fmt.Errorf("repo: parent ticket %s not found", parentID)
 		}
+		parentRecID = p.RecordID
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
@@ -531,19 +640,19 @@ func SetParent(ctx context.Context, db *sql.DB, id, parentID, changedBy string) 
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE tickets SET parent_id = ?, updated_at = datetime('now') WHERE id = ?
-	`, nullIfEmpty(parentID), id); err != nil {
-		return fmt.Errorf("repo: update parent_id: %w", err)
+		UPDATE tickets SET parent_record_id = ?, updated_at = datetime('now') WHERE record_id = ?
+	`, nullIfEmpty(parentRecID), t.RecordID); err != nil {
+		return fmt.Errorf("repo: update parent_record_id: %w", err)
 	}
-	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+	if err := planning.RehashTicket(ctx, tx, t.RecordID); err != nil {
 		return err
 	}
 
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+		INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
 			created_at, updated_at)
 		VALUES (?, 'parent_id', ?, ?, ?, datetime('now'), datetime('now'))
-	`, id, nullIfEmpty(oldVal), nullIfEmpty(parentID), nullIfEmpty(changedBy))
+	`, t.RecordID, nullIfEmpty(oldVal), nullIfEmpty(parentID), nullIfEmpty(changedBy))
 	if err != nil {
 		return fmt.Errorf("repo: record setparent history: %w", err)
 	}
@@ -561,18 +670,26 @@ type BlockerInfo struct {
 	Status string `json:"status"`
 }
 
-// BlockersOf returns tickets that block the given ticket.
+// BlockersOf returns tickets that block the given ticket (by its label).
 // Soft-deleted blockers and soft-deleted dep rows are excluded.
 func BlockersOf(ctx context.Context, db *sql.DB, id string) ([]BlockerInfo, error) {
+	recID, err := resolveRecordID(ctx, db, id)
+	if err != nil {
+		return nil, err
+	}
+	if recID == "" {
+		return nil, nil
+	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT t.id, t.title, t.status
+		SELECT m.ticket_id, t.title, t.status
 		FROM ticket_deps d
-		JOIN tickets t ON t.id = d.blocker_id
-		WHERE d.blocked_id = ?
+		JOIN tickets t ON t.record_id = d.blocker_record_id
+		JOIN ticket_idmap m ON m.record_id = t.record_id AND m.deleted_at IS NULL
+		WHERE d.blocked_record_id = ?
 		  AND d.deleted_at IS NULL
 		  AND t.deleted_at IS NULL
-		ORDER BY CAST(SUBSTR(t.id, 3) AS INTEGER)
-	`, id)
+		ORDER BY CAST(SUBSTR(m.ticket_id, 3) AS INTEGER)
+	`, recID)
 	if err != nil {
 		return nil, fmt.Errorf("repo: blockers of %s: %w", id, err)
 	}
@@ -589,17 +706,19 @@ func BlockersOf(ctx context.Context, db *sql.DB, id string) ([]BlockerInfo, erro
 	return result, rows.Err()
 }
 
-// ChildrenOf returns direct children of a ticket. Soft-deleted
-// children are excluded.
-func ChildrenOf(ctx context.Context, db *sql.DB, parentID string) ([]TicketSummary, error) {
+// ChildrenOf returns the direct children of a ticket, keyed by the
+// parent's record_id. Soft-deleted children are excluded. Summaries carry
+// the child's friendly label as ID.
+func ChildrenOf(ctx context.Context, db *sql.DB, parentRecordID string) ([]TicketSummary, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, type, title, status, priority
-		FROM tickets
-		WHERE parent_id = ? AND deleted_at IS NULL
-		ORDER BY CAST(SUBSTR(id, 3) AS INTEGER)
-	`, parentID)
+		SELECT m.ticket_id, t.type, t.title, t.status, t.priority
+		FROM tickets t
+		JOIN ticket_idmap m ON m.record_id = t.record_id AND m.deleted_at IS NULL
+		WHERE t.parent_record_id = ? AND t.deleted_at IS NULL
+		ORDER BY CAST(SUBSTR(m.ticket_id, 3) AS INTEGER)
+	`, parentRecordID)
 	if err != nil {
-		return nil, fmt.Errorf("repo: children of %s: %w", parentID, err)
+		return nil, fmt.Errorf("repo: children of %s: %w", parentRecordID, err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -622,42 +741,52 @@ const maxTreeDepth = 1 << 20
 
 // Descendant is a ticket in a subtree, carrying the parent link and
 // depth (1 = direct child of the root) needed to reassemble nesting.
+// ID/ParentID are friendly labels; RecordID is the stable identity.
 type Descendant struct {
 	TicketSummary
+	RecordID string `json:"record_id"`
 	ParentID string `json:"parent_id"`
 	Depth    int    `json:"depth"`
 }
 
-// descendantsCTE returns every live descendant of a root ticket with
-// its depth (1 = direct child) and parent link, bounded to maxDepth
-// levels. It is the shared primitive behind `ticket show --tree`
-// (nested) and `ticket list --under` (flat filter). Rows are ordered
-// parent-before-child (by depth) so callers can assemble nesting in a
-// single pass.
+// descendantsCTE walks the parent_record_id chain from a root record_id,
+// then joins the idmap to present friendly labels. It is the shared
+// primitive behind `ticket show --tree` (nested) and `ticket list --under`
+// (flat filter). Rows are ordered parent-before-child (by depth).
 const descendantsCTE = `
-WITH RECURSIVE subtree(id, type, title, status, priority, parent_id, depth) AS (
-	SELECT id, type, title, status, priority, parent_id, 1
+WITH RECURSIVE subtree(record_id, depth) AS (
+	SELECT record_id, 1
 	FROM tickets
-	WHERE parent_id = ? AND deleted_at IS NULL
+	WHERE parent_record_id = ? AND deleted_at IS NULL
 	UNION ALL
-	SELECT t.id, t.type, t.title, t.status, t.priority, t.parent_id, s.depth + 1
+	SELECT t.record_id, s.depth + 1
 	FROM tickets t
-	JOIN subtree s ON t.parent_id = s.id
+	JOIN subtree s ON t.parent_record_id = s.record_id
 	WHERE t.deleted_at IS NULL AND s.depth < ?
 )
-SELECT id, type, title, status, priority, parent_id, depth
-FROM subtree
-ORDER BY depth, CAST(SUBSTR(id, 3) AS INTEGER)`
+SELECT m.ticket_id, t.record_id, t.type, t.title, t.status, t.priority, pm.ticket_id, s.depth
+FROM subtree s
+JOIN tickets t ON t.record_id = s.record_id
+JOIN ticket_idmap m ON m.record_id = t.record_id AND m.deleted_at IS NULL
+LEFT JOIN ticket_idmap pm ON pm.record_id = t.parent_record_id AND pm.deleted_at IS NULL
+ORDER BY s.depth, CAST(SUBSTR(m.ticket_id, 3) AS INTEGER)`
 
-// DescendantsOf returns the flat list of descendants of rootID, ordered
-// parent-before-child. maxDepth <= 0 means unbounded (1 = direct
+// DescendantsOf returns the flat list of descendants of rootID (a label),
+// ordered parent-before-child. maxDepth <= 0 means unbounded (1 = direct
 // children only, 2 = children + grandchildren, …). The root ticket is
 // not included. An unknown or childless root yields an empty slice.
 func DescendantsOf(ctx context.Context, db *sql.DB, rootID string, maxDepth int) ([]Descendant, error) {
 	if maxDepth <= 0 {
 		maxDepth = maxTreeDepth
 	}
-	rows, err := db.QueryContext(ctx, descendantsCTE, rootID, maxDepth)
+	rootRecID, err := resolveRecordID(ctx, db, rootID)
+	if err != nil {
+		return nil, err
+	}
+	if rootRecID == "" {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx, descendantsCTE, rootRecID, maxDepth)
 	if err != nil {
 		return nil, fmt.Errorf("repo: descendants of %s: %w", rootID, err)
 	}
@@ -667,7 +796,7 @@ func DescendantsOf(ctx context.Context, db *sql.DB, rootID string, maxDepth int)
 	for rows.Next() {
 		var d Descendant
 		var parent sql.NullString
-		if err := rows.Scan(&d.ID, &d.Type, &d.Title, &d.Status, &d.Priority, &parent, &d.Depth); err != nil {
+		if err := rows.Scan(&d.ID, &d.RecordID, &d.Type, &d.Title, &d.Status, &d.Priority, &parent, &d.Depth); err != nil {
 			return nil, fmt.Errorf("repo: scan descendant: %w", err)
 		}
 		d.ParentID = parent.String
@@ -752,20 +881,17 @@ func WhatNext(ctx context.Context, db *sql.DB, ss ...planning.StatusSet) (*Ticke
 	// statuses every candidate is the ready lane → constant rank.
 	rankExpr := "0"
 	if activeIn, activeArgs := statusInClause(active); activeIn != "" {
-		rankExpr = "CASE WHEN status IN (" + activeIn + ") THEN 0 ELSE 1 END"
+		rankExpr = "CASE WHEN t.status IN (" + activeIn + ") THEN 0 ELSE 1 END"
 		args = append(args, activeArgs...)
 	}
 
 	//nolint:gosec // G202: candIn/unblocked/rankExpr are "?"-placeholder fragments and
 	// the trusted priorityRank const; every status value binds via args.
-	query := `
-		SELECT id, type, parent_id, title, description, status, priority,
-			assigned_to, team, decision_ref, created_at, updated_at
-		FROM tickets
-		WHERE status IN (` + candIn + `) AND deleted_at IS NULL` +
+	query := ticketReadSQL + `
+		WHERE t.status IN (` + candIn + `) AND t.deleted_at IS NULL` +
 		unblocked + `
 		ORDER BY ` + rankExpr + `, ` + priorityRank + `,
-			CAST(SUBSTR(id, 3) AS INTEGER)
+			CAST(SUBSTR(m.ticket_id, 3) AS INTEGER)
 		LIMIT 1
 	`
 	rows, err := db.QueryContext(ctx, query, args...)
@@ -795,13 +921,10 @@ func NextReview(ctx context.Context, db *sql.DB, ss ...planning.StatusSet) (*Tic
 	}
 	//nolint:gosec // G202: reviewIn is a "?"-placeholder fragment and priorityRank is a
 	// trusted const; every status value binds via args.
-	query := `
-		SELECT id, type, parent_id, title, description, status, priority,
-			assigned_to, team, decision_ref, created_at, updated_at
-		FROM tickets
-		WHERE status IN (` + reviewIn + `) AND deleted_at IS NULL
+	query := ticketReadSQL + `
+		WHERE t.status IN (` + reviewIn + `) AND t.deleted_at IS NULL
 		ORDER BY ` + priorityRank + `,
-			CAST(SUBSTR(id, 3) AS INTEGER)
+			CAST(SUBSTR(m.ticket_id, 3) AS INTEGER)
 		LIMIT 1
 	`
 	rows, err := db.QueryContext(ctx, query, args...)
@@ -926,7 +1049,7 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, f UpdateTicketFiel
 		args = append(args, c.colArg)
 	}
 	setParts = append(setParts, "updated_at = datetime('now')")
-	args = append(args, id)
+	args = append(args, t.RecordID)
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -934,20 +1057,20 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, f UpdateTicketFiel
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	stmt := fmt.Sprintf("UPDATE tickets SET %s WHERE id = ?", strings.Join(setParts, ", ")) //nolint:gosec // G201: setParts items are constructed from a closed-set whitelist of column names + literal "= ?", values bind via ExecContext
+	stmt := fmt.Sprintf("UPDATE tickets SET %s WHERE record_id = ?", strings.Join(setParts, ", ")) //nolint:gosec // G201: setParts items are constructed from a closed-set whitelist of column names + literal "= ?", values bind via ExecContext
 	if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
 		return fmt.Errorf("repo: update ticket: %w", err)
 	}
-	if err := planning.RehashTicket(ctx, tx, id); err != nil {
+	if err := planning.RehashTicket(ctx, tx, t.RecordID); err != nil {
 		return err
 	}
 
 	for _, c := range changes {
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by,
+			INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
 				created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-		`, id, c.field, nullIfEmpty(c.old), nullIfEmpty(c.new), nullIfEmpty(changedBy))
+		`, t.RecordID, c.field, nullIfEmpty(c.old), nullIfEmpty(c.new), nullIfEmpty(changedBy))
 		if err != nil {
 			return fmt.Errorf("repo: record update history: %w", err)
 		}
@@ -1000,7 +1123,7 @@ func scanTickets(rows *sql.Rows) ([]Ticket, error) {
 	var result []Ticket
 	for rows.Next() {
 		var t Ticket
-		if err := rows.Scan(&t.ID, &t.Type, &t.ParentID, &t.Title, &t.Description,
+		if err := rows.Scan(&t.ID, &t.RecordID, &t.Type, &t.ParentID, &t.Title, &t.Description,
 			&t.Status, &t.Priority, &t.AssignedTo, &t.Team, &t.DecisionRef,
 			&t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("repo: scan ticket: %w", err)

@@ -70,7 +70,7 @@ func TestRebuild_RemovesRowsAbsentFromChangelog(t *testing.T) {
 	// be present (replayed from source changelog).
 	var t99 int
 	if err := dstDB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM tickets WHERE id = 'T-99'`,
+		`SELECT COUNT(*) FROM tickets WHERE record_id = 'T-99'`,
 	).Scan(&t99); err != nil {
 		t.Fatalf("count T-99: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestRebuild_RemovesRowsAbsentFromChangelog(t *testing.T) {
 	}
 	var t1 int
 	if err := dstDB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM tickets WHERE id = 'T-1'`,
+		`SELECT COUNT(*) FROM tickets WHERE record_id = 'T-1'`,
 	).Scan(&t1); err != nil {
 		t.Fatalf("count T-1: %v", err)
 	}

@@ -32,33 +32,59 @@ func nullStrPtr(s sql.NullString) *string {
 	return &v
 }
 
-// RehashTicket recomputes the canonical hash for tickets.id = id and
-// writes it to the hash + canonical_version columns.
-func RehashTicket(ctx context.Context, e Execer, id string) error {
+// RehashTicket recomputes the canonical hash for tickets.record_id =
+// recordID and writes it to the hash + canonical_version columns.
+func RehashTicket(ctx context.Context, e Execer, recordID string) error {
 	var (
-		ttype, title, status, priority, createdAt, updatedAt          string
-		parentID, description, assignedTo, team, decisionRef, deleted sql.NullString
+		ttype, title, status, priority, createdAt, updatedAt             string
+		parentRecID, description, assignedTo, team, decisionRef, deleted sql.NullString
 	)
 	if err := e.QueryRowContext(ctx, `
-		SELECT type, parent_id, title, description, status, priority,
+		SELECT type, parent_record_id, title, description, status, priority,
 		       assigned_to, team, decision_ref, created_at, updated_at, deleted_at
-		FROM tickets WHERE id = ?
-	`, id).Scan(&ttype, &parentID, &title, &description, &status, &priority,
+		FROM tickets WHERE record_id = ?
+	`, recordID).Scan(&ttype, &parentRecID, &title, &description, &status, &priority,
 		&assignedTo, &team, &decisionRef, &createdAt, &updatedAt, &deleted); err != nil {
-		return fmt.Errorf("planning: rehash ticket %s: select: %w", id, err)
+		return fmt.Errorf("planning: rehash ticket %s: select: %w", recordID, err)
 	}
 	h := Hash([]any{
 		CanonicalVersion,
-		id, ttype, nullStrPtr(parentID), title, nullStrPtr(description),
+		recordID, ttype, nullStrPtr(parentRecID), title, nullStrPtr(description),
 		status, priority,
 		nullStrPtr(assignedTo), nullStrPtr(team), nullStrPtr(decisionRef),
 		createdAt, updatedAt, nullStrPtr(deleted),
 	})
 	if _, err := e.ExecContext(ctx,
-		`UPDATE tickets SET hash = ?, canonical_version = ? WHERE id = ?`,
-		h, CanonicalVersion, id,
+		`UPDATE tickets SET hash = ?, canonical_version = ? WHERE record_id = ?`,
+		h, CanonicalVersion, recordID,
 	); err != nil {
-		return fmt.Errorf("planning: rehash ticket %s: update: %w", id, err)
+		return fmt.Errorf("planning: rehash ticket %s: update: %w", recordID, err)
+	}
+	return nil
+}
+
+// RehashTicketIDMap recomputes the canonical hash for the ticket_idmap row
+// keyed by record_id (the record_id ↔ friendly ticket_id mapping).
+func RehashTicketIDMap(ctx context.Context, e Execer, recordID string) error {
+	var (
+		ticketID, createdAt, updatedAt string
+		deleted                        sql.NullString
+	)
+	if err := e.QueryRowContext(ctx, `
+		SELECT ticket_id, created_at, updated_at, deleted_at
+		FROM ticket_idmap WHERE record_id = ?
+	`, recordID).Scan(&ticketID, &createdAt, &updatedAt, &deleted); err != nil {
+		return fmt.Errorf("planning: rehash ticket_idmap %s: select: %w", recordID, err)
+	}
+	h := Hash([]any{
+		CanonicalVersion, recordID, ticketID,
+		createdAt, updatedAt, nullStrPtr(deleted),
+	})
+	if _, err := e.ExecContext(ctx,
+		`UPDATE ticket_idmap SET hash = ?, canonical_version = ? WHERE record_id = ?`,
+		h, CanonicalVersion, recordID,
+	); err != nil {
+		return fmt.Errorf("planning: rehash ticket_idmap %s: update: %w", recordID, err)
 	}
 	return nil
 }
@@ -124,56 +150,56 @@ func RehashDecisionRef(ctx context.Context, e Execer, sourceID, targetID, refTyp
 
 // RehashTicketDep recomputes the canonical hash for the
 // (blocker_id, blocked_id) ticket_deps row.
-func RehashTicketDep(ctx context.Context, e Execer, blockerID, blockedID string) error {
+func RehashTicketDep(ctx context.Context, e Execer, blockerRecID, blockedRecID string) error {
 	var (
 		createdAt, updatedAt string
 		deleted              sql.NullString
 	)
 	if err := e.QueryRowContext(ctx, `
 		SELECT created_at, updated_at, deleted_at FROM ticket_deps
-		WHERE blocker_id = ? AND blocked_id = ?
-	`, blockerID, blockedID).Scan(&createdAt, &updatedAt, &deleted); err != nil {
+		WHERE blocker_record_id = ? AND blocked_record_id = ?
+	`, blockerRecID, blockedRecID).Scan(&createdAt, &updatedAt, &deleted); err != nil {
 		return fmt.Errorf("planning: rehash ticket_dep %s→%s: select: %w",
-			blockerID, blockedID, err)
+			blockerRecID, blockedRecID, err)
 	}
 	h := Hash([]any{
-		CanonicalVersion, blockerID, blockedID,
+		CanonicalVersion, blockerRecID, blockedRecID,
 		createdAt, updatedAt, nullStrPtr(deleted),
 	})
 	if _, err := e.ExecContext(ctx, `
 		UPDATE ticket_deps SET hash = ?, canonical_version = ?
-		WHERE blocker_id = ? AND blocked_id = ?
-	`, h, CanonicalVersion, blockerID, blockedID); err != nil {
+		WHERE blocker_record_id = ? AND blocked_record_id = ?
+	`, h, CanonicalVersion, blockerRecID, blockedRecID); err != nil {
 		return fmt.Errorf("planning: rehash ticket_dep %s→%s: update: %w",
-			blockerID, blockedID, err)
+			blockerRecID, blockedRecID, err)
 	}
 	return nil
 }
 
 // RehashTicketLabel recomputes the canonical hash for the
-// (ticket_id, label) ticket_labels row.
-func RehashTicketLabel(ctx context.Context, e Execer, ticketID, label string) error {
+// (ticket_record_id, label) ticket_labels row.
+func RehashTicketLabel(ctx context.Context, e Execer, ticketRecID, label string) error {
 	var (
 		createdAt, updatedAt string
 		deleted              sql.NullString
 	)
 	if err := e.QueryRowContext(ctx, `
 		SELECT created_at, updated_at, deleted_at FROM ticket_labels
-		WHERE ticket_id = ? AND label = ?
-	`, ticketID, label).Scan(&createdAt, &updatedAt, &deleted); err != nil {
+		WHERE ticket_record_id = ? AND label = ?
+	`, ticketRecID, label).Scan(&createdAt, &updatedAt, &deleted); err != nil {
 		return fmt.Errorf("planning: rehash ticket_label %s/%s: select: %w",
-			ticketID, label, err)
+			ticketRecID, label, err)
 	}
 	h := Hash([]any{
-		CanonicalVersion, ticketID, label,
+		CanonicalVersion, ticketRecID, label,
 		createdAt, updatedAt, nullStrPtr(deleted),
 	})
 	if _, err := e.ExecContext(ctx, `
 		UPDATE ticket_labels SET hash = ?, canonical_version = ?
-		WHERE ticket_id = ? AND label = ?
-	`, h, CanonicalVersion, ticketID, label); err != nil {
+		WHERE ticket_record_id = ? AND label = ?
+	`, h, CanonicalVersion, ticketRecID, label); err != nil {
 		return fmt.Errorf("planning: rehash ticket_label %s/%s: update: %w",
-			ticketID, label, err)
+			ticketRecID, label, err)
 	}
 	return nil
 }
@@ -187,7 +213,7 @@ func RehashTicketHistory(ctx context.Context, e Execer, rowid int64) error {
 		oldVal, newVal, changedBy, deleted               sql.NullString
 	)
 	if err := e.QueryRowContext(ctx, `
-		SELECT ticket_id, field, old_value, new_value, changed_by,
+		SELECT ticket_record_id, field, old_value, new_value, changed_by,
 		       changed_at, created_at, updated_at, deleted_at
 		FROM ticket_history WHERE rowid = ?
 	`, rowid).Scan(&ticketID, &field, &oldVal, &newVal, &changedBy,

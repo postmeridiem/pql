@@ -337,7 +337,7 @@ func TestUpdateTicket(t *testing.T) {
 	// History row per changed field.
 	var n int
 	if err := db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM ticket_history WHERE ticket_id = ? AND changed_by = 'tester'`,
+		`SELECT COUNT(*) FROM ticket_history WHERE ticket_record_id = (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?) AND changed_by = 'tester'`,
 		id).Scan(&n); err != nil {
 		t.Fatalf("count history: %v", err)
 	}
@@ -382,11 +382,22 @@ func TestNextTicketID_Increments(t *testing.T) {
 	}
 }
 
+// recordOf resolves a friendly label to its record_id (works even after the
+// ticket row is soft-deleted, since the idmap row persists).
+func recordOf(t *testing.T, db *sql.DB, label string) string {
+	t.Helper()
+	var rec string
+	if err := db.QueryRow(`SELECT record_id FROM ticket_idmap WHERE ticket_id = ?`, label).Scan(&rec); err != nil {
+		t.Fatalf("recordOf %s: %v", label, err)
+	}
+	return rec
+}
+
 // readHash returns the stored hash + canonical_version for tickets.id = id.
 func readHash(t *testing.T, db *sql.DB, id string) (hash string, canonicalVersion int) {
 	t.Helper()
 	if err := db.QueryRow(
-		`SELECT hash, canonical_version FROM tickets WHERE id = ?`, id,
+		`SELECT hash, canonical_version FROM tickets WHERE record_id = (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?)`, id,
 	).Scan(&hash, &canonicalVersion); err != nil {
 		t.Fatalf("read hash %s: %v", id, err)
 	}
@@ -404,8 +415,8 @@ func TestCreateTicket_PopulatesHash(t *testing.T) {
 	if h == "" {
 		t.Errorf("hash empty after create")
 	}
-	if v != 1 {
-		t.Errorf("canonical_version = %d, want 1", v)
+	if v != planning.CanonicalVersion {
+		t.Errorf("canonical_version = %d, want %d", v, planning.CanonicalVersion)
 	}
 }
 
@@ -478,7 +489,7 @@ func TestSoftDelete_TicketHiddenFromReads(t *testing.T) {
 
 	// Soft-delete + rehash to keep hash current.
 	if _, err := db.ExecContext(ctx,
-		`UPDATE tickets SET deleted_at = datetime('now') WHERE id = ?`, id); err != nil {
+		`UPDATE tickets SET deleted_at = datetime('now') WHERE record_id = (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?)`, id); err != nil {
 		t.Fatalf("soft delete: %v", err)
 	}
 
@@ -500,16 +511,16 @@ func TestSoftDelete_ChangesHash(t *testing.T) {
 	before, _ := readHash(t, db, id)
 
 	if _, err := db.ExecContext(ctx,
-		`UPDATE tickets SET deleted_at = datetime('now') WHERE id = ?`, id); err != nil {
+		`UPDATE tickets SET deleted_at = datetime('now') WHERE record_id = (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?)`, id); err != nil {
 		t.Fatalf("soft delete: %v", err)
 	}
-	if err := planning.RehashTicket(ctx, db, id); err != nil {
+	if err := planning.RehashTicket(ctx, db, recordOf(t, db, id)); err != nil {
 		t.Fatalf("rehash after soft delete: %v", err)
 	}
 
 	// Re-read hash directly (GetTicket would filter out the deleted row).
 	var after string
-	if err := db.QueryRow(`SELECT hash FROM tickets WHERE id = ?`, id).Scan(&after); err != nil {
+	if err := db.QueryRow(`SELECT hash FROM tickets WHERE record_id = (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?)`, id).Scan(&after); err != nil {
 		t.Fatalf("read post-delete hash: %v", err)
 	}
 	if before == after {
@@ -595,7 +606,7 @@ func TestDescendantsOf_SoftDeletedExcluded(t *testing.T) {
 
 	// Soft-delete T-2; its subtree (T-4, T-5) detaches too since the
 	// recursion can't descend through a removed node.
-	if _, err := db.ExecContext(ctx, `UPDATE tickets SET deleted_at = datetime('now') WHERE id = 'T-2'`); err != nil {
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET deleted_at = datetime('now') WHERE record_id = (SELECT record_id FROM ticket_idmap WHERE ticket_id = 'T-2')`); err != nil {
 		t.Fatalf("soft delete: %v", err)
 	}
 	ds, err := DescendantsOf(ctx, db, "T-1", 0)
@@ -690,8 +701,8 @@ func TestListTickets_Unblocked(t *testing.T) {
 	// T-3 blocked by T-2 (open) → blocked. T-5 blocked by T-3 → also.
 	for _, dep := range [][2]string{{"T-2", "T-3"}, {"T-3", "T-5"}} {
 		if _, err := db.ExecContext(ctx, `
-			INSERT INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
-			VALUES (?, ?, datetime('now'), datetime('now'))
+			INSERT INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at)
+			VALUES ((SELECT record_id FROM ticket_idmap WHERE ticket_id = ?), (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?), datetime('now'), datetime('now'))
 		`, dep[0], dep[1]); err != nil {
 			t.Fatalf("insert dep %v: %v", dep, err)
 		}
@@ -764,7 +775,7 @@ func TestAppendDescription(t *testing.T) {
 
 	// History records each description change.
 	var n int
-	_ = db.QueryRow(`SELECT COUNT(*) FROM ticket_history WHERE ticket_id = ? AND field = 'description'`, id).Scan(&n)
+	_ = db.QueryRow(`SELECT COUNT(*) FROM ticket_history WHERE ticket_record_id = (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?) AND field = 'description'`, id).Scan(&n)
 	if n != 2 {
 		t.Errorf("description history rows = %d, want 2", n)
 	}
@@ -779,8 +790,8 @@ func TestWhatNext_ExcludesBlocked(t *testing.T) {
 	_ = SetStatus(ctx, db, blocked, "ready", "")
 	blocker, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "the blocker"})
 	if _, err := db.ExecContext(ctx, `
-		INSERT INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at)
-		VALUES (?, ?, datetime('now'), datetime('now'))
+		INSERT INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at)
+		VALUES ((SELECT record_id FROM ticket_idmap WHERE ticket_id = ?), (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?), datetime('now'), datetime('now'))
 	`, blocker, blocked); err != nil {
 		t.Fatalf("insert dep: %v", err)
 	}

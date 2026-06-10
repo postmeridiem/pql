@@ -51,13 +51,14 @@ func TestImport_RoundTripWithExport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Import: %v", err)
 	}
-	if res.StatementsRun != 2 {
-		t.Errorf("statements = %d, want 2", res.StatementsRun)
+	// 2 tickets + 2 idmap rows (D-26).
+	if res.StatementsRun != 4 {
+		t.Errorf("statements = %d, want 4", res.StatementsRun)
 	}
 	for _, id := range []string{"T-1", "T-2"} {
 		var got string
 		if err := dstDB.QueryRowContext(ctx,
-			`SELECT id FROM tickets WHERE id = ?`, id,
+			`SELECT record_id FROM tickets WHERE record_id = ?`, id,
 		).Scan(&got); err != nil {
 			t.Errorf("ticket %s missing after import: %v", id, err)
 		}
@@ -169,7 +170,7 @@ func TestImport_LWWGuardPreventsStaleOverwrite(t *testing.T) {
 	// simulates a replica that already saw a later edit.
 	dstVault, dstDB := setupVault(t)
 	if _, err := dstDB.ExecContext(ctx, `
-		INSERT INTO tickets (id, type, title, status, priority, created_at, updated_at)
+		INSERT INTO tickets (record_id, type, title, status, priority, created_at, updated_at)
 		VALUES ('T-1', 'task', 'newer-title', 'done', 'high',
 		        '2025-05-01 10:00:00', '2025-05-01 10:00:00')
 	`); err != nil {
@@ -186,7 +187,7 @@ func TestImport_LWWGuardPreventsStaleOverwrite(t *testing.T) {
 
 	var title, status string
 	if err := dstDB.QueryRowContext(ctx,
-		`SELECT title, status FROM tickets WHERE id = 'T-1'`,
+		`SELECT title, status FROM tickets WHERE record_id = 'T-1'`,
 	).Scan(&title, &status); err != nil {
 		t.Fatalf("read: %v", err)
 	}

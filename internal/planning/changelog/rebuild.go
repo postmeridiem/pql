@@ -25,6 +25,7 @@ var replicatedTables = []string{
 	"ticket_history",
 	"ticket_labels",
 	"ticket_deps",
+	"ticket_idmap",
 	"tickets",
 }
 

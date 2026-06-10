@@ -80,7 +80,7 @@ func TestSetStatus_SoftDeletedChildIgnored(t *testing.T) {
 	parent, _ := CreateTicket(ctx, db, NewTicketOpts{Type: "epic", Title: "epic"})
 	child := mkChild(ctx, t, db, "task", "doomed", parent)
 	if _, err := db.ExecContext(ctx,
-		`UPDATE tickets SET deleted_at = datetime('now') WHERE id = ?`, child); err != nil {
+		`UPDATE tickets SET deleted_at = datetime('now') WHERE record_id = (SELECT record_id FROM ticket_idmap WHERE ticket_id = ?)`, child); err != nil {
 		t.Fatalf("soft delete: %v", err)
 	}
 	// The only child is soft-deleted, so it doesn't block the close.

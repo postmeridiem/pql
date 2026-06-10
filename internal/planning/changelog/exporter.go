@@ -199,9 +199,57 @@ type tableExporter func(ctx context.Context, db *sql.DB, since string, sink *fil
 
 var tableExporters = []tableExporter{
 	exportTickets,
+	exportTicketIDMap,
 	exportTicketDeps,
 	exportTicketLabels,
 	exportTicketHistory,
+}
+
+// exportTicketIDMap emits the record_id ↔ friendly ticket_id mapping
+// (D-26). ticket_id is mutable (relabel), so the LWW UPDATE carries it.
+func exportTicketIDMap(ctx context.Context, db *sql.DB, since string, sink *fileSink) (int, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT record_id, ticket_id,
+		       created_at, updated_at, deleted_at, hash, canonical_version
+		FROM ticket_idmap
+		WHERE updated_at >= ?
+		ORDER BY updated_at, hash
+	`, since)
+	if err != nil {
+		return 0, fmt.Errorf("changelog: query ticket_idmap: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	n := 0
+	for rows.Next() {
+		var (
+			recordID, ticketID, createdAt, updatedAt string
+			deletedAt, hash                          sql.NullString
+			canonicalVersion                         sql.NullInt64
+		)
+		if err := rows.Scan(&recordID, &ticketID, &createdAt, &updatedAt,
+			&deletedAt, &hash, &canonicalVersion); err != nil {
+			return n, fmt.Errorf("changelog: scan ticket_idmap: %w", err)
+		}
+		ym, err := monthOf(updatedAt)
+		if err != nil {
+			return n, err
+		}
+		line := fmt.Sprintf(
+			`INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(record_id) DO UPDATE SET ticket_id=excluded.ticket_id, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > ticket_idmap.updated_at OR (excluded.updated_at = ticket_idmap.updated_at AND excluded.hash > ticket_idmap.hash);`,
+			sqlStr(recordID), sqlStr(ticketID),
+			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
+			sqlNullStr(hash), sqlNullInt(canonicalVersion),
+		)
+		wrote, err := sink.appendLine("ticket_idmap", ym, line)
+		if err != nil {
+			return n, err
+		}
+		if wrote {
+			n++
+		}
+	}
+	return n, rows.Err()
 }
 
 // exportTickets emits one INSERT … ON CONFLICT(id) DO UPDATE … WHERE …
@@ -209,7 +257,7 @@ var tableExporters = []tableExporter{
 // LWW guard makes the line idempotent under replay (D-16).
 func exportTickets(ctx context.Context, db *sql.DB, since string, sink *fileSink) (int, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, type, parent_id, title, description, status, priority,
+		SELECT record_id, type, parent_record_id, title, description, status, priority,
 		       assigned_to, team, decision_ref,
 		       created_at, updated_at, deleted_at, hash, canonical_version
 		FROM tickets
@@ -224,12 +272,12 @@ func exportTickets(ctx context.Context, db *sql.DB, since string, sink *fileSink
 	n := 0
 	for rows.Next() {
 		var (
-			id, typ, title, status, priority, createdAt, updatedAt           string
-			parentID, description, assignedTo, team, decisionRef, deletedAt  sql.NullString
-			hash                                                             sql.NullString
-			canonicalVersion                                                 sql.NullInt64
+			recordID, typ, title, status, priority, createdAt, updatedAt       string
+			parentRecID, description, assignedTo, team, decisionRef, deletedAt sql.NullString
+			hash                                                               sql.NullString
+			canonicalVersion                                                   sql.NullInt64
 		)
-		if err := rows.Scan(&id, &typ, &parentID, &title, &description,
+		if err := rows.Scan(&recordID, &typ, &parentRecID, &title, &description,
 			&status, &priority, &assignedTo, &team, &decisionRef,
 			&createdAt, &updatedAt, &deletedAt, &hash, &canonicalVersion); err != nil {
 			return n, fmt.Errorf("changelog: scan ticket: %w", err)
@@ -239,8 +287,8 @@ func exportTickets(ctx context.Context, db *sql.DB, since string, sink *fileSink
 			return n, err
 		}
 		line := fmt.Sprintf(
-			`INSERT INTO tickets (id, type, parent_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT(id) DO UPDATE SET type=excluded.type, parent_id=excluded.parent_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);`,
-			sqlStr(id), sqlStr(typ), sqlNullStr(parentID), sqlStr(title), sqlNullStr(description),
+			`INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);`,
+			sqlStr(recordID), sqlStr(typ), sqlNullStr(parentRecID), sqlStr(title), sqlNullStr(description),
 			sqlStr(status), sqlStr(priority),
 			sqlNullStr(assignedTo), sqlNullStr(team), sqlNullStr(decisionRef),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
@@ -259,7 +307,7 @@ func exportTickets(ctx context.Context, db *sql.DB, since string, sink *fileSink
 
 func exportTicketDeps(ctx context.Context, db *sql.DB, since string, sink *fileSink) (int, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT blocker_id, blocked_id,
+		SELECT blocker_record_id, blocked_record_id,
 		       created_at, updated_at, deleted_at, hash, canonical_version
 		FROM ticket_deps
 		WHERE updated_at >= ?
@@ -286,7 +334,7 @@ func exportTicketDeps(ctx context.Context, db *sql.DB, since string, sink *fileS
 			return n, err
 		}
 		line := fmt.Sprintf(
-			`INSERT INTO ticket_deps (blocker_id, blocked_id, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(blocker_id, blocked_id) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > ticket_deps.updated_at OR (excluded.updated_at = ticket_deps.updated_at AND excluded.hash > ticket_deps.hash);`,
+			`INSERT INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(blocker_record_id, blocked_record_id) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > ticket_deps.updated_at OR (excluded.updated_at = ticket_deps.updated_at AND excluded.hash > ticket_deps.hash);`,
 			sqlStr(blocker), sqlStr(blocked),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
@@ -304,7 +352,7 @@ func exportTicketDeps(ctx context.Context, db *sql.DB, since string, sink *fileS
 
 func exportTicketLabels(ctx context.Context, db *sql.DB, since string, sink *fileSink) (int, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT ticket_id, label,
+		SELECT ticket_record_id, label,
 		       created_at, updated_at, deleted_at, hash, canonical_version
 		FROM ticket_labels
 		WHERE updated_at >= ?
@@ -318,11 +366,11 @@ func exportTicketLabels(ctx context.Context, db *sql.DB, since string, sink *fil
 	n := 0
 	for rows.Next() {
 		var (
-			ticketID, label, createdAt, updatedAt string
-			deletedAt, hash                       sql.NullString
-			canonicalVersion                      sql.NullInt64
+			ticketRecID, label, createdAt, updatedAt string
+			deletedAt, hash                          sql.NullString
+			canonicalVersion                         sql.NullInt64
 		)
-		if err := rows.Scan(&ticketID, &label, &createdAt, &updatedAt,
+		if err := rows.Scan(&ticketRecID, &label, &createdAt, &updatedAt,
 			&deletedAt, &hash, &canonicalVersion); err != nil {
 			return n, fmt.Errorf("changelog: scan ticket_label: %w", err)
 		}
@@ -331,8 +379,8 @@ func exportTicketLabels(ctx context.Context, db *sql.DB, since string, sink *fil
 			return n, err
 		}
 		line := fmt.Sprintf(
-			`INSERT INTO ticket_labels (ticket_id, label, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(ticket_id, label) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > ticket_labels.updated_at OR (excluded.updated_at = ticket_labels.updated_at AND excluded.hash > ticket_labels.hash);`,
-			sqlStr(ticketID), sqlStr(label),
+			`INSERT INTO ticket_labels (ticket_record_id, label, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(ticket_record_id, label) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > ticket_labels.updated_at OR (excluded.updated_at = ticket_labels.updated_at AND excluded.hash > ticket_labels.hash);`,
+			sqlStr(ticketRecID), sqlStr(label),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
 		)
@@ -354,7 +402,7 @@ func exportTicketLabels(ctx context.Context, db *sql.DB, since string, sink *fil
 // mutate.
 func exportTicketHistory(ctx context.Context, db *sql.DB, since string, sink *fileSink) (int, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT ticket_id, field, old_value, new_value, changed_by,
+		SELECT ticket_record_id, field, old_value, new_value, changed_by,
 		       changed_at, created_at, updated_at, deleted_at,
 		       hash, canonical_version
 		FROM ticket_history
@@ -369,11 +417,11 @@ func exportTicketHistory(ctx context.Context, db *sql.DB, since string, sink *fi
 	n := 0
 	for rows.Next() {
 		var (
-			ticketID, field, changedAt, createdAt, updatedAt string
-			oldVal, newVal, changedBy, deletedAt, hash       sql.NullString
-			canonicalVersion                                 sql.NullInt64
+			ticketRecID, field, changedAt, createdAt, updatedAt string
+			oldVal, newVal, changedBy, deletedAt, hash          sql.NullString
+			canonicalVersion                                    sql.NullInt64
 		)
-		if err := rows.Scan(&ticketID, &field, &oldVal, &newVal, &changedBy,
+		if err := rows.Scan(&ticketRecID, &field, &oldVal, &newVal, &changedBy,
 			&changedAt, &createdAt, &updatedAt, &deletedAt,
 			&hash, &canonicalVersion); err != nil {
 			return n, fmt.Errorf("changelog: scan ticket_history: %w", err)
@@ -383,8 +431,8 @@ func exportTicketHistory(ctx context.Context, db *sql.DB, since string, sink *fi
 			return n, err
 		}
 		line := fmt.Sprintf(
-			`INSERT INTO ticket_history (ticket_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT(hash) DO NOTHING;`,
-			sqlStr(ticketID), sqlStr(field),
+			`INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT(hash) DO NOTHING;`,
+			sqlStr(ticketRecID), sqlStr(field),
 			sqlNullStr(oldVal), sqlNullStr(newVal), sqlNullStr(changedBy),
 			sqlStr(changedAt), sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),

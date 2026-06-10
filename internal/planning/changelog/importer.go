@@ -124,10 +124,9 @@ func Import(ctx context.Context, db *sql.DB, vaultPath string) (*ImportResult, e
 		}
 	}
 
-	// Collision detection scans the full tickets changelog (independent of
-	// the replay cutoff) so a colliding id is surfaced even on an
-	// incremental import whose new file is only one half of the collision.
-	collisions, err := detectTicketCollisions(root)
+	// Duplicate-label detection runs against the rebuilt ticket_idmap so it
+	// reflects LWW and any prior relabels (D-26).
+	collisions, err := detectTicketCollisions(ctx, db)
 	if err != nil {
 		return nil, err
 	}

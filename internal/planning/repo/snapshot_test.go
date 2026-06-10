@@ -17,15 +17,15 @@ func TestImport_ForwardParentReferences(t *testing.T) {
 
 	parentID := "T-6"
 	snap := &Snapshot{
-		// T-1 references T-6, but T-6 appears later in the array.
+		// T-1 references parent label T-6, but T-6 appears later in the array.
 		Tickets: []Ticket{
 			{
-				ID: "T-1", Type: "task", ParentID: &parentID,
+				ID: "T-1", RecordID: "rec-1", Type: "task", ParentID: &parentID,
 				Title: "child first", Status: "backlog", Priority: "medium",
 				CreatedAt: "2025-01-01 00:00:00", UpdatedAt: "2025-01-01 00:00:00",
 			},
 			{
-				ID: "T-6", Type: "task",
+				ID: "T-6", RecordID: "rec-6", Type: "task",
 				Title: "parent later", Status: "backlog", Priority: "medium",
 				CreatedAt: "2025-01-01 00:00:00", UpdatedAt: "2025-01-01 00:00:00",
 			},
@@ -46,9 +46,9 @@ func TestImport_ForwardParentReferences(t *testing.T) {
 	// FK enforcement should be back to normal after the import — a
 	// fresh insert pointing at a non-existent parent must still fail.
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO tickets (id, type, parent_id, title, status, priority,
+		INSERT INTO tickets (record_id, type, parent_record_id, title, status, priority,
 			created_at, updated_at)
-		VALUES ('T-99', 'task', 'T-NONEXISTENT', 'x', 'backlog', 'medium',
+		VALUES ('rec-99', 'task', 'rec-NONEXISTENT', 'x', 'backlog', 'medium',
 			datetime('now'), datetime('now'))
 	`)
 	if err == nil {

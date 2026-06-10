@@ -941,7 +941,7 @@ func ensurePqlPermissions(dir string) initPermissions {
 // it can't re-create the table set on its own. Per D-15.
 func ensureChangelogDirs(dir string) initChangelogStat {
 	root := filepath.Join(dir, ".pql", "changelog")
-	tables := []string{"tickets", "ticket_deps", "ticket_labels", "ticket_history"}
+	tables := []string{"tickets", "ticket_idmap", "ticket_deps", "ticket_labels", "ticket_history"}
 	stat := initChangelogStat{Root: root}
 	for _, table := range tables {
 		tableDir := filepath.Join(root, table)

@@ -50,8 +50,10 @@ func TestIntegration_TicketNew_WritesThroughToChangelog(t *testing.T) {
 	if id == "" {
 		t.Fatal("ticket new --id-only produced no id")
 	}
-	if cl := changelogTable(t, vault, "tickets"); !strings.Contains(cl, id) {
-		t.Fatalf("ticket %s not written through to changelog (no plan export ran); changelog:\n%s", id, cl)
+	// The friendly T-NNN label lives in the ticket_idmap changelog now (the
+	// tickets row is keyed by the underwater record_id, D-26).
+	if cl := changelogTable(t, vault, "ticket_idmap"); !strings.Contains(cl, id) {
+		t.Fatalf("ticket %s not written through to changelog (no plan export ran); ticket_idmap changelog:\n%s", id, cl)
 	}
 }
 
