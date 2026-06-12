@@ -314,6 +314,16 @@ func TestHash_ChangesWhenConfigChanges(t *testing.T) {
 
 // --- DB path ---------------------------------------------------------------
 
+// skipOnWindows skips tests that simulate a read-only vault via chmod:
+// stripping write bits from a directory does not prevent file creation on
+// Windows, so the cache-fallback path never triggers there.
+func skipOnWindows(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod cannot make a directory read-only on Windows; fallback untestable here")
+	}
+}
+
 func TestDBPath_FlagWins(t *testing.T) {
 	vault := t.TempDir()
 	cfg, err := Load(LoadOpts{
@@ -323,7 +333,7 @@ func TestDBPath_FlagWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.DBPath != "/tmp/explicit.sqlite" {
+	if cfg.DBPath != filepath.Clean("/tmp/explicit.sqlite") {
 		t.Errorf("DBPath = %q, want explicit", cfg.DBPath)
 	}
 }
@@ -337,7 +347,7 @@ func TestDBPath_EnvOverridesDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.DBPath != "/tmp/from-env.sqlite" {
+	if cfg.DBPath != filepath.Clean("/tmp/from-env.sqlite") {
 		t.Errorf("DBPath = %q, want env value", cfg.DBPath)
 	}
 }
@@ -376,6 +386,7 @@ func TestDBPath_DefaultsToInVaultPqlDir(t *testing.T) {
 }
 
 func TestDBPath_FallsBackToCacheOnReadOnlyVault(t *testing.T) {
+	skipOnWindows(t)
 	if os.Getuid() == 0 {
 		t.Skip("root bypasses permission checks; cannot test fallback")
 	}
@@ -402,6 +413,7 @@ func TestDBPath_FallsBackToCacheOnReadOnlyVault(t *testing.T) {
 }
 
 func TestDBPath_FallbackUsesPerVaultSubdir(t *testing.T) {
+	skipOnWindows(t)
 	if os.Getuid() == 0 {
 		t.Skip("root bypasses permission checks; cannot test fallback")
 	}
@@ -428,6 +440,7 @@ func TestDBPath_FallbackUsesPerVaultSubdir(t *testing.T) {
 }
 
 func TestDBPath_HomeDirFallbackMatchesPlatform(t *testing.T) {
+	skipOnWindows(t)
 	if os.Getuid() == 0 {
 		t.Skip("root bypasses permission checks; cannot test fallback")
 	}
