@@ -19,12 +19,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - name: install tools
+        # Pinned versions, installed from source through the Go module
+        # proxy + sumdb. The curl|sh release installer broke on an
+        # upstream tarball checksum mismatch; go install sidesteps
+        # release-asset checksums entirely and keeps CI on the same
+        # golangci-lint version the dev machines use.
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin" latest
-          go install github.com/goreleaser/goreleaser/v2@latest
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+          go install github.com/goreleaser/goreleaser/v2@v2.16.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: ./ci/lint.sh
 
@@ -36,6 +41,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - run: ./ci/test.sh
 
@@ -49,7 +55,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - name: install goreleaser
-        run: go install github.com/goreleaser/goreleaser/v2@latest
+        run: go install github.com/goreleaser/goreleaser/v2@v2.16.0
       - run: goreleaser release --snapshot --clean

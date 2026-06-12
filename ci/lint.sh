@@ -11,4 +11,6 @@ echo "==> goreleaser check"
 goreleaser check
 
 echo "==> govulncheck"
-govulncheck ./...
+# Same pinned go-run invocation as the Makefile's vuln target — no
+# local install needed, identical locally and in CI.
+go run golang.org/x/vuln/cmd/govulncheck@v1.2.0 ./...
