@@ -19,6 +19,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - name: install tools
         # Pinned versions, installed from source through the Go module
@@ -40,6 +41,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - run: ./ci/test.sh
 
@@ -53,6 +55,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - name: install goreleaser
         run: go install github.com/goreleaser/goreleaser/v2@v2.16.0
