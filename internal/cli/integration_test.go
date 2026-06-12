@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -32,6 +33,9 @@ func TestMain(m *testing.M) {
 	defer os.RemoveAll(tmp)
 
 	pqlBin = filepath.Join(tmp, "pql")
+	if runtime.GOOS == "windows" {
+		pqlBin += ".exe"
+	}
 	build := exec.Command("go", "build", "-o", pqlBin, "../../cmd/pql")
 	if out, err := build.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "integration: build: %v\n%s\n", err, out)
@@ -59,6 +63,51 @@ func run(t *testing.T, vault string, args ...string) (stdout, stderr []byte, exi
 		t.Fatalf("invoke pql: %v\nstderr: %s", err, errBuf.String())
 	}
 	return outBuf.Bytes(), errBuf.Bytes(), exitCode
+}
+
+// skillStates decodes the []skill.Status array emitted by the skill
+// subcommands (one entry per bundled skill) and returns state keyed by
+// skill name. Decodes into an independent struct on purpose: the JSON
+// keys are the output contract, not the source structs.
+func skillStates(t *testing.T, out []byte) map[string]string {
+	t.Helper()
+	var statuses []struct {
+		Name  string `json:"name"`
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(out, &statuses); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	states := make(map[string]string, len(statuses))
+	for _, st := range statuses {
+		states[st.Name] = st.State
+	}
+	return states
+}
+
+// initSkillStats decodes the per-skill stats array from `pql init`
+// output, keyed by skill name. Fails the test if no entries decode, so
+// a renamed key can't pass as a vacuous loop.
+func initSkillStats(t *testing.T, out []byte) map[string]struct{ Mode, State string } {
+	t.Helper()
+	var result struct {
+		Skills []struct {
+			Name  string `json:"name"`
+			Mode  string `json:"mode"`
+			State string `json:"state"`
+		} `json:"skills"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if len(result.Skills) == 0 {
+		t.Fatalf("no skills array in init output:\n%s", out)
+	}
+	stats := make(map[string]struct{ Mode, State string }, len(result.Skills))
+	for _, s := range result.Skills {
+		stats[s.Name] = struct{ Mode, State string }{s.Mode, s.State}
+	}
+	return stats
 }
 
 func councilVault(t *testing.T) string {
@@ -405,12 +454,14 @@ func TestIntegration_Skill_StatusOnMissingExits0(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("exit = %v, want 0 (missing state reported in data)\nstderr: %s", err, errBuf.String())
 	}
-	var st map[string]any
-	if err := json.Unmarshal(outBuf.Bytes(), &st); err != nil {
-		t.Fatalf("invalid JSON: %v\n%s", err, outBuf.String())
+	states := skillStates(t, outBuf.Bytes())
+	if len(states) < 2 {
+		t.Errorf("got %d bundled skills, want at least 2 (pql + clean-house)", len(states))
 	}
-	if st["state"] != "missing" {
-		t.Errorf("state = %v, want missing", st["state"])
+	for _, name := range []string{"pql", "clean-house"} {
+		if states[name] != "missing" {
+			t.Errorf("%s state = %q, want missing", name, states[name])
+		}
 	}
 }
 
@@ -439,10 +490,8 @@ func TestIntegration_Skill_InstallIsIdempotent(t *testing.T) {
 	if code != 0 {
 		t.Errorf("status after install exit = %d, want 0", code)
 	}
-	var st map[string]any
-	_ = json.Unmarshal(out, &st)
-	if st["state"] != "current" {
-		t.Errorf("state after install = %v, want current", st["state"])
+	if states := skillStates(t, out); states["pql"] != "current" {
+		t.Errorf("pql state after install = %q, want current", states["pql"])
 	}
 	// Second install on a current state → still 0, still current.
 	if code, _ := runSkill("skill", "install"); code != 0 {
@@ -508,10 +557,8 @@ func TestIntegration_Skill_UninstallRemovesFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("exit = %v, want 0 (state=missing reported in data post-uninstall)", err)
 	}
-	var st map[string]any
-	_ = json.Unmarshal(out, &st)
-	if st["state"] != "missing" {
-		t.Errorf("state = %v, want missing", st["state"])
+	if states := skillStates(t, out); states["pql"] != "missing" {
+		t.Errorf("pql state = %q, want missing", states["pql"])
 	}
 	if _, err := os.Stat(filepath.Join(vault, ".claude", "skills", "pql", "SKILL.md")); !os.IsNotExist(err) {
 		t.Errorf("SKILL.md still exists after uninstall: %v", err)
@@ -702,27 +749,45 @@ func TestIntegration_Doctor_PopulatedAfterIndex(t *testing.T) {
 func TestIntegration_Doctor_SkillFieldReportsState(t *testing.T) {
 	vault := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+	// pqlEntry runs doctor and returns the "pql" entry from the
+	// per-skill skills array.
+	pqlEntry := func() (projectState, embeddedHash string) {
+		t.Helper()
+		out, err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
+		if err != nil {
+			t.Fatalf("doctor: %v", err)
+		}
+		var rep struct {
+			Skills []struct {
+				Name    string `json:"name"`
+				Project *struct {
+					State string `json:"state"`
+				} `json:"project"`
+				EmbeddedHash string `json:"embedded_hash"`
+			} `json:"skills"`
+		}
+		if err := json.Unmarshal(out, &rep); err != nil {
+			t.Fatalf("invalid JSON: %v\n%s", err, out)
+		}
+		for _, s := range rep.Skills {
+			if s.Name != "pql" {
+				continue
+			}
+			if s.Project != nil {
+				projectState = s.Project.State
+			}
+			return projectState, s.EmbeddedHash
+		}
+		t.Fatalf("no pql entry in doctor skills array:\n%s", out)
+		return "", ""
+	}
+
 	// Fresh vault: skill should be missing.
-	out, err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
-	if err != nil {
-		t.Fatalf("doctor: %v", err)
+	state, hash := pqlEntry()
+	if state != "missing" {
+		t.Errorf("project.state = %q, want missing", state)
 	}
-	var rep struct {
-		Skill struct {
-			Project struct {
-				State string `json:"state"`
-			} `json:"project"`
-			EmbeddedHash    string `json:"embedded_hash"`
-			EmbeddedVersion string `json:"embedded_version"`
-		} `json:"skill"`
-	}
-	if err := json.Unmarshal(out, &rep); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if rep.Skill.Project.State != "missing" {
-		t.Errorf("project.state = %q, want missing", rep.Skill.Project.State)
-	}
-	if rep.Skill.EmbeddedHash == "" {
+	if hash == "" {
 		t.Errorf("embedded_hash should be set")
 	}
 
@@ -730,15 +795,8 @@ func TestIntegration_Doctor_SkillFieldReportsState(t *testing.T) {
 	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
 		t.Fatalf("skill install: %v", err)
 	}
-	out, err = exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
-	if err != nil {
-		t.Fatalf("doctor (post-install): %v", err)
-	}
-	if err := json.Unmarshal(out, &rep); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if rep.Skill.Project.State != "current" {
-		t.Errorf("project.state after install = %q, want current", rep.Skill.Project.State)
+	if state, _ := pqlEntry(); state != "current" {
+		t.Errorf("project.state after install = %q, want current", state)
 	}
 }
 
@@ -845,17 +903,11 @@ func TestIntegration_Init_WithSkillYesInstalls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	var result struct {
-		Skill struct {
-			Mode  string `json:"mode"`
-			State string `json:"state"`
-		} `json:"skill"`
-	}
-	if err := json.Unmarshal(out, &result); err != nil {
-		t.Fatalf("invalid JSON: %v\n%s", err, out)
-	}
-	if result.Skill.State != "current" {
-		t.Errorf("skill.state = %q, want current", result.Skill.State)
+	skills := initSkillStats(t, out)
+	for name, st := range skills {
+		if st.State != "current" {
+			t.Errorf("skills[%s].state = %q, want current", name, st.State)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "pql", "SKILL.md")); err != nil {
 		t.Errorf("SKILL.md not installed: %v", err)
@@ -870,18 +922,13 @@ func TestIntegration_Init_WithSkillNoSkips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	var result struct {
-		Skill struct {
-			Mode  string `json:"mode"`
-			State string `json:"state"`
-		} `json:"skill"`
-	}
-	_ = json.Unmarshal(out, &result)
-	if result.Skill.Mode != "no" {
-		t.Errorf("skill.mode = %q, want no", result.Skill.Mode)
-	}
-	if result.Skill.State != "missing" {
-		t.Errorf("skill.state = %q, want missing", result.Skill.State)
+	for name, st := range initSkillStats(t, out) {
+		if st.Mode != "no" {
+			t.Errorf("skills[%s].mode = %q, want no", name, st.Mode)
+		}
+		if st.State != "missing" {
+			t.Errorf("skills[%s].state = %q, want missing", name, st.State)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "pql", "SKILL.md")); !os.IsNotExist(err) {
 		t.Errorf("SKILL.md should not exist after --with-skill=no: %v", err)
@@ -898,15 +945,10 @@ func TestIntegration_Init_WithSkillPromptSkipsWithoutTTY(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	var result struct {
-		Skill struct {
-			Mode string `json:"mode"`
-			Note string `json:"note"`
-		} `json:"skill"`
-	}
-	_ = json.Unmarshal(out, &result)
-	if result.Skill.Mode != "prompt-skipped-no-tty" {
-		t.Errorf("skill.mode = %q, want prompt-skipped-no-tty", result.Skill.Mode)
+	for name, st := range initSkillStats(t, out) {
+		if st.Mode != "prompt-skipped-no-tty" {
+			t.Errorf("skills[%s].mode = %q, want prompt-skipped-no-tty", name, st.Mode)
+		}
 	}
 }
 
