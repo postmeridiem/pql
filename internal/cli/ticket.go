@@ -875,9 +875,9 @@ func newTicketBlockCmd() *cobra.Command {
 			// bumps updated_at so the row is live again.
 			if _, err := pdb.SQL().ExecContext(ctx, `
 				INSERT INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at)
-				VALUES (?, ?, datetime('now'), datetime('now'))
+				VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%f','now'), strftime('%Y-%m-%d %H:%M:%f','now'))
 				ON CONFLICT(blocker_record_id, blocked_record_id) DO UPDATE SET
-					deleted_at = NULL, updated_at = datetime('now')
+					deleted_at = NULL, updated_at = strftime('%Y-%m-%d %H:%M:%f','now')
 			`, blockerRec, blockedRec); err != nil {
 				return &exitError{code: diag.DataErr, msg: err.Error()}
 			}
@@ -932,7 +932,7 @@ func newTicketUnblockCmd() *cobra.Command {
 			}
 			res, err := pdb.SQL().ExecContext(ctx, `
 				UPDATE ticket_deps
-				SET deleted_at = datetime('now'), updated_at = datetime('now')
+				SET deleted_at = strftime('%Y-%m-%d %H:%M:%f','now'), updated_at = strftime('%Y-%m-%d %H:%M:%f','now')
 				WHERE blocker_record_id = ? AND blocked_record_id = ? AND deleted_at IS NULL
 			`, blockerRec, blockedRec)
 			if err != nil {
@@ -999,7 +999,7 @@ func newTicketTeamCmd() *cobra.Command {
 					return err
 				}
 				if _, err := pdb.SQL().ExecContext(ctx, `
-					UPDATE tickets SET team = ?, updated_at = datetime('now') WHERE record_id = ?
+					UPDATE tickets SET team = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE record_id = ?
 				`, team, rec); err != nil {
 					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
 				}
@@ -1066,9 +1066,9 @@ func newTicketLabelCmd() *cobra.Command {
 					// the re-attachment as a state change.
 					if _, addErr := pdb.SQL().ExecContext(ctx, `
 						INSERT INTO ticket_labels (ticket_record_id, label, created_at, updated_at)
-						VALUES (?, ?, datetime('now'), datetime('now'))
+						VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%f','now'), strftime('%Y-%m-%d %H:%M:%f','now'))
 						ON CONFLICT(ticket_record_id, label) DO UPDATE SET
-							deleted_at = NULL, updated_at = datetime('now')
+							deleted_at = NULL, updated_at = strftime('%Y-%m-%d %H:%M:%f','now')
 					`, rec, label); addErr != nil {
 						return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, addErr)}
 					}
@@ -1078,7 +1078,7 @@ func newTicketLabelCmd() *cobra.Command {
 				case "rm":
 					res, rmErr := pdb.SQL().ExecContext(ctx, `
 						UPDATE ticket_labels
-						SET deleted_at = datetime('now'), updated_at = datetime('now')
+						SET deleted_at = strftime('%Y-%m-%d %H:%M:%f','now'), updated_at = strftime('%Y-%m-%d %H:%M:%f','now')
 						WHERE ticket_record_id = ? AND label = ? AND deleted_at IS NULL
 					`, rec, label)
 					if rmErr != nil {

@@ -11,6 +11,32 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.10.4] - 2026-06-16
+
+### Fixed
+
+- **`plan rebuild` no longer silently reverts a ticket mutation made in the same
+  second it was created.** Write timestamps were second-granularity
+  (`datetime('now')`), so a `ticket new` immediately followed by `ticket status`
+  produced two changelog rows with identical `updated_at`. The LWW guard (D-16)
+  then broke the tie on the content hash — which is unrelated to recency — so any
+  replay (`plan rebuild`, fresh clone, disaster recovery, post-merge/post-checkout
+  hooks) reverted the status to its created value about one run in three,
+  non-deterministically. Write timestamps now carry millisecond precision
+  (`strftime('%Y-%m-%d %H:%M:%f','now')`), so same-second mutations are ordered by
+  time and the hash tiebreaker only fires at the sub-millisecond boundary D-16
+  always intended. No schema change, no `canonical_version` bump, no migration —
+  the canonical hash already excludes the precision-only change in effect. The
+  most common trigger is agent/scripted use, where back-to-back commands land in
+  one second.
+- **The generated `post-checkout` hook no longer rebuilds `pql.db` on branch
+  creation.** `git checkout -b` reports an unchanged HEAD (`$1 == $2`); the
+  working tree — and therefore `pql.db` — is already correct there, so the hook
+  now rebuilds only on a real branch *switch* (`$3 == 1` **and** `$1 != $2`).
+  Re-run `pql init` to refresh the hook. (Surfaced by a downstream report of
+  activated tickets reverting on `git checkout -b`; the millisecond fix above is
+  the root cause, this removes the now-pointless rebuild on that path.)
+
 ## [1.10.3] - 2026-06-10
 
 ### Fixed

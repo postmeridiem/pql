@@ -14,8 +14,8 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.10.3
-status: v1.10.3 — embedded skill now documents ticket parent/child linking (`ticket setparent`, `ticket new --parent`) and distinguishes it from blockers; a gap that led a consuming agent to guess the wrong command. Skill-doc fix; reinstall via `pql skill install`.
+version: 1.10.4
+status: v1.10.4 — changelog replay no longer loses same-second ticket mutations. Write timestamps gain millisecond precision so the LWW guard orders mutations made within the same wall-clock second (a `ticket new` + `ticket status` pair reverted ~1/3 of the time on `plan rebuild`), aligning the implementation with D-16's millisecond-collision design. The generated `post-checkout` hook also skips the rebuild on branch *creation* (`git checkout -b`), where it was pure downside.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT

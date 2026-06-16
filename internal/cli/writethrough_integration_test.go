@@ -84,6 +84,39 @@ func TestIntegration_Rebuild_PreservesUncommittedTickets(t *testing.T) {
 	}
 }
 
+// TestIntegration_Rebuild_PreservesSameSecondStatusChange guards the LWW
+// data-loss bug fixed by millisecond-precision write timestamps. Creating a
+// ticket and changing its status within the same wall-clock second used to
+// produce two changelog rows with identical second-granularity updated_at
+// values; the LWW guard then broke the tie on the content hash (unrelated to
+// recency), so `plan rebuild` reverted the status to its created value about
+// one run in three. With ms-precision timestamps the two rows are ordered by
+// time and in_progress wins deterministically. We loop because the old bug was
+// probabilistic — a single iteration would miss a regression ~2/3 of the time.
+func TestIntegration_Rebuild_PreservesSameSecondStatusChange(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		vault := t.TempDir()
+		out, errb, code := run(t, vault, "ticket", "new", "task", "scratch", "--id-only")
+		if code != 0 {
+			t.Fatalf("iter %d: ticket new: code=%d stderr=%s", i, code, errb)
+		}
+		id := strings.TrimSpace(string(out))
+		if _, errb, code := run(t, vault, "ticket", "status", id, "in_progress"); code != 0 {
+			t.Fatalf("iter %d: ticket status: code=%d stderr=%s", i, code, errb)
+		}
+		if _, errb, code := run(t, vault, "plan", "rebuild"); code != 0 {
+			t.Fatalf("iter %d: plan rebuild: code=%d stderr=%s", i, code, errb)
+		}
+		show, errb, code := run(t, vault, "ticket", "show", id)
+		if code != 0 {
+			t.Fatalf("iter %d: ticket show: code=%d stderr=%s", i, code, errb)
+		}
+		if !strings.Contains(string(show), `"status":"in_progress"`) {
+			t.Fatalf("iter %d: status reverted after rebuild — same-second LWW bug regressed; show:\n%s", i, show)
+		}
+	}
+}
+
 // TestIntegration_AllTicketMutationsWriteThrough guards against a future
 // mutation verb forgetting its exportThrough call: after exercising each
 // replicated table, its changelog file must be non-empty.

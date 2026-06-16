@@ -195,10 +195,14 @@ func TestRenderPostMergeHook_BakesAbsolutePath(t *testing.T) {
 	}
 }
 
-func TestRenderPostCheckoutHook_OnlyFiresOnBranchSwitch(t *testing.T) {
+func TestRenderPostCheckoutHook_RebuildsOnSwitchNotCreation(t *testing.T) {
 	body := renderPostCheckoutHook("/usr/local/bin/pql")
-	if !strings.Contains(body, `if [ "$3" = "1" ]`) {
-		t.Errorf("post-checkout hook should gate on $3 == 1:\n%s", body)
+	// Rebuild only on a real branch switch: the branch-checkout flag is set
+	// ($3 == 1) AND the pre/post-checkout HEADs differ ($1 != $2). A branch
+	// *creation* (git checkout -b) reports equal HEADs and must NOT rebuild,
+	// else it drops an uncommitted ticket mutation.
+	if !strings.Contains(body, `if [ "$3" = "1" ] && [ "$1" != "$2" ]`) {
+		t.Errorf("post-checkout hook should rebuild only when $3==1 AND $1!=$2:\n%s", body)
 	}
 	if !strings.Contains(body, "'/usr/local/bin/pql' plan rebuild") {
 		t.Errorf("post-checkout hook should call plan rebuild:\n%s", body)

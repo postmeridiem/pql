@@ -196,7 +196,7 @@ func Relabel(ctx context.Context, db *sql.DB, target, newLabel string) (oldLabel
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE ticket_idmap SET ticket_id = ?, updated_at = datetime('now') WHERE record_id = ?`,
+		`UPDATE ticket_idmap SET ticket_id = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE record_id = ?`,
 		newLabel, recordID,
 	); err != nil {
 		return "", "", fmt.Errorf("repo: relabel update: %w", err)
@@ -310,7 +310,7 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority,
 			assigned_to, team, decision_ref, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f','now'), strftime('%Y-%m-%d %H:%M:%f','now'))
 	`, recordID, opts.Type,
 		nullIfEmpty(parentRecID),
 		opts.Title,
@@ -325,7 +325,7 @@ func CreateTicket(ctx context.Context, db *sql.DB, opts NewTicketOpts) (string, 
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at)
-		VALUES (?, ?, datetime('now'), datetime('now'))
+		VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%f','now'), strftime('%Y-%m-%d %H:%M:%f','now'))
 	`, recordID, label); err != nil {
 		return "", fmt.Errorf("repo: create ticket idmap: %w", err)
 	}
@@ -606,7 +606,7 @@ func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string,
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE tickets SET status = ?, updated_at = datetime('now') WHERE record_id = ?
+		UPDATE tickets SET status = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE record_id = ?
 	`, newStatus, t.RecordID); err != nil {
 		return fmt.Errorf("repo: update status: %w", err)
 	}
@@ -617,7 +617,7 @@ func SetStatus(ctx context.Context, db *sql.DB, id, newStatus, changedBy string,
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
 			created_at, updated_at)
-		VALUES (?, 'status', ?, ?, ?, datetime('now'), datetime('now'))
+		VALUES (?, 'status', ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f','now'), strftime('%Y-%m-%d %H:%M:%f','now'))
 	`, t.RecordID, t.Status, newStatus, nullIfEmpty(changedBy))
 	if err != nil {
 		return fmt.Errorf("repo: record history: %w", err)
@@ -651,7 +651,7 @@ func Assign(ctx context.Context, db *sql.DB, id, agent, changedBy string) error 
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE tickets SET assigned_to = ?, updated_at = datetime('now') WHERE record_id = ?
+		UPDATE tickets SET assigned_to = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE record_id = ?
 	`, agent, t.RecordID); err != nil {
 		return fmt.Errorf("repo: update assigned_to: %w", err)
 	}
@@ -662,7 +662,7 @@ func Assign(ctx context.Context, db *sql.DB, id, agent, changedBy string) error 
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
 			created_at, updated_at)
-		VALUES (?, 'assigned_to', ?, ?, ?, datetime('now'), datetime('now'))
+		VALUES (?, 'assigned_to', ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f','now'), strftime('%Y-%m-%d %H:%M:%f','now'))
 	`, t.RecordID, nullIfEmpty(oldVal), agent, nullIfEmpty(changedBy))
 	if err != nil {
 		return fmt.Errorf("repo: record assign history: %w", err)
@@ -716,7 +716,7 @@ func SetParent(ctx context.Context, db *sql.DB, id, parentID, changedBy string) 
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE tickets SET parent_record_id = ?, updated_at = datetime('now') WHERE record_id = ?
+		UPDATE tickets SET parent_record_id = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE record_id = ?
 	`, nullIfEmpty(parentRecID), t.RecordID); err != nil {
 		return fmt.Errorf("repo: update parent_record_id: %w", err)
 	}
@@ -727,7 +727,7 @@ func SetParent(ctx context.Context, db *sql.DB, id, parentID, changedBy string) 
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
 			created_at, updated_at)
-		VALUES (?, 'parent_id', ?, ?, ?, datetime('now'), datetime('now'))
+		VALUES (?, 'parent_id', ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f','now'), strftime('%Y-%m-%d %H:%M:%f','now'))
 	`, t.RecordID, nullIfEmpty(oldVal), nullIfEmpty(parentID), nullIfEmpty(changedBy))
 	if err != nil {
 		return fmt.Errorf("repo: record setparent history: %w", err)
@@ -1124,7 +1124,7 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, f UpdateTicketFiel
 		setParts = append(setParts, c.colExpr)
 		args = append(args, c.colArg)
 	}
-	setParts = append(setParts, "updated_at = datetime('now')")
+	setParts = append(setParts, "updated_at = strftime('%Y-%m-%d %H:%M:%f','now')")
 	args = append(args, t.RecordID)
 
 	tx, err := db.BeginTx(ctx, nil)
@@ -1145,7 +1145,7 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, f UpdateTicketFiel
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
 				created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+			VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f','now'), strftime('%Y-%m-%d %H:%M:%f','now'))
 		`, t.RecordID, c.field, nullIfEmpty(c.old), nullIfEmpty(c.new), nullIfEmpty(changedBy))
 		if err != nil {
 			return fmt.Errorf("repo: record update history: %w", err)

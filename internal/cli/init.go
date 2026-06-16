@@ -480,18 +480,34 @@ func renderPostMergeHook(pqlPath string) string {
 
 const pqlPostCheckoutMarker = "# --- pql plan rebuild (post-checkout) ---"
 
-// renderPostCheckoutHook fires only on branch switches ($3 == "1");
-// file checkouts ($3 == "0") are no-op. Branch switch lands on a
-// different changelog tree — rebuild is the only correct response
-// because incremental replay can't remove rows that lived on the
-// previous branch but not the new one (D-18).
+// renderPostCheckoutHook fires only on branch checkouts ($3 == "1");
+// file checkouts ($3 == "0") are no-op. It further distinguishes a
+// branch *switch* (prev-HEAD != new-HEAD) from a branch *creation* or
+// no-op checkout (prev-HEAD == new-HEAD, as `git checkout -b` reports):
+//
+//   - switch: lands on a different changelog tree, so rebuild pql.db to
+//     match. Incremental replay can't remove rows that lived on the
+//     previous branch but not the new one (D-18).
+//   - creation/no-op: the working tree is unchanged, so pql.db already
+//     reflects this branch *plus* any uncommitted mutation. A rebuild
+//     replays only the committed changelog and would silently drop that
+//     mutation — a data-loss footgun on `git checkout -b`. Skip it; the
+//     mutation stays in pql.db and the pre-commit write-through (D-23)
+//     flushes it at the next commit, exactly as if no checkout had run.
 func renderPostCheckoutHook(pqlPath string) string {
 	return `# --- pql plan rebuild (post-checkout) ---
-# Auto-installed by pql init. On branch checkout (third arg == 1),
-# rebuild pql.db from the changelog so the local cache reflects the
-# new branch's planning state. File-level checkouts ($3 == 0) are
-# skipped.
-if [ "$3" = "1" ]; then
+# Auto-installed by pql init. On a branch *switch* (third arg == 1 and
+# the pre/post-checkout HEADs differ), rebuild pql.db from the changelog
+# so the local cache reflects the new branch's planning state.
+#
+# A branch *creation* or no-op checkout (e.g. git checkout -b) reports
+# the same HEAD for both args ($1 == $2): the working tree is unchanged
+# and pql.db is already correct, so a rebuild would only discard an
+# uncommitted ticket mutation. Skip it — the pre-commit hook flushes
+# that mutation to the changelog at the next commit.
+#
+# File-level checkouts ($3 == 0) are skipped entirely.
+if [ "$3" = "1" ] && [ "$1" != "$2" ]; then
     echo "pql: rebuilding planning database from changelog..." >&2
     ` + shellQuote(pqlPath) + ` plan rebuild >/dev/null 2>&1 || true
 fi
