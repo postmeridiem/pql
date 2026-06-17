@@ -81,6 +81,9 @@ You might also want, project-permitting:
 - [Q-7: Code-aware extractor](questions/architecture.md#q-7-code-aware-extractor) — _architecture_
 - [Q-9: Multi-user ticket ID distribution](questions/architecture.md#q-9-multi-user-ticket-id-distribution) — _architecture_
 - [Q-10: Soft-delete stub retention and purge](questions/architecture.md#q-10-soft-delete-stub-retention-and-purge) — _architecture_
+- [Q-11: Comment / discussion threads on tickets (and decisions?)](questions/architecture.md#q-11-comment--discussion-threads-on-tickets-and-decisions) — _architecture_
+- [Q-12: External tracker (JIRA) as a pql ticket backend — proxy or separate tool?](questions/architecture.md#q-12-external-tracker-jira-as-a-pql-ticket-backend--proxy-or-separate-tool) — _architecture_
+- [Q-13: GitHub/Gitea issue backend for ID claiming and one-way mirror](questions/architecture.md#q-13-githubgitea-issue-backend-for-id-claiming-and-one-way-mirror) — _architecture_
 
 ## Resolved questions
 
