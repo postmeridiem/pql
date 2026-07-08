@@ -12,7 +12,13 @@
       "Bash(pql-dev)",
       "Bash(pql-dev *)",
       "Bash(./bin/pql)",
-      "Bash(./bin/pql *)"
+      "Bash(./bin/pql *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(jq *)",
+      "Bash(grep *)",
+      "Bash(sort *)"
     ],
     "deny": [
       "Bash(rm -rf /*)",
