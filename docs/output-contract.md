@@ -68,7 +68,7 @@ Enriched (default-on intent):
 | `--quiet` | suppress stderr warnings |
 | `--verbose` | emit per-phase timing diagnostics on stderr (`internal/telemetry/`) |
 
-Output is JSON only (default array, `--pretty`, or `--jsonl`). Non-JSON renderers (`--table`, `--csv`) and projection (`--select <jsonpath>`, `--no-color`) are **not implemented** — they were in the original sketch but never built; pipe to `jq` if you need them.
+Output is JSON only (default array, `--pretty`, or `--jsonl`), with two sanctioned opt-in plain-text exceptions: `ticket new --id-only` (bare `T-NNN`) and the planning list verbs' `--oneline` (`id<TAB>status<TAB>title` lines, per D-27) — both reject the JSON shaping flags with exit `64` rather than mixing modes. The planning list verbs also take `--fields <csv>`, a field projection that returns JSON rows with only the named keys in the requested order (unknown names exit `64`); `pql ticket list` defaults to a projection that omits `description` — `--full` restores whole rows. Non-JSON renderers (`--table`, `--csv`) and JSONPath projection (`--select`) remain **not implemented**; pipe to `jq` for anything beyond field selection.
 
 ## `--flat-search` semantics
 

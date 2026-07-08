@@ -1,9 +1,9 @@
 // Package render formats query results for stdout per docs/output-contract.md.
 //
-// v1 ships JSON (default), pretty JSON, and JSONL. Table / CSV / JSONPath
-// projection (--select) are deferred — the read-only subcommands in v0.1
-// don't need them and they pull in deps + design surface that's better
-// landed when a real call site forces the issue.
+// v1 ships JSON (default), pretty JSON, and JSONL, plus field projection
+// (Project, backing the planning list verbs' --fields flag — the call
+// site that finally forced the issue, per D-27). Table / CSV remain
+// deferred until a real consumer needs them.
 package render
 
 import (

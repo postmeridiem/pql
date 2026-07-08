@@ -94,9 +94,8 @@ Tickets are SQLite-native.
 | `pql decisions sync [--no-style]` | Parse the DQR tree → upsert into pql.db; surfaces style warnings (filename, subdir-type, domain pairing/conflicts) unless `--no-style` |
 | `pql decisions validate [--no-style]` | Dry-run parse; structural errors exit non-zero, style issues warn (suppress with `--no-style`) |
 | `pql decisions claim <D\|Q\|R> <domain> "title"` | Print next available ID |
-| `pql decisions list [--type X] [--domain X] [--status X]` | List decisions |
-| `pql decisions show <id> [--with-refs] [--with-tickets]` | Show with joins |
-| `pql decisions coverage` | Confirmed decisions without tickets |
+| `pql decisions list [--type X] [--domain X] [--status X] [--fields F] [--oneline]` | List decisions. `--fields id,status,title` = only those keys, in order; `--oneline` = plain `id<TAB>status<TAB>title` lines |
+| `pql decisions show <id> [--with-refs] [--with-tickets]` | Show with joins (`--with-tickets` = implementation status, per D-20) |
 | `pql decisions refs <id>` | Cross-references involving a decision |
 
 Always `pql decisions sync` before querying if decisions/*.md may have changed.
@@ -106,7 +105,7 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | Command | Purpose |
 |---|---|
 | `pql ticket new <type> "title" [--parent T-NNN] [--decision D-NNN] [--priority P] [--id-only]` | Create (emits T-NNN; `--parent` files it under an epic/story in one step; `--id-only` prints the bare id for tree-creation scripts) |
-| `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-NNN] [--leaf] [--unblocked]` | List with filters. `--under` = recursive descendants of a ticket; `--leaf` = no children; `--unblocked` = blockers all reached a terminal status |
+| `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-NNN] [--leaf] [--unblocked] [--fields F] [--full] [--oneline]` | List with filters. Default rows omit `description` (D-27) — `--full` = whole rows; `--fields id,status,title` = only those keys, in order; `--oneline` = plain `id<TAB>status<TAB>title` lines. `--under` = recursive descendants of a ticket; `--leaf` = no children; `--unblocked` = blockers all reached a terminal status |
 | `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Show one or more (comma-batch → array of show-trees). `--with-children` = direct children; `--tree` = nested descendant subtree + direct parent (cap with `--depth N`) |
 | `pql ticket status <id> <new-status> [--force]` | Change status. Closing (terminal status) is blocked while the ticket has open children; `--force` cascades that status to all not-yet-closed descendants and lists them |
 | `pql ticket statuslist` | List the configured status vocabulary (name, label, class, order, is_default, is_terminal) — what a UI reads to render columns |
@@ -139,7 +138,7 @@ cascade the close down the subtree).
 
 | Command | Purpose |
 |---|---|
-| `pql plan status` | Dashboard: decision counts, open Qs, ticket summary, coverage gaps |
+| `pql plan status` | Dashboard: decision counts, open Qs, ticket summary |
 | `pql plan whatsnext` | Next ticket to work on (active work, then the "ready" lane) with full context bundle |
 | `pql plan review` | Next ticket awaiting review with full context bundle |
 | `pql plan export [--stage]` | Append changed planning rows to `.pql/changelog/<table>/<YYYY-MM>.sql` (the git-tracked log of record); `--stage` also `git add`s them. Normally a no-op — mutations already write through |
@@ -185,9 +184,10 @@ fold the bookkeeping into a commit or trust the normal commit flow.
 - **Append a note** → `pql ticket append T-5 "benchmarked; TTL now 5m"` — blank-line separated, never overwrites; use `--file note.md` or `--stdin` for longer content
 - **Subtree of an epic** → `pql ticket show T-2 --tree --pretty` — nested `subtree` + direct parent in `ancestors`; add `--depth N` to cap levels
 - **Ready leaf work under an epic** → `pql ticket list --under T-2 --leaf --unblocked` — leaf tickets beneath T-2 whose blockers have all reached a terminal status; the batch complement to `plan whatsnext`
+- **Cheap board index** → `pql ticket list --fields id,status,title` (JSON) or `--oneline` (plain lines) — list already omits `description`; `--full` only when you need the bodies, and `ticket show <id>` to read one
+- **Implementation status of a decision** → `pql decisions show D-5 --with-tickets`
 - **What's next?** → `pql plan whatsnext --pretty`
 - **Review queue** → `pql plan review --pretty`
-- **Coverage gaps** → `pql decisions coverage`
 - **Dashboard** → `pql plan status --pretty`
 - **Force a changelog catch-up** → `pql plan export` (normally a no-op; mutations already write through to `.pql/changelog/`)
 
@@ -207,7 +207,7 @@ fold the bookkeeping into a commit or trust the normal commit flow.
 
 ## Anti-patterns
 
-- Don't pipe to `jq` for simple projections — use `--limit`, `--pretty`, `--jsonl`.
+- Don't pipe to `jq` for simple projections — use `--fields`, `--oneline`, `--limit`, `--pretty`, `--jsonl`.
 - Don't chain `pql files` + `pql meta` — one `pql query` with WHERE.
 - Don't parse errors — pass stderr diagnostics back directly.
 - Don't forget `pql decisions sync` before querying decisions.

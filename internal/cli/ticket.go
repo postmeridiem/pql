@@ -324,6 +324,7 @@ func newTicketNewCmd() *cobra.Command {
 func newTicketListCmd() *cobra.Command {
 	var statusFlag, teamFlag, assignedFlag, decisionFlag, labelFlag, underFlag string
 	var leafFlag, unblockedFlag bool
+	var proj *listProjection
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tickets from pql.db",
@@ -335,7 +336,14 @@ func newTicketListCmd() *cobra.Command {
 --under restricts to the recursive descendants of a ticket; --leaf to
 tickets with no children; --unblocked to tickets whose blockers have all
 reached a terminal status. Composed, they answer "what leaf work under this
-epic is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`" + `.`,
+epic is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`" + `.
+
+The default projection omits the description column — it dominates the
+payload and the common callers ("what's on the board", "find by title")
+never read it (D-27). Opt back in with --full (or --fields '*'), pick an
+exact column set with --fields id,status,title, or use --oneline for a
+plain id<TAB>status<TAB>title index. ` + "`pql ticket show`" + ` always returns
+whole records.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -364,15 +372,17 @@ epic is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`"
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
+			// Default projection: drop description (D-27). Explicit
+			// --fields projects from whole rows, so a caller asking for
+			// description by name still gets it.
+			if !proj.wantsFullRows() && proj.fields == "" {
+				for i := range tks {
+					tks[i].Description = nil
+				}
 			}
-			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.Render(tks, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
+			return renderProjectedList(cmd, tks, proj, func(t repo.Ticket) string {
+				return t.ID + "\t" + t.Status + "\t" + t.Title
+			})
 		},
 	}
 	cmd.Flags().StringVar(&statusFlag, "status", "", "filter by status")
@@ -383,6 +393,7 @@ epic is ready to pick up" — the batch complement to ` + "`pql plan whatsnext`"
 	cmd.Flags().StringVar(&underFlag, "under", "", "restrict to recursive descendants of this ticket")
 	cmd.Flags().BoolVar(&leafFlag, "leaf", false, "restrict to tickets with no children")
 	cmd.Flags().BoolVar(&unblockedFlag, "unblocked", false, "restrict to tickets whose blockers have all reached a terminal status")
+	proj = addListProjectionFlags(cmd, true)
 	return cmd
 }
 

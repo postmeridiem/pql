@@ -11,6 +11,31 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.11.0] - 2026-07-08
+
+### Added
+
+- **Projection on the planning list verbs (D-27, T-56).** `pql ticket list` and
+  `pql decisions list` take `--fields id,status,title` — JSON rows with only
+  the named keys, in the requested order (unknown names exit `64` listing the
+  valid set; `--fields '*'` selects all) — and `--oneline`, a plain-text
+  `id<TAB>status<TAB>title` index for terminal use (composes only with
+  `--limit`; rejects `--pretty`/`--jsonl`). Raised by two consumers whose
+  agents had full `ticket list` dumps truncated by tool-output budgets
+  (measured: description was ~81% of a 735 KB payload).
+
+### Changed
+
+- **`pql ticket list` default output no longer includes `description`.**
+  The default projection is the index — every field except the one that
+  dominated the payload. **Compatibility:** callers that read `description`
+  from list output must pass `--full` (or name it in `--fields`); `pql ticket
+  show` still returns whole records, as do all other record-level surfaces.
+- The embedded skill no longer documents `pql decisions coverage` or
+  "coverage gaps" in `plan status` — the coverage report was removed by D-20
+  (implementation status lives on `decisions show --with-tickets`), and the
+  skill had drifted.
+
 ## [1.10.4] - 2026-06-16
 
 ### Fixed

@@ -230,10 +230,17 @@ func newDecisionsClaimCmd() *cobra.Command {
 
 func newDecisionsListCmd() *cobra.Command {
 	var typeFlag, domainFlag, statusFlag string
+	var proj *listProjection
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List decisions from pql.db",
-		Args:  cobra.NoArgs,
+		Long: `List decisions, optionally filtered.
+
+Decision rows are already light (bodies stay in the DQR markdown), so
+whole rows are the default. --fields id,status,title narrows the JSON
+columns and --oneline emits a plain id<TAB>status<TAB>title index — the
+same projection surface as ` + "`pql ticket list`" + ` (D-27).`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			cfg, err := config.Load(loadOptsFromFlags(cmd))
@@ -256,20 +263,15 @@ func newDecisionsListCmd() *cobra.Command {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.Render(decs, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
+			return renderProjectedList(cmd, decs, proj, func(d repo.Decision) string {
+				return d.ID + "\t" + d.Status + "\t" + d.Title
+			})
 		},
 	}
 	cmd.Flags().StringVar(&typeFlag, "type", "", "filter by type (confirmed|question|rejected)")
 	cmd.Flags().StringVar(&domainFlag, "domain", "", "filter by domain")
 	cmd.Flags().StringVar(&statusFlag, "status", "", "filter by status (active|superseded|resolved|open)")
+	proj = addListProjectionFlags(cmd, false)
 	return cmd
 }
 

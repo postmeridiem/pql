@@ -1261,6 +1261,117 @@ func TestIntegration_Status_ForceCascadesToSubtree(t *testing.T) {
 	}
 }
 
+// --- list projection: --fields / --full / --oneline (D-27) ----------------
+
+func TestIntegration_TicketList_DefaultOmitsDescription(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "heavy ticket", "--description", "a very long body", "--id-only")
+
+	stdout := pqlIT(t, vault, "ticket", "list")
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	if _, ok := rows[0]["description"]; ok {
+		t.Errorf("default projection should omit description, got: %v", rows[0])
+	}
+	if rows[0]["id"] != "T-1" || rows[0]["status"] != "backlog" {
+		t.Errorf("default projection lost core fields: %v", rows[0])
+	}
+
+	// --full opts back into whole rows; --fields can also name
+	// description explicitly.
+	for _, args := range [][]string{
+		{"ticket", "list", "--full"},
+		{"ticket", "list", "--fields", "id,description"},
+	} {
+		out := pqlIT(t, vault, args...)
+		if !strings.Contains(out, "a very long body") {
+			t.Errorf("%v should include the description:\n%s", args, out)
+		}
+	}
+}
+
+func TestIntegration_TicketList_FieldsProjectsAndOrders(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "one", "--id-only")
+
+	stdout := pqlIT(t, vault, "ticket", "list", "--fields", "status, id")
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
+	}
+	if len(rows) != 1 || len(rows[0]) != 2 {
+		t.Fatalf("want exactly the 2 requested keys, got: %s", stdout)
+	}
+	// Keys come out in the requested order (status before id).
+	if !strings.Contains(stdout, `{"status":"backlog","id":"T-1"}`) {
+		t.Errorf("requested field order not preserved:\n%s", stdout)
+	}
+}
+
+func TestIntegration_TicketList_UnknownFieldExits64(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "one", "--id-only")
+
+	_, stderr, code := run(t, vault, "ticket", "list", "--fields", "titel")
+	if code != 64 {
+		t.Fatalf("unknown field should exit 64, got %d", code)
+	}
+	if !strings.Contains(string(stderr), "titel") || !strings.Contains(string(stderr), "title") {
+		t.Errorf("error should name the bad field and the valid set:\n%s", stderr)
+	}
+}
+
+func TestIntegration_TicketList_Oneline(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "first", "--id-only")
+	pqlIT(t, vault, "ticket", "new", "task", "second", "--id-only")
+
+	stdout := pqlIT(t, vault, "ticket", "list", "--oneline")
+	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2:\n%s", len(lines), stdout)
+	}
+	if lines[0] != "T-1\tbacklog\tfirst" {
+		t.Errorf("line 0 = %q, want id<TAB>status<TAB>title", lines[0])
+	}
+
+	// Plain-text mode refuses the JSON shaping flags.
+	for _, extra := range []string{"--pretty", "--jsonl", "--full"} {
+		_, _, code := run(t, vault, "ticket", "list", "--oneline", extra)
+		if code != 64 {
+			t.Errorf("--oneline %s should exit 64, got %d", extra, code)
+		}
+	}
+}
+
+func TestIntegration_DecisionsList_FieldsAndOneline(t *testing.T) {
+	vault := initVaultIT(t)
+	writeFileIT(t, filepath.Join(vault, "governance", "decisions", "architecture.md"), `### D-1: Test decision
+- **Date:** 2026-07-08
+- **Decision:** Keep it small.
+`)
+	pqlIT(t, vault, "decisions", "sync")
+
+	oneline := pqlIT(t, vault, "decisions", "list", "--oneline")
+	if !strings.HasPrefix(oneline, "D-1\tactive\tTest decision") {
+		t.Errorf("decisions --oneline = %q, want id<TAB>status<TAB>title", oneline)
+	}
+
+	stdout := pqlIT(t, vault, "decisions", "list", "--fields", "id,domain")
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
+	}
+	if len(rows) != 1 || len(rows[0]) != 2 || rows[0]["domain"] != "architecture" {
+		t.Errorf("decisions --fields projection wrong: %s", stdout)
+	}
+}
+
 // initVaultIT returns a fresh vault; pql.db is created lazily by the first
 // ticket write, so no explicit init is needed.
 func initVaultIT(t *testing.T) string {
