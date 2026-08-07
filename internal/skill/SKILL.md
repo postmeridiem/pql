@@ -144,7 +144,7 @@ cascade the close down the subtree).
 | `pql plan review` | Next ticket awaiting review with full context bundle |
 | `pql plan export [--stage]` | Append changed planning rows to `.pql/changelog/<table>/<YYYY-MM>.sql` (the git-tracked log of record); `--stage` also `git add`s them. Normally a no-op — mutations already write through |
 | `pql plan import [--legacy FILE]` | Replay `.pql/changelog/` into `pql.db` (or one-time `--legacy pql-plan.json` migration from the pre-D-15 snapshot) |
-| `pql plan rebuild` | Drop replicated tables and replay `.pql/changelog/` from scratch. Warns on stderr (`changelog.ticket_id_collision`) + lists `collisions` in the result if one ticket id was filed twice across clones |
+| `pql plan rebuild [--verify]` | Drop replicated tables and replay `.pql/changelog/` from scratch. Warns on stderr (`changelog.ticket_id_collision`) + lists `collisions` in the result if one ticket id was filed twice across clones. `--verify` compares every row's hash before and after the replay and reports rows that came back changed or not at all — exit `65` only if rows were lost |
 
 ### Versioning planning state
 
@@ -192,6 +192,7 @@ fold the bookkeeping into a commit or trust the normal commit flow.
 - **Review queue** → `pql plan review --pretty`
 - **Dashboard** → `pql plan status --pretty`
 - **Force a changelog catch-up** → `pql plan export` (normally a no-op; mutations already write through to `.pql/changelog/`)
+- **Check a rebuild didn't quietly change anything** → `pql plan rebuild --verify` — per-row hash comparison either side of the replay; use it when a ticket looks like it reverted, or after recovering a vault
 
 ---
 

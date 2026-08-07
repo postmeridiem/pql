@@ -82,16 +82,16 @@ type dashboard struct {
 }
 
 type decisionSummary struct {
-	Total      int `json:"total"`
-	Confirmed  int `json:"confirmed"`
-	Questions  int `json:"questions"`
-	Rejected   int `json:"rejected"`
-	OpenQs     int `json:"open_questions"`
+	Total     int `json:"total"`
+	Confirmed int `json:"confirmed"`
+	Questions int `json:"questions"`
+	Rejected  int `json:"rejected"`
+	OpenQs    int `json:"open_questions"`
 }
 
 type ticketSummary struct {
-	Total      int            `json:"total"`
-	ByStatus   map[string]int `json:"by_status"`
+	Total    int            `json:"total"`
+	ByStatus map[string]int `json:"by_status"`
 }
 
 func buildDashboard(ctx context.Context, db *sql.DB) (*dashboard, error) {
@@ -321,7 +321,8 @@ func stageChangelog(ctx context.Context, paths []string) error {
 // --- rebuild ---
 
 func newPlanRebuildCmd() *cobra.Command {
-	return &cobra.Command{
+	var verify bool
+	cmd := &cobra.Command{
 		Use:   "rebuild",
 		Short: "Drop replicated tables and replay .pql/changelog/ from scratch",
 		Long: `Truncate the replicated planning tables (tickets, ticket_deps,
@@ -335,8 +336,15 @@ markdown-sourced (D-8) and refreshed via ` + "`pql decisions sync`" + `.
 After a branch switch that changed decisions/*.md, follow rebuild
 with that command.
 
-  pql plan rebuild        # power-user / disaster recovery
-  # or invoked from the post-checkout / post-rewrite hooks`,
+  pql plan rebuild            # power-user / disaster recovery
+  pql plan rebuild --verify   # same, plus a before/after row comparison
+  # or invoked from the post-checkout / post-rewrite hooks
+
+--verify snapshots every replicated row's canonical hash before the
+replay and compares afterwards, reporting rows that came back with
+different content or did not come back at all. Counts alone would miss
+the dangerous case — a row that is present but wrong. A divergence is a
+warning, not a failure; only rows that disappear outright exit non-zero.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -350,22 +358,56 @@ with that command.
 			}
 			defer func() { _ = pdb.Close() }()
 
-			res, err := changelog.Rebuild(ctx, pdb.SQL(), cfg.Vault.Path)
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			warnTicketCollisions(res.Collisions)
-
 			rOpts, err := renderOptsFromFlags(cmd)
 			if err != nil {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(res, rOpts); err != nil {
+
+			if !verify {
+				res, err := changelog.Rebuild(ctx, pdb.SQL(), cfg.Vault.Path)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				warnTicketCollisions(res.Collisions)
+				if _, err := render.One(res, rOpts); err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				return nil
+			}
+
+			res, report, err := changelog.VerifiedRebuild(ctx, pdb.SQL(), cfg.Vault.Path)
+			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			warnTicketCollisions(res.Collisions)
+			warnRebuildDivergences(report)
+
+			verified := &struct {
+				*changelog.RebuildResult
+				Verify *changelog.VerifyReport `json:"verify"`
+			}{res, report}
+			if _, err := render.One(verified, rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			if report.RowsLost > 0 {
+				return &exitError{code: diag.DataErr, msg: fmt.Sprintf(
+					"%d row(s) did not survive the replay; see verify.divergences", report.RowsLost)}
 			}
 			return nil
 		},
+	}
+	cmd.Flags().BoolVar(&verify, "verify", false, "compare row hashes before and after the replay and report divergences")
+	return cmd
+}
+
+// warnRebuildDivergences emits one stderr warning per row that did not survive
+// a verified rebuild intact, so a divergence is visible without reading the
+// result JSON.
+func warnRebuildDivergences(report *changelog.VerifyReport) {
+	for _, d := range report.Divergences {
+		diag.Warn("pql.plan.rebuild_divergence", fmt.Sprintf(
+			"%s: %s.%s did not survive replay unchanged", d.Kind, d.Table, d.Key))
 	}
 }
 

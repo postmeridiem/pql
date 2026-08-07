@@ -516,3 +516,46 @@ Version-tracking requirement (raised 2026-08-07): this introduces a fourth versi
 
 Trigger revision (2026-08-07): run the upgrade on pull, driven by a version change, rather than on every load. The post-merge hook already owns the replication lifecycle (D-18) and already runs plan import, so a pull is where a working-tree change to tracked files is expected and unsurprising; rewriting .pql/changelog during an arbitrary read command would surprise the user and can race an open editor. Detection therefore compares the changelog''s declared format version against the binary''s on the hook path, not on every invocation, which also removes the requirement that the check be cheap enough to run constantly. Two gaps to cover so the trigger is not only a pull: a binary can be upgraded without any pull, and a fresh clone has no merge to hook. So also check at plan import and plan rebuild, which is where a format-incompatible changelog would otherwise fail, and provide an explicit verb for the manual case. On mismatch without an upgrade having run, the right behaviour is a loud diagnostic naming the format version found and the one expected, never a silent replay under the wrong rules.', NULL, '2026-08-07 13:58:00', '2026-08-07 13:58:00.484', '2026-08-07 13:58:00.484', NULL, 'b231dfaeba1ea06efd90eae7aa4c2d1c', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRW9P7VASFHMVSBD1BWB0B8', 'title', 'automatic changelog format upgrades on load', 'automatic changelog format upgrades, triggered on pull', NULL, '2026-08-07 13:58:06', '2026-08-07 13:58:06.465', '2026-08-07 13:58:06.465', NULL, 'f0312ae0ed13ea79782cfd6934c7d035', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRKG5SNB3T4ZW5THC2C6YE4', 'status', 'ready', 'done', NULL, '2026-08-07 14:05:40', '2026-08-07 14:05:40.010', '2026-08-07 14:05:40.010', NULL, 'd31e6edd08c8b8dfdf77707ef0425a52', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FB0TGPVXWVVHST6374CJDB8R', 'status', 'backlog', 'ready', NULL, '2026-08-07 14:34:31', '2026-08-07 14:34:31.494', '2026-08-07 14:34:31.494', NULL, '7484ef56d0046a4eeaf24b6b02094c4f', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXS9BB2GWPY0TWKS9X5V6WNW', 'status', 'backlog', 'ready', NULL, '2026-08-07 14:34:34', '2026-08-07 14:34:34.041', '2026-08-07 14:34:34.041', NULL, '3729debd763643af1b8304b8a25f97ad', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXS9BB2GWPY0TWKS9X5V6WNW', 'description', NULL, 'Raised 2026-08-07: T-44 and T-68 were filed months apart against different
+symptoms and turn out to be the same machine pointed at two axes.
+
+- **T-44** — forward migrations for the **pql.db schema** axis. Gated by D-19 on
+  third-party distribution: an external user cannot be told to `rm pql.db` on
+  every schema change, and their database may hold state no shared changelog has.
+- **T-68** — forward migrations for the **changelog file format** axis. Forced
+  early by T-59: the LWW guard is literal SQL inside already-committed changelog
+  lines, so the fix does not reach existing repos until those files are rewritten.
+
+What they share, and what should therefore be built once:
+
+- An ordered list of forward-only steps, each with an id, a detector and a
+  transformation — a new format or schema change becomes a new entry, not a new
+  mechanism.
+- A declared version per axis to compare a repo''s state against what the binary
+  emits, with all declared versions living in `project.yaml` beside
+  `schema_version` and surfaced through `pql version --build-info`.
+- A trigger policy: on pull via the post-merge hook, plus the paths where an
+  incompatible artefact would otherwise fail (`plan import`, `plan rebuild`), plus
+  an explicit verb for the manual case.
+- A loud diagnostic naming what was found and what was expected whenever a
+  mismatch is detected and no upgrade has run. Never a silent proceed.
+- A mapping of app version to each axis version, kept somewhere durable so an
+  upgrade spanning several releases can be reasoned about after the fact.
+
+Sequencing: T-68 goes first because it is forced now, and it establishes the
+runner. T-44 then applies the same runner to the pql.db axis when its
+distribution gate is actually reached — which keeps faith with D-19''s "no
+migration framework before then" while not building the thing twice. The
+counter-argument is worth stating: D-19 resists a migration runner precisely
+because pql.db is regenerable, and the changelog axis is not the same kind of
+artefact. If the two axes turn out to need genuinely different guarantees, split
+them back apart deliberately rather than by drift.
+
+Both axes want a decision record. The existing D-19 covers the pql.db stance;
+whether this epic amends it or adds a companion record is the first thing to
+settle.', NULL, '2026-08-07 14:36:09', '2026-08-07 14:36:09.505', '2026-08-07 14:36:09.505', NULL, 'b75bf3183772a810477d3d26c19d336b', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FB0TGPVXWVVHST6374CJDB8R', 'parent_id', NULL, 'T-69', NULL, '2026-08-07 14:36:17', '2026-08-07 14:36:17.809', '2026-08-07 14:36:17.809', NULL, '0e0550e409d7eb9fd4164ec582f985a0', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRW9P7VASFHMVSBD1BWB0B8', 'parent_id', NULL, 'T-69', NULL, '2026-08-07 14:36:17', '2026-08-07 14:36:17.816', '2026-08-07 14:36:17.816', NULL, 'a58fd6542394b54b0ac8a94a355e7048', 2) ON CONFLICT(hash) DO NOTHING;

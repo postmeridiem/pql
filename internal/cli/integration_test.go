@@ -1401,6 +1401,77 @@ func TestIntegration_TicketList_Oneline(t *testing.T) {
 	}
 }
 
+// A clean vault verifies clean, and --verify stays exit 0 — the flag is a
+// report, not a gate (T-60).
+func TestIntegration_PlanRebuildVerify_CleanVaultExits0(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "one", "--id-only")
+	pqlIT(t, vault, "ticket", "new", "task", "two", "--id-only")
+
+	stdout := pqlIT(t, vault, "plan", "rebuild", "--verify")
+	var res struct {
+		Verify struct {
+			RowsBefore  map[string]int `json:"rows_before"`
+			RowsAfter   map[string]int `json:"rows_after"`
+			RowsLost    int            `json:"rows_lost"`
+			Divergences []struct {
+				Kind string `json:"kind"`
+			} `json:"divergences"`
+		} `json:"verify"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
+	}
+	if len(res.Verify.Divergences) != 0 || res.Verify.RowsLost != 0 {
+		t.Errorf("clean vault reported divergences: %s", stdout)
+	}
+	if res.Verify.RowsBefore["tickets"] != 2 || res.Verify.RowsAfter["tickets"] != 2 {
+		t.Errorf("ticket counts wrong either side of the replay: %s", stdout)
+	}
+}
+
+// Rows that vanish are the one case that exits non-zero — a report nobody
+// reads is not a safety net.
+func TestIntegration_PlanRebuildVerify_LostRowsExit65(t *testing.T) {
+	vault := initVaultIT(t)
+	dbPath := filepath.Join(t.TempDir(), "plan.sqlite")
+	pql := func(args ...string) (string, []byte, int) {
+		t.Helper()
+		full := append([]string{"--vault", vault, "--db", dbPath}, args...)
+		cmd := pqlCmd(t, full...)
+		var outBuf, errBuf bytes.Buffer
+		cmd.Stdout = &outBuf
+		cmd.Stderr = &errBuf
+		code := 0
+		if err := cmd.Run(); err != nil {
+			var ee *exec.ExitError
+			if errors.As(err, &ee) {
+				code = ee.ExitCode()
+			} else {
+				t.Fatalf("invoke: %v", err)
+			}
+		}
+		return outBuf.String(), errBuf.Bytes(), code
+	}
+
+	if _, _, code := pql("ticket", "new", "task", "kept", "--id-only"); code != 0 {
+		t.Fatalf("seed ticket: exit %d", code)
+	}
+	// Delete the changelog the ticket wrote through to: the row now exists only
+	// in the database, so a replay cannot bring it back.
+	if err := os.RemoveAll(filepath.Join(vault, ".pql", "changelog")); err != nil {
+		t.Fatalf("drop changelog: %v", err)
+	}
+
+	stdout, stderr, code := pql("plan", "rebuild", "--verify")
+	if code != 65 {
+		t.Errorf("exit = %d, want 65 when rows are lost\nstdout: %s", code, stdout)
+	}
+	if !strings.Contains(string(stderr), "rebuild_divergence") {
+		t.Errorf("stderr should carry a divergence diagnostic, got: %s", stderr)
+	}
+}
+
 // Decision linkage used to be settable only at `ticket new`, so a tree created
 // without --decision could never be repaired and the decision's own
 // implementation-status view (D-20) quietly under-reported (T-61).

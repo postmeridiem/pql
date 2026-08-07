@@ -863,3 +863,131 @@ Risks to handle explicitly:
 Version-tracking requirement (raised 2026-08-07): this introduces a fourth version axis, and they now need to be legible together. Today there is project.yaml version (the app), project.yaml schema_version (index.db), planning.CanonicalVersion (pql.db row hashing), and with this ticket a changelog format version. A consumer holding format 1 needs to know which binary emits format 2, and pql needs to answer that without the user reading source. Requirements: declare the changelog format version in project.yaml beside schema_version so all declared versions live in one file; expose it plus CanonicalVersion from pql version --build-info, which already carries schema_version, so a consumer can diff what it has against what the binary emits; and keep a mapping of app version to each schema/format version somewhere durable (a table in docs or a section in CHANGELOG) so an upgrade across several releases can be reasoned about after the fact. The upgrade module should read the declared version rather than a constant buried in a package.
 
 Trigger revision (2026-08-07): run the upgrade on pull, driven by a version change, rather than on every load. The post-merge hook already owns the replication lifecycle (D-18) and already runs plan import, so a pull is where a working-tree change to tracked files is expected and unsurprising; rewriting .pql/changelog during an arbitrary read command would surprise the user and can race an open editor. Detection therefore compares the changelog''s declared format version against the binary''s on the hook path, not on every invocation, which also removes the requirement that the check be cheap enough to run constantly. Two gaps to cover so the trigger is not only a pull: a binary can be upgraded without any pull, and a fresh clone has no merge to hook. So also check at plan import and plan rebuild, which is where a format-incompatible changelog would otherwise fail, and provide an explicit verb for the manual case. On mismatch without an upgrade having run, the right behaviour is a loud diagnostic naming the format version found and the one expected, never a silent replay under the wrong rules.', 'ready', 'high', NULL, NULL, 'D-15', '2026-08-07 13:37:14.814', '2026-08-07 13:58:06.465', NULL, '92d142ed7aa663173a6d39274aa2f8dd', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRKG5SNB3T4ZW5THC2C6YE4', 'task', NULL, 'pql ticket decision <id> <D-NNN|none> to link an existing ticket to a decision', 'Source: feature-request.md FR-5 (settled-reach, 2026-07-27). A delegated agent
+created a 19-ticket tree implementing a freshly written D-record and omitted
+`--decision` on every `ticket new`. Discovered on review, unrepairable.
+
+Today `decision_ref` is create-time-or-never. `internal/cli/ticket.go` wires
+`--decision` only onto `ticket new`; `repo.UpdateTicketFields`
+(`internal/planning/repo/tickets.go:1049`) covers title/description/priority/type
+only, and `refine write` decodes with `DisallowUnknownFields`, so a
+`{"decision":"D-1"}` patch is rejected outright.
+
+Every other structural attribute is repairable after the fact — `setparent` for
+hierarchy, `block`/`unblock` for dependencies, `assign`, `team`, `label`, `status`,
+even `relabel` for a colliding id. Decision linkage is the only one where a
+delegation mistake is permanent, and it degrades D-20''s implementation-status view
+(`decisions show <id> --with-tickets`) silently: that view is only as complete as
+the links happen to be.
+
+Ask — a dedicated subcommand matching the setparent/team/assign precedent:
+
+    pql ticket decision T-1211 D-258        # set/replace
+    pql ticket decision T-1211 none         # clear, mirroring `setparent … none`
+
+Accept comma-batched ids (`T-1,T-2,T-3`) the way `setparent` does; the motivating
+case is 19 tickets at once, and a repair verb that only takes one id at a time
+invites the same delegation failure it exists to fix.
+
+Scope: repo method, a `ticket_history` row per change, changelog write-through,
+integration test, the embedded skill''s ticket-subcommand table
+(`internal/skill/SKILL.md`), and CHANGELOG. Decide explicitly whether to validate
+that the D-record exists: `ticket new` does not today (it stores the ref
+unchecked), so warn-but-write matches existing behaviour while a hard reject is a
+behaviour change worth stating in the record. Adding `decision` to `refine write`''s
+writable set would serve equally well; the dedicated subcommand just matches the
+established precedent.', 'done', 'medium', NULL, NULL, 'D-20', '2026-08-07 12:58:48.653', '2026-08-07 14:05:40.010', NULL, 'c60cf184c875677b825ee544b11752b2', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXS9BB2GWPY0TWKS9X5V6WNW', 'epic', NULL, 'forward migration machinery across the version axes', NULL, 'backlog', 'high', NULL, NULL, 'D-19', '2026-08-07 14:34:16.212', '2026-08-07 14:34:16.212', NULL, '8b7195c515b2165fbcc08e53e9849703', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FB0TGPVXWVVHST6374CJDB8R', 'task', NULL, 'implement pql.db forward migrations (gate: third-party distribution)', 'Per the 2026-05-31 amendment to D-19: the ''no migration runner ever'' stance holds only while pql is single-author / pre-distribution — pql.db is a regenerable cache, so rm + rebuild from the changelog is acceptable recovery. Before distributing to third parties or onboarding users beyond the author, add an in-place forward-migration path: external users can''t be told to rm pql.db on every schema change, and their pql.db may hold state not yet in any shared changelog. Scope: revive the in-house runner D-6 sketched (a schema_migrations table + forward-only steps in internal/planning/schema.go), or equivalent. Gate: external distribution / multi-user adoption. Until then, schema-create-if-missing + verify + regenerate-from-changelog stands.', 'ready', 'medium', NULL, NULL, 'D-19', '2026-05-31 12:25:23', '2026-08-07 14:34:31.493', NULL, '7add80eb38e86794baa01d65a4d832d9', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXS9BB2GWPY0TWKS9X5V6WNW', 'epic', NULL, 'forward migration machinery across the version axes', NULL, 'ready', 'high', NULL, NULL, 'D-19', '2026-08-07 14:34:16.212', '2026-08-07 14:34:34.041', NULL, 'da11ec79fab4ad7a6a9769b9f808382d', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXS9BB2GWPY0TWKS9X5V6WNW', 'epic', NULL, 'forward migration machinery across the version axes', 'Raised 2026-08-07: T-44 and T-68 were filed months apart against different
+symptoms and turn out to be the same machine pointed at two axes.
+
+- **T-44** — forward migrations for the **pql.db schema** axis. Gated by D-19 on
+  third-party distribution: an external user cannot be told to `rm pql.db` on
+  every schema change, and their database may hold state no shared changelog has.
+- **T-68** — forward migrations for the **changelog file format** axis. Forced
+  early by T-59: the LWW guard is literal SQL inside already-committed changelog
+  lines, so the fix does not reach existing repos until those files are rewritten.
+
+What they share, and what should therefore be built once:
+
+- An ordered list of forward-only steps, each with an id, a detector and a
+  transformation — a new format or schema change becomes a new entry, not a new
+  mechanism.
+- A declared version per axis to compare a repo''s state against what the binary
+  emits, with all declared versions living in `project.yaml` beside
+  `schema_version` and surfaced through `pql version --build-info`.
+- A trigger policy: on pull via the post-merge hook, plus the paths where an
+  incompatible artefact would otherwise fail (`plan import`, `plan rebuild`), plus
+  an explicit verb for the manual case.
+- A loud diagnostic naming what was found and what was expected whenever a
+  mismatch is detected and no upgrade has run. Never a silent proceed.
+- A mapping of app version to each axis version, kept somewhere durable so an
+  upgrade spanning several releases can be reasoned about after the fact.
+
+Sequencing: T-68 goes first because it is forced now, and it establishes the
+runner. T-44 then applies the same runner to the pql.db axis when its
+distribution gate is actually reached — which keeps faith with D-19''s "no
+migration framework before then" while not building the thing twice. The
+counter-argument is worth stating: D-19 resists a migration runner precisely
+because pql.db is regenerable, and the changelog axis is not the same kind of
+artefact. If the two axes turn out to need genuinely different guarantees, split
+them back apart deliberately rather than by drift.
+
+Both axes want a decision record. The existing D-19 covers the pql.db stance;
+whether this epic amends it or adds a companion record is the first thing to
+settle.', 'ready', 'high', NULL, NULL, 'D-19', '2026-08-07 14:34:16.212', '2026-08-07 14:36:09.505', NULL, '3feb32bc3956b378e718f2bc73d2a59b', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FB0TGPVXWVVHST6374CJDB8R', 'task', '06FXS9BB2GWPY0TWKS9X5V6WNW', 'implement pql.db forward migrations (gate: third-party distribution)', 'Per the 2026-05-31 amendment to D-19: the ''no migration runner ever'' stance holds only while pql is single-author / pre-distribution — pql.db is a regenerable cache, so rm + rebuild from the changelog is acceptable recovery. Before distributing to third parties or onboarding users beyond the author, add an in-place forward-migration path: external users can''t be told to rm pql.db on every schema change, and their pql.db may hold state not yet in any shared changelog. Scope: revive the in-house runner D-6 sketched (a schema_migrations table + forward-only steps in internal/planning/schema.go), or equivalent. Gate: external distribution / multi-user adoption. Until then, schema-create-if-missing + verify + regenerate-from-changelog stands.', 'ready', 'medium', NULL, NULL, 'D-19', '2026-05-31 12:25:23', '2026-08-07 14:36:17.809', NULL, '1826391001552ea959efad65f0136281', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRW9P7VASFHMVSBD1BWB0B8', 'task', '06FXS9BB2GWPY0TWKS9X5V6WNW', 'automatic changelog format upgrades, triggered on pull', 'Raised 2026-08-07 while fixing T-59. The LWW guard is not a runtime rule — it is
+literal SQL text baked into every `INSERT ... ON CONFLICT` line already committed
+under `.pql/changelog/`. Changing the exporter therefore only fixes rows written
+from now on; every historical row keeps replaying under the old, causally wrong
+tie-break. The consumers (clide, settled-reach, council) must not have to run a
+manual repair, so the upgrade has to happen automatically when pql loads a
+changelog it recognises as an older format.
+
+Design (user''s, and the right one): **do the transformation in SQL, not with
+regexes over the file text.** We already have a SQLite database at hand; use it.
+
+1. **Detect.** Carry an explicit changelog format version — a marker in
+   `.pql/changelog/` (alongside `0000-schema.sql`, which already uses key markers
+   the importer reads). Absent marker = format 1. Compare against the version this
+   binary emits; equal means no work, and the check must be cheap enough to run on
+   every load.
+2. **Stage.** Replay each table''s files into a staging table mirroring the
+   canonical columns plus `seq INTEGER PRIMARY KEY AUTOINCREMENT` and the source
+   file, so arrival order — the causal order the fix depends on — is captured as
+   data. The staging load must be append-only: the ON CONFLICT tail has to be
+   dropped before execution, otherwise the *old* guard resolves the rows during
+   staging and bakes the very loss we are repairing into the output. Dropping a
+   trailing clause is a structural edit, not a semantic rewrite of row contents.
+3. **Transform in SQL.** Rename, restructure, re-resolve — whatever the format
+   step needs — as ordinary statements against the staging table.
+4. **Re-emit.** Write the files back from the staging rows, in `seq` order,
+   through the current statement renderer, so the output carries the new guard.
+   Same rows, same order, corrected conflict clause: the log is preserved, not
+   collapsed to current state. Collapsing would discard intermediate mutations and
+   make every clone''s files diverge textually.
+5. **Stamp** the new format version and make the whole thing idempotent — a second
+   run must be a no-op.
+
+Structure it as a module with an ordered list of format steps, each with an id, a
+detector and a transformation, so the next changelog format change is a new entry
+rather than a new mechanism. This is the changelog-format axis, distinct from
+pql.db schema migrations (D-19 / T-44) — worth saying out loud in the record so
+the two do not get conflated, though they should probably share a vocabulary.
+
+Risks to handle explicitly:
+
+- The files are git-tracked. A rewrite produces a real diff in the consumer''s
+  working tree; it must land in a commit, and the staging must be atomic enough
+  that an interrupted upgrade cannot leave a half-rewritten changelog.
+- Two clones upgrading independently must produce byte-identical output, or the
+  next merge is a conflict storm. Determinism of the renderer is the requirement.
+- Needs a decision record: automatic rewriting of tracked files on load is a
+  behaviour worth stating deliberately, including whether it is opt-out.
+
+Version-tracking requirement (raised 2026-08-07): this introduces a fourth version axis, and they now need to be legible together. Today there is project.yaml version (the app), project.yaml schema_version (index.db), planning.CanonicalVersion (pql.db row hashing), and with this ticket a changelog format version. A consumer holding format 1 needs to know which binary emits format 2, and pql needs to answer that without the user reading source. Requirements: declare the changelog format version in project.yaml beside schema_version so all declared versions live in one file; expose it plus CanonicalVersion from pql version --build-info, which already carries schema_version, so a consumer can diff what it has against what the binary emits; and keep a mapping of app version to each schema/format version somewhere durable (a table in docs or a section in CHANGELOG) so an upgrade across several releases can be reasoned about after the fact. The upgrade module should read the declared version rather than a constant buried in a package.
+
+Trigger revision (2026-08-07): run the upgrade on pull, driven by a version change, rather than on every load. The post-merge hook already owns the replication lifecycle (D-18) and already runs plan import, so a pull is where a working-tree change to tracked files is expected and unsurprising; rewriting .pql/changelog during an arbitrary read command would surprise the user and can race an open editor. Detection therefore compares the changelog''s declared format version against the binary''s on the hook path, not on every invocation, which also removes the requirement that the check be cheap enough to run constantly. Two gaps to cover so the trigger is not only a pull: a binary can be upgraded without any pull, and a fresh clone has no merge to hook. So also check at plan import and plan rebuild, which is where a format-incompatible changelog would otherwise fail, and provide an explicit verb for the manual case. On mismatch without an upgrade having run, the right behaviour is a loud diagnostic naming the format version found and the one expected, never a silent replay under the wrong rules.', 'ready', 'high', NULL, NULL, 'D-15', '2026-08-07 13:37:14.814', '2026-08-07 14:36:17.816', NULL, '990612e6aa95391c20242a5357e4ca78', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);

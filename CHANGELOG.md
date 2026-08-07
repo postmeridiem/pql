@@ -15,6 +15,16 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ### Added
 
+- **`pql plan rebuild --verify` (T-60).** Snapshots every replicated row's
+  canonical hash before the drop-and-replay and compares afterwards, reporting
+  rows that came back with different content (`changed`) or did not come back at
+  all (`missing`), with per-row warnings on stderr and counts either side in the
+  result. Row counts alone would have missed the failure that motivated it: the
+  row was present, just wrong, and every rebuild silently reaffirmed it for a
+  month. A divergence is a warning and stays exit `0` — only lost rows exit
+  `65`. Attributing a divergence to an equal-timestamp tie needs per-statement
+  changelog staging and lands with T-68.
+
 - **`pql ticket decision <id[,id,...]> <D-NNN|none>` (T-61).** Links existing
   tickets to the decision they implement, or clears the link with `none`,
   mirroring `setparent`. Decision linkage was previously settable only at
