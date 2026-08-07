@@ -195,6 +195,21 @@ func (fs *fileSink) close() {
 	}
 }
 
+// Every replicated row carries an inline last-writer-wins guard (D-16):
+// `WHERE excluded.updated_at >= <table>.updated_at`. A strictly newer row wins,
+// and an exact tie resolves in favour of whichever statement is applied later —
+// which is the row appended later in the changelog, since replay walks tables,
+// files and lines in sorted order.
+//
+// Position, not content hash. The guard originally broke ties on
+// `excluded.hash > <table>.hash`, an ordering that is arbitrary with respect to
+// causality: a ticket created and mutated inside one timestamp tick produced two
+// rows whose winner depended on which content happened to sort higher, so replay
+// could revert the row to its created state on every fresh clone and branch
+// switch (T-59, and T-1057 in settled-reach — a description lost for a month).
+// Append order within a file *is* causal order, and unlike sub-second precision
+// it also repairs rows already written. The hash remains on the row for identity
+// and dedupe; it no longer decides recency.
 type tableExporter func(ctx context.Context, db *sql.DB, since string, sink *fileSink) (int, error)
 
 var tableExporters = []tableExporter{
@@ -236,7 +251,7 @@ func exportTicketIDMap(ctx context.Context, db *sql.DB, since string, sink *file
 			return n, err
 		}
 		line := fmt.Sprintf(
-			`INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(record_id) DO UPDATE SET ticket_id=excluded.ticket_id, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > ticket_idmap.updated_at OR (excluded.updated_at = ticket_idmap.updated_at AND excluded.hash > ticket_idmap.hash);`,
+			`INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(record_id) DO UPDATE SET ticket_id=excluded.ticket_id, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= ticket_idmap.updated_at;`,
 			sqlStr(recordID), sqlStr(ticketID),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
@@ -287,7 +302,7 @@ func exportTickets(ctx context.Context, db *sql.DB, since string, sink *fileSink
 			return n, err
 		}
 		line := fmt.Sprintf(
-			`INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);`,
+			`INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;`,
 			sqlStr(recordID), sqlStr(typ), sqlNullStr(parentRecID), sqlStr(title), sqlNullStr(description),
 			sqlStr(status), sqlStr(priority),
 			sqlNullStr(assignedTo), sqlNullStr(team), sqlNullStr(decisionRef),
@@ -334,7 +349,7 @@ func exportTicketDeps(ctx context.Context, db *sql.DB, since string, sink *fileS
 			return n, err
 		}
 		line := fmt.Sprintf(
-			`INSERT INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(blocker_record_id, blocked_record_id) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > ticket_deps.updated_at OR (excluded.updated_at = ticket_deps.updated_at AND excluded.hash > ticket_deps.hash);`,
+			`INSERT INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(blocker_record_id, blocked_record_id) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= ticket_deps.updated_at;`,
 			sqlStr(blocker), sqlStr(blocked),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
@@ -379,7 +394,7 @@ func exportTicketLabels(ctx context.Context, db *sql.DB, since string, sink *fil
 			return n, err
 		}
 		line := fmt.Sprintf(
-			`INSERT INTO ticket_labels (ticket_record_id, label, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(ticket_record_id, label) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > ticket_labels.updated_at OR (excluded.updated_at = ticket_labels.updated_at AND excluded.hash > ticket_labels.hash);`,
+			`INSERT INTO ticket_labels (ticket_record_id, label, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(ticket_record_id, label) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= ticket_labels.updated_at;`,
 			sqlStr(ticketRecID), sqlStr(label),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),

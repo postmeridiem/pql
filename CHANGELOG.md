@@ -15,6 +15,23 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ### Fixed
 
+- **Changelog replay resolves an exact `updated_at` tie by append position, not
+  content hash (T-59, D-16 amended).** The emitted guard is now `WHERE
+  excluded.updated_at >= <table>.updated_at`, so the row appended later to the
+  changelog wins a tie — replay applies statements in sorted table/file/line
+  order, which is causal order. The retired tiebreaker compared content hashes,
+  an ordering unrelated to recency: a ticket created and mutated inside one
+  timestamp tick could revert to its created state on every `plan rebuild`,
+  fresh clone or branch switch, depending on which content happened to sort
+  higher. 1.10.4 fixed the *write* side by moving timestamps to millisecond
+  precision, but rows written before it keep second granularity permanently, so
+  the ties — and the silent reverts — survived. The hash stays on every row for
+  content integrity and as the exporter's emission-order tiebreaker.
+  **Note:** the guard is literal SQL inside each already-committed changelog
+  line, so existing history still carries the old rule until it is rewritten;
+  that rewrite, and an explicit changelog format version to drive it, are
+  tracked by T-68.
+
 - **A `git worktree` session no longer resolves to its main checkout (T-58).**
   Vault discovery required `.git` to be a *directory*, but a linked worktree
   carries a `.git` **file** holding a `gitdir:` pointer — so the walk-up skipped

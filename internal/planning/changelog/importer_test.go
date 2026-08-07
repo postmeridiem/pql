@@ -197,6 +197,70 @@ func TestImport_LWWGuardPreventsStaleOverwrite(t *testing.T) {
 	}
 }
 
+// The T-1057 shape: a ticket created and immediately appended to inside one
+// timestamp tick, so both changelog rows carry the identical updated_at. The
+// guard used to break that tie on the content hash, which is unrelated to
+// causality — the placeholder won whenever its hash sorted higher, and every
+// replay silently reverted the description. Append position decides now, so the
+// second row wins however the hashes sort (T-59).
+func TestImport_EqualTimestampResolvesByAppendPosition(t *testing.T) {
+	ctx := context.Background()
+	srcVault, srcDB := setupVault(t)
+	const ts = "2025-06-12 10:40:59"
+
+	// Row 1: the placeholder, hashed high on purpose so the retired
+	// hash tiebreaker would have preferred it.
+	seedTicket(t, srcDB, "T-1", ts)
+	if _, err := srcDB.ExecContext(ctx, `
+		UPDATE tickets SET description = '(description follows in first append)',
+		                   hash = 'ffffffffffffffff'
+		WHERE record_id = 'T-1'
+	`); err != nil {
+		t.Fatalf("seed placeholder: %v", err)
+	}
+	if _, err := Export(ctx, srcDB, srcVault); err != nil {
+		t.Fatalf("export placeholder: %v", err)
+	}
+
+	// Row 2: the real text, same updated_at, hashed low. Resetting the export
+	// marker is what a same-tick second mutation produces in practice — another
+	// line appended to the same month file.
+	if _, err := srcDB.ExecContext(ctx, `
+		UPDATE tickets SET description = 'the real description',
+		                   hash = '0000000000000000'
+		WHERE record_id = 'T-1'
+	`); err != nil {
+		t.Fatalf("seed append: %v", err)
+	}
+	if err := repo.WriteMeta(ctx, srcDB, repo.MetaLastExportMarker, ""); err != nil {
+		t.Fatalf("reset marker: %v", err)
+	}
+	if _, err := Export(ctx, srcDB, srcVault); err != nil {
+		t.Fatalf("export append: %v", err)
+	}
+
+	// Replay into a clean replica — the fresh-clone / branch-switch path.
+	dstVault, dstDB := setupVault(t)
+	copyTree(t,
+		filepath.Join(srcVault, ".pql", "changelog"),
+		filepath.Join(dstVault, ".pql", "changelog"),
+	)
+	if _, err := Import(ctx, dstDB, dstVault); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+
+	var got string
+	if err := dstDB.QueryRowContext(ctx,
+		`SELECT description FROM tickets WHERE record_id = 'T-1'`,
+	).Scan(&got); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if got != "the real description" {
+		t.Errorf("description = %q, want the later-appended row; "+
+			"the placeholder winning means the tie resolved on hash, not position", got)
+	}
+}
+
 func TestImport_RefusesMismatchedCanonicalVersion(t *testing.T) {
 	ctx := context.Background()
 	vault, db := setupVault(t)
