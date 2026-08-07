@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -44,13 +45,64 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// sandboxHomes holds one fake HOME per test, so repeated invocations inside a
+// single test see each other's writes (install → status) while separate tests
+// stay isolated.
+var sandboxHomes sync.Map // test name → home dir
+
+// pqlCmd builds an *exec.Cmd for the integration binary with a sandboxed
+// environment. Every invocation in this suite goes through it.
+//
+// Skill scope auto-resolves to *user* scope whenever a bundled skill is already
+// installed under $HOME — true on any developer machine, never in CI. With the
+// real HOME inherited, six tests failed locally for reasons unrelated to the
+// code under test, and the run rewrote the developer's ~/.claude/skills/ with
+// the test binary's embedded copy (T-57). Redirecting HOME, the XDG dirs, and
+// any ambient PQL_* overrides makes the suite hermetic, so it gates locally
+// exactly as it does in CI.
+func pqlCmd(t *testing.T, args ...string) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command(pqlBin, args...)
+	cmd.Env = sandboxEnv(t)
+	return cmd
+}
+
+func sandboxEnv(t *testing.T) []string {
+	t.Helper()
+	stored, ok := sandboxHomes.Load(t.Name())
+	if !ok {
+		stored = t.TempDir()
+		sandboxHomes.Store(t.Name(), stored)
+		t.Cleanup(func() { sandboxHomes.Delete(t.Name()) })
+	}
+	home := stored.(string)
+
+	var env []string
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		switch {
+		case key == "HOME", key == "USERPROFILE",
+			key == "XDG_CONFIG_HOME", key == "XDG_CACHE_HOME",
+			strings.HasPrefix(key, "PQL_"):
+			continue // replaced below, or dropped so the dev shell cannot leak in
+		}
+		env = append(env, kv)
+	}
+	return append(env,
+		"HOME="+home,
+		"USERPROFILE="+home, // os.UserHomeDir reads this one on Windows
+		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
+		"XDG_CACHE_HOME="+filepath.Join(home, ".cache"),
+	)
+}
+
 // run invokes pqlBin with the given args and an out-of-vault --db so the
 // test fixture stays clean. Returns stdout, stderr, and the exit code.
 func run(t *testing.T, vault string, args ...string) (stdout, stderr []byte, exitCode int) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "integration.sqlite")
 	full := append([]string{"--vault", vault, "--db", dbPath}, args...)
-	cmd := exec.Command(pqlBin, full...)
+	cmd := pqlCmd(t, full...)
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -133,7 +185,7 @@ func councilVault(t *testing.T) string {
 // --- tests ----------------------------------------------------------------
 
 func TestIntegration_Version(t *testing.T) {
-	cmd := exec.Command(pqlBin, "--version")
+	cmd := pqlCmd(t, "--version")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("pql --version: %v", err)
@@ -144,7 +196,7 @@ func TestIntegration_Version(t *testing.T) {
 }
 
 func TestIntegration_VersionBuildInfo(t *testing.T) {
-	cmd := exec.Command(pqlBin, "version", "--build-info")
+	cmd := pqlCmd(t, "version", "--build-info")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("pql version --build-info: %v", err)
@@ -447,7 +499,7 @@ func TestIntegration_Meta_VaasaPersona(t *testing.T) {
 func TestIntegration_Skill_StatusOnMissingExits0(t *testing.T) {
 	vault := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	cmd := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "status")
+	cmd := pqlCmd(t, "--vault", vault, "--db", dbPath, "skill", "status")
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -471,7 +523,7 @@ func TestIntegration_Skill_InstallIsIdempotent(t *testing.T) {
 
 	runSkill := func(args ...string) (int, []byte) {
 		full := append([]string{"--vault", vault, "--db", dbPath}, args...)
-		cmd := exec.Command(pqlBin, full...)
+		cmd := pqlCmd(t, full...)
 		out, err := cmd.Output()
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
@@ -511,7 +563,7 @@ func TestIntegration_Skill_InstallRefusesModifiedWithoutForce(t *testing.T) {
 	vault := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
 
-	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
+	if err := pqlCmd(t, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
 	skillFile := filepath.Join(vault, ".claude", "skills", "pql", "SKILL.md")
@@ -519,7 +571,7 @@ func TestIntegration_Skill_InstallRefusesModifiedWithoutForce(t *testing.T) {
 		t.Fatalf("hand-edit: %v", err)
 	}
 
-	cmd := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install")
+	cmd := pqlCmd(t, "--vault", vault, "--db", dbPath, "skill", "install")
 	var errBuf bytes.Buffer
 	cmd.Stderr = &errBuf
 	err := cmd.Run()
@@ -540,7 +592,7 @@ func TestIntegration_Skill_InstallRefusesModifiedWithoutForce(t *testing.T) {
 	}
 
 	// With --force it succeeds.
-	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install", "--force").Run(); err != nil {
+	if err := pqlCmd(t, "--vault", vault, "--db", dbPath, "skill", "install", "--force").Run(); err != nil {
 		t.Errorf("--force install failed: %v", err)
 	}
 }
@@ -548,11 +600,11 @@ func TestIntegration_Skill_InstallRefusesModifiedWithoutForce(t *testing.T) {
 func TestIntegration_Skill_UninstallRemovesFiles(t *testing.T) {
 	vault := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
+	if err := pqlCmd(t, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	cmd := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "uninstall")
+	cmd := pqlCmd(t, "--vault", vault, "--db", dbPath, "skill", "uninstall")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("exit = %v, want 0 (state=missing reported in data post-uninstall)", err)
@@ -687,7 +739,7 @@ func TestIntegration_Query_NoMatchExits0(t *testing.T) {
 func TestIntegration_Doctor_FreshVaultBeforeIndex(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "doctor")
+	cmd := pqlCmd(t, "--vault", dir, "--db", dbPath, "doctor")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("pql doctor: %v", err)
@@ -715,11 +767,11 @@ func TestIntegration_Doctor_PopulatedAfterIndex(t *testing.T) {
 	vault := councilVault(t)
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
 	// First, run a query to materialise the index.
-	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "files", "--limit", "1").Run(); err != nil {
+	if err := pqlCmd(t, "--vault", vault, "--db", dbPath, "files", "--limit", "1").Run(); err != nil {
 		t.Fatalf("warm up index: %v", err)
 	}
 	// Now doctor should report a populated DB.
-	out, err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
+	out, err := pqlCmd(t, "--vault", vault, "--db", dbPath, "doctor").Output()
 	if err != nil {
 		t.Fatalf("pql doctor: %v", err)
 	}
@@ -753,7 +805,7 @@ func TestIntegration_Doctor_SkillFieldReportsState(t *testing.T) {
 	// per-skill skills array.
 	pqlEntry := func() (projectState, embeddedHash string) {
 		t.Helper()
-		out, err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
+		out, err := pqlCmd(t, "--vault", vault, "--db", dbPath, "doctor").Output()
 		if err != nil {
 			t.Fatalf("doctor: %v", err)
 		}
@@ -792,7 +844,7 @@ func TestIntegration_Doctor_SkillFieldReportsState(t *testing.T) {
 	}
 
 	// After installing, doctor should report current.
-	if err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
+	if err := pqlCmd(t, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
 		t.Fatalf("skill install: %v", err)
 	}
 	if state, _ := pqlEntry(); state != "current" {
@@ -803,7 +855,7 @@ func TestIntegration_Doctor_SkillFieldReportsState(t *testing.T) {
 func TestIntegration_Doctor_VersionMatchesBinary(t *testing.T) {
 	vault := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	out, err := exec.Command(pqlBin, "--vault", vault, "--db", dbPath, "doctor").Output()
+	out, err := pqlCmd(t, "--vault", vault, "--db", dbPath, "doctor").Output()
 	if err != nil {
 		t.Fatalf("pql doctor: %v", err)
 	}
@@ -827,7 +879,7 @@ func TestIntegration_Doctor_VersionMatchesBinary(t *testing.T) {
 func TestIntegration_Init_FreshDirectory(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init")
+	cmd := pqlCmd(t, "--vault", dir, "--db", dbPath, "init")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("pql init: %v", err)
@@ -871,7 +923,7 @@ func TestIntegration_Init_IsIdempotentOnExistingConfig(t *testing.T) {
 	}
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
 	// Skip the skill prompt; we're testing config behaviour.
-	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init", "--with-skill=no")
+	cmd := pqlCmd(t, "--vault", dir, "--db", dbPath, "init", "--with-skill=no")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("init: %v", err)
@@ -898,7 +950,7 @@ func TestIntegration_Init_IsIdempotentOnExistingConfig(t *testing.T) {
 func TestIntegration_Init_WithSkillYesInstalls(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init", "--with-skill=yes")
+	cmd := pqlCmd(t, "--vault", dir, "--db", dbPath, "init", "--with-skill=yes")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("init: %v", err)
@@ -917,7 +969,7 @@ func TestIntegration_Init_WithSkillYesInstalls(t *testing.T) {
 func TestIntegration_Init_WithSkillNoSkips(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init", "--with-skill=no")
+	cmd := pqlCmd(t, "--vault", dir, "--db", dbPath, "init", "--with-skill=no")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("init: %v", err)
@@ -940,7 +992,7 @@ func TestIntegration_Init_WithSkillPromptSkipsWithoutTTY(t *testing.T) {
 	// should defer cleanly without hanging.
 	dir := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init", "--with-skill=prompt")
+	cmd := pqlCmd(t, "--vault", dir, "--db", dbPath, "init", "--with-skill=prompt")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("init: %v", err)
@@ -959,7 +1011,7 @@ func TestIntegration_Init_AppendsToExistingGitignore(t *testing.T) {
 		t.Fatalf("seed gitignore: %v", err)
 	}
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
-	cmd := exec.Command(pqlBin, "--vault", dir, "--db", dbPath, "init")
+	cmd := pqlCmd(t, "--vault", dir, "--db", dbPath, "init")
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("pql init: %v", err)
 	}
@@ -1221,7 +1273,7 @@ func TestIntegration_Rebuild_NoCollisionNoWarning(t *testing.T) {
 
 func TestIntegration_Status_BlocksCloseWithOpenChildren(t *testing.T) {
 	vault := initVaultIT(t)
-	pqlIT(t, vault, "ticket", "new", "epic", "parent epic", "--id-only")   // T-1
+	pqlIT(t, vault, "ticket", "new", "epic", "parent epic", "--id-only")                   // T-1
 	pqlIT(t, vault, "ticket", "new", "task", "child task", "--parent", "T-1", "--id-only") // T-2
 
 	_, stderr, code := run(t, vault, "ticket", "status", "T-1", "done")
@@ -1235,8 +1287,8 @@ func TestIntegration_Status_BlocksCloseWithOpenChildren(t *testing.T) {
 
 func TestIntegration_Status_ForceCascadesToSubtree(t *testing.T) {
 	vault := initVaultIT(t)
-	pqlIT(t, vault, "ticket", "new", "epic", "epic", "--id-only")                      // T-1
-	pqlIT(t, vault, "ticket", "new", "story", "story", "--parent", "T-1", "--id-only") // T-2
+	pqlIT(t, vault, "ticket", "new", "epic", "epic", "--id-only")                         // T-1
+	pqlIT(t, vault, "ticket", "new", "story", "story", "--parent", "T-1", "--id-only")    // T-2
 	pqlIT(t, vault, "ticket", "new", "task", "deep task", "--parent", "T-2", "--id-only") // T-3
 
 	stdout, stderr, code := run(t, vault, "ticket", "status", "T-1", "cancelled", "--force")
