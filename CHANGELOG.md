@@ -13,6 +13,20 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ## [1.12.0]
 
+### Added
+
+- **`pql ticket decision <id[,id,...]> <D-NNN|none>` (T-61).** Links existing
+  tickets to the decision they implement, or clears the link with `none`,
+  mirroring `setparent`. Decision linkage was previously settable only at
+  `ticket new --decision`, which made it the one structural attribute a
+  delegation mistake could not repair — every other one (parent, blockers,
+  assignee, team, labels, status, even a colliding label) already had a verb.
+  The motivating case was a 19-ticket tree created without `--decision`, which
+  left `pql decisions show <id> --with-tickets` — the implementation-status view
+  from D-20 — silently under-reporting. Ids are comma-batchable because that is
+  the shape the repair actually takes, and an unknown decision id is rejected by
+  name rather than surfacing a foreign-key error.
+
 ### Fixed
 
 - **Changelog replay resolves an exact `updated_at` tie by append position, not

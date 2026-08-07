@@ -68,6 +68,113 @@ func TestCreateTicket_WithDecisionRef(t *testing.T) {
 	}
 }
 
+// seedDecision inserts a decision row so decision_ref's FK is satisfiable.
+func seedDecision(ctx context.Context, t *testing.T, db *sql.DB, id string) {
+	t.Helper()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO decisions (id, type, domain, title, file_path) VALUES (?, 'confirmed', 'test', 'test', 'test.md')`,
+		id); err != nil {
+		t.Fatalf("insert decision %s: %v", id, err)
+	}
+}
+
+func TestSetDecision_SetReplaceAndClear(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	seedDecision(ctx, t, db, "D-001")
+	seedDecision(ctx, t, db, "D-002")
+
+	id, err := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "unlinked at creation"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	decisionOf := func() *string {
+		t.Helper()
+		tk, err := GetTicket(ctx, db, id)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		return tk.DecisionRef
+	}
+	if got := decisionOf(); got != nil {
+		t.Fatalf("decision_ref = %v, want nil before linking", *got)
+	}
+
+	if err := SetDecision(ctx, db, id, "D-001", ""); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if got := decisionOf(); got == nil || *got != "D-001" {
+		t.Errorf("after set, decision_ref = %v, want D-001", got)
+	}
+
+	if err := SetDecision(ctx, db, id, "D-002", ""); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	if got := decisionOf(); got == nil || *got != "D-002" {
+		t.Errorf("after replace, decision_ref = %v, want D-002", got)
+	}
+
+	if err := SetDecision(ctx, db, id, "", ""); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if got := decisionOf(); got != nil {
+		t.Errorf("after clear, decision_ref = %v, want nil", *got)
+	}
+}
+
+// An unknown decision has to fail as a plain not-found, not as a raw SQLite
+// foreign-key violation — the caller is usually repairing a delegation
+// mistake and needs to know whether to sync the DQR tree.
+func TestSetDecision_UnknownDecisionRejected(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+
+	id, err := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "t"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	err = SetDecision(ctx, db, id, "D-999", "")
+	if err == nil {
+		t.Fatal("expected an error for an unknown decision, got nil")
+	}
+	if !strings.Contains(err.Error(), "D-999 not found") {
+		t.Errorf("error should name the missing decision, got: %v", err)
+	}
+}
+
+func TestSetDecision_RecordsHistoryAndChangesHash(t *testing.T) {
+	ctx := context.Background()
+	db := setupDB(t)
+	seedDecision(ctx, t, db, "D-001")
+
+	id, err := CreateTicket(ctx, db, NewTicketOpts{Type: "task", Title: "t"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	before, _ := readHash(t, db, id)
+
+	if err := SetDecision(ctx, db, id, "D-001", "agent"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	after, _ := readHash(t, db, id)
+	if before == after {
+		t.Error("hash unchanged after linking a decision; the row would not replicate")
+	}
+
+	var newValue string
+	if err := db.QueryRowContext(ctx, `
+		SELECT new_value FROM ticket_history
+		WHERE ticket_record_id = ? AND field = 'decision_ref'
+	`, recordOf(t, db, id)).Scan(&newValue); err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if newValue != "D-001" {
+		t.Errorf("history new_value = %q, want D-001", newValue)
+	}
+}
+
 func TestSetStatus(t *testing.T) {
 	ctx := context.Background()
 	db := setupDB(t)

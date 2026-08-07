@@ -1043,6 +1043,71 @@ func Ancestors(ctx context.Context, db *sql.DB, t *Ticket) ([]Ticket, error) {
 	return result, nil
 }
 
+// SetDecision links a ticket to a decision record, or clears the link when
+// decisionID is empty. Every other structural attribute of a ticket is
+// repairable after the fact — parent, blockers, assignee, team, labels, status,
+// even a colliding label — and this one used to be settable only at `ticket
+// new`, which made a delegation mistake permanent and quietly degraded the
+// implementation-status view decisions carry (D-20).
+//
+// The decision is resolved before the write so an unknown id fails as a plain
+// "not found" rather than as a foreign-key violation from SQLite.
+func SetDecision(ctx context.Context, db *sql.DB, id, decisionID, changedBy string) error {
+	t, err := GetTicket(ctx, db, id)
+	if err != nil {
+		return err
+	}
+	if t == nil {
+		return fmt.Errorf("repo: ticket %s not found", id)
+	}
+
+	oldVal := ""
+	if t.DecisionRef != nil {
+		oldVal = *t.DecisionRef
+	}
+	if oldVal == decisionID {
+		return nil
+	}
+	if decisionID != "" {
+		d, err := GetDecision(ctx, db, decisionID)
+		if err != nil {
+			return err
+		}
+		if d == nil {
+			return fmt.Errorf("repo: decision %s not found (run `pql decisions sync` if it was just written)", decisionID)
+		}
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("repo: begin set decision: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE tickets SET decision_ref = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE record_id = ?
+	`, nullIfEmpty(decisionID), t.RecordID); err != nil {
+		return fmt.Errorf("repo: update decision_ref: %w", err)
+	}
+	if err := planning.RehashTicket(ctx, tx, t.RecordID); err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by,
+			created_at, updated_at)
+		VALUES (?, 'decision_ref', ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f','now'), strftime('%Y-%m-%d %H:%M:%f','now'))
+	`, t.RecordID, nullIfEmpty(oldVal), nullIfEmpty(decisionID), nullIfEmpty(changedBy))
+	if err != nil {
+		return fmt.Errorf("repo: record decision history: %w", err)
+	}
+	if err := rehashHistoryRow(ctx, tx, res); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 // UpdateTicketFields names the optional fields a refine-style multi-field
 // update can touch. Status, parent, assignee, team, and labels have
 // dedicated verbs and are intentionally excluded.

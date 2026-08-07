@@ -113,6 +113,7 @@ Always `pql decisions sync` before querying if decisions/*.md may have changed.
 | `pql ticket assign <id> <agent>` | Set assignee |
 | `pql ticket setparent <id[,id,...]> <parent-id \| none>` | Set (or clear with `none`) a ticket's **parent** — the hierarchy link (epic→story→task). Positional, not a flag. This is the parent/child relationship, distinct from blockers |
 | `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description (blank-line separated); never round-trips existing text |
+| `pql ticket decision <id[,id,...]> <D-NNN \| none>` | Link tickets to the decision they implement (clear with `none`). Repairs a link omitted at `ticket new --decision`; an unknown decision id is rejected. This is what `decisions show --with-tickets` reports |
 | `pql ticket block <id> --by <other>` | Add a **blocker** (a dependency: <id> can't start until <other> is done) — NOT a parent/child link; use `setparent` or `new --parent` for hierarchy |
 | `pql ticket unblock <id> --from <other>` | Remove blocker |
 | `pql ticket team <id> <team>` | Set team |
@@ -177,6 +178,7 @@ fold the bookkeeping into a commit or trust the normal commit flow.
 - **Create ticket** → `pql ticket new task "implement X" --decision D-5`
 - **Create ticket, capture id for a script** → `id=$(pql ticket new task "implement X" --id-only)` — prints just `T-NNN`
 - **File a ticket under an epic** → `pql ticket new bug "fix X" --parent T-276` (one step), or reparent an existing one → `pql ticket setparent T-9 T-276` (clear with `none`). Parent = hierarchy; use `block` only for blocking dependencies
+- **Link a ticket tree to its decision after the fact** → `pql ticket decision T-9,T-10,T-12 D-5` (clear with `none`) — the repair path when `ticket new --decision` was omitted; without it `decisions show D-5 --with-tickets` under-reports what implements the decision
 - **Batch close** → `pql ticket status T-1,T-2,T-3 done`
 - **Full context** → `pql ticket show T-5 --with-context --pretty`
 - **Batch show** → `pql ticket show T-1,T-2,T-3 --pretty`

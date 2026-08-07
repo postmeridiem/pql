@@ -414,3 +414,105 @@ Version-tracking requirement (raised 2026-08-07): this introduces a fourth versi
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRVT8QNJ0V4WPGZQW9DNH5C', 'status', 'backlog', 'ready', NULL, '2026-08-07 13:39:55', '2026-08-07 13:39:55.146', '2026-08-07 13:39:55.146', NULL, '8ef5cd07f4868b9bf3907f9431c65784', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRW9P7VASFHMVSBD1BWB0B8', 'status', 'backlog', 'ready', NULL, '2026-08-07 13:39:57', '2026-08-07 13:39:57.948', '2026-08-07 13:39:57.948', NULL, 'f2b56efb15b10a1a8391bd8e43aba4b4', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRKD48PHFF1QJ8W2NVKZCSG', 'status', 'ready', 'done', NULL, '2026-08-07 13:50:51', '2026-08-07 13:50:51.557', '2026-08-07 13:50:51.557', NULL, 'edce102882b7e6e2f2826b489f00115c', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRW9P7VASFHMVSBD1BWB0B8', 'description', 'Raised 2026-08-07 while fixing T-59. The LWW guard is not a runtime rule — it is
+literal SQL text baked into every `INSERT ... ON CONFLICT` line already committed
+under `.pql/changelog/`. Changing the exporter therefore only fixes rows written
+from now on; every historical row keeps replaying under the old, causally wrong
+tie-break. The consumers (clide, settled-reach, council) must not have to run a
+manual repair, so the upgrade has to happen automatically when pql loads a
+changelog it recognises as an older format.
+
+Design (user''s, and the right one): **do the transformation in SQL, not with
+regexes over the file text.** We already have a SQLite database at hand; use it.
+
+1. **Detect.** Carry an explicit changelog format version — a marker in
+   `.pql/changelog/` (alongside `0000-schema.sql`, which already uses key markers
+   the importer reads). Absent marker = format 1. Compare against the version this
+   binary emits; equal means no work, and the check must be cheap enough to run on
+   every load.
+2. **Stage.** Replay each table''s files into a staging table mirroring the
+   canonical columns plus `seq INTEGER PRIMARY KEY AUTOINCREMENT` and the source
+   file, so arrival order — the causal order the fix depends on — is captured as
+   data. The staging load must be append-only: the ON CONFLICT tail has to be
+   dropped before execution, otherwise the *old* guard resolves the rows during
+   staging and bakes the very loss we are repairing into the output. Dropping a
+   trailing clause is a structural edit, not a semantic rewrite of row contents.
+3. **Transform in SQL.** Rename, restructure, re-resolve — whatever the format
+   step needs — as ordinary statements against the staging table.
+4. **Re-emit.** Write the files back from the staging rows, in `seq` order,
+   through the current statement renderer, so the output carries the new guard.
+   Same rows, same order, corrected conflict clause: the log is preserved, not
+   collapsed to current state. Collapsing would discard intermediate mutations and
+   make every clone''s files diverge textually.
+5. **Stamp** the new format version and make the whole thing idempotent — a second
+   run must be a no-op.
+
+Structure it as a module with an ordered list of format steps, each with an id, a
+detector and a transformation, so the next changelog format change is a new entry
+rather than a new mechanism. This is the changelog-format axis, distinct from
+pql.db schema migrations (D-19 / T-44) — worth saying out loud in the record so
+the two do not get conflated, though they should probably share a vocabulary.
+
+Risks to handle explicitly:
+
+- The files are git-tracked. A rewrite produces a real diff in the consumer''s
+  working tree; it must land in a commit, and the staging must be atomic enough
+  that an interrupted upgrade cannot leave a half-rewritten changelog.
+- Two clones upgrading independently must produce byte-identical output, or the
+  next merge is a conflict storm. Determinism of the renderer is the requirement.
+- Needs a decision record: automatic rewriting of tracked files on load is a
+  behaviour worth stating deliberately, including whether it is opt-out.
+
+Version-tracking requirement (raised 2026-08-07): this introduces a fourth version axis, and they now need to be legible together. Today there is project.yaml version (the app), project.yaml schema_version (index.db), planning.CanonicalVersion (pql.db row hashing), and with this ticket a changelog format version. A consumer holding format 1 needs to know which binary emits format 2, and pql needs to answer that without the user reading source. Requirements: declare the changelog format version in project.yaml beside schema_version so all declared versions live in one file; expose it plus CanonicalVersion from pql version --build-info, which already carries schema_version, so a consumer can diff what it has against what the binary emits; and keep a mapping of app version to each schema/format version somewhere durable (a table in docs or a section in CHANGELOG) so an upgrade across several releases can be reasoned about after the fact. The upgrade module should read the declared version rather than a constant buried in a package.', 'Raised 2026-08-07 while fixing T-59. The LWW guard is not a runtime rule — it is
+literal SQL text baked into every `INSERT ... ON CONFLICT` line already committed
+under `.pql/changelog/`. Changing the exporter therefore only fixes rows written
+from now on; every historical row keeps replaying under the old, causally wrong
+tie-break. The consumers (clide, settled-reach, council) must not have to run a
+manual repair, so the upgrade has to happen automatically when pql loads a
+changelog it recognises as an older format.
+
+Design (user''s, and the right one): **do the transformation in SQL, not with
+regexes over the file text.** We already have a SQLite database at hand; use it.
+
+1. **Detect.** Carry an explicit changelog format version — a marker in
+   `.pql/changelog/` (alongside `0000-schema.sql`, which already uses key markers
+   the importer reads). Absent marker = format 1. Compare against the version this
+   binary emits; equal means no work, and the check must be cheap enough to run on
+   every load.
+2. **Stage.** Replay each table''s files into a staging table mirroring the
+   canonical columns plus `seq INTEGER PRIMARY KEY AUTOINCREMENT` and the source
+   file, so arrival order — the causal order the fix depends on — is captured as
+   data. The staging load must be append-only: the ON CONFLICT tail has to be
+   dropped before execution, otherwise the *old* guard resolves the rows during
+   staging and bakes the very loss we are repairing into the output. Dropping a
+   trailing clause is a structural edit, not a semantic rewrite of row contents.
+3. **Transform in SQL.** Rename, restructure, re-resolve — whatever the format
+   step needs — as ordinary statements against the staging table.
+4. **Re-emit.** Write the files back from the staging rows, in `seq` order,
+   through the current statement renderer, so the output carries the new guard.
+   Same rows, same order, corrected conflict clause: the log is preserved, not
+   collapsed to current state. Collapsing would discard intermediate mutations and
+   make every clone''s files diverge textually.
+5. **Stamp** the new format version and make the whole thing idempotent — a second
+   run must be a no-op.
+
+Structure it as a module with an ordered list of format steps, each with an id, a
+detector and a transformation, so the next changelog format change is a new entry
+rather than a new mechanism. This is the changelog-format axis, distinct from
+pql.db schema migrations (D-19 / T-44) — worth saying out loud in the record so
+the two do not get conflated, though they should probably share a vocabulary.
+
+Risks to handle explicitly:
+
+- The files are git-tracked. A rewrite produces a real diff in the consumer''s
+  working tree; it must land in a commit, and the staging must be atomic enough
+  that an interrupted upgrade cannot leave a half-rewritten changelog.
+- Two clones upgrading independently must produce byte-identical output, or the
+  next merge is a conflict storm. Determinism of the renderer is the requirement.
+- Needs a decision record: automatic rewriting of tracked files on load is a
+  behaviour worth stating deliberately, including whether it is opt-out.
+
+Version-tracking requirement (raised 2026-08-07): this introduces a fourth version axis, and they now need to be legible together. Today there is project.yaml version (the app), project.yaml schema_version (index.db), planning.CanonicalVersion (pql.db row hashing), and with this ticket a changelog format version. A consumer holding format 1 needs to know which binary emits format 2, and pql needs to answer that without the user reading source. Requirements: declare the changelog format version in project.yaml beside schema_version so all declared versions live in one file; expose it plus CanonicalVersion from pql version --build-info, which already carries schema_version, so a consumer can diff what it has against what the binary emits; and keep a mapping of app version to each schema/format version somewhere durable (a table in docs or a section in CHANGELOG) so an upgrade across several releases can be reasoned about after the fact. The upgrade module should read the declared version rather than a constant buried in a package.
+
+Trigger revision (2026-08-07): run the upgrade on pull, driven by a version change, rather than on every load. The post-merge hook already owns the replication lifecycle (D-18) and already runs plan import, so a pull is where a working-tree change to tracked files is expected and unsurprising; rewriting .pql/changelog during an arbitrary read command would surprise the user and can race an open editor. Detection therefore compares the changelog''s declared format version against the binary''s on the hook path, not on every invocation, which also removes the requirement that the check be cheap enough to run constantly. Two gaps to cover so the trigger is not only a pull: a binary can be upgraded without any pull, and a fresh clone has no merge to hook. So also check at plan import and plan rebuild, which is where a format-incompatible changelog would otherwise fail, and provide an explicit verb for the manual case. On mismatch without an upgrade having run, the right behaviour is a loud diagnostic naming the format version found and the one expected, never a silent replay under the wrong rules.', NULL, '2026-08-07 13:58:00', '2026-08-07 13:58:00.484', '2026-08-07 13:58:00.484', NULL, 'b231dfaeba1ea06efd90eae7aa4c2d1c', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRW9P7VASFHMVSBD1BWB0B8', 'title', 'automatic changelog format upgrades on load', 'automatic changelog format upgrades, triggered on pull', NULL, '2026-08-07 13:58:06', '2026-08-07 13:58:06.465', '2026-08-07 13:58:06.465', NULL, 'f0312ae0ed13ea79782cfd6934c7d035', 2) ON CONFLICT(hash) DO NOTHING;

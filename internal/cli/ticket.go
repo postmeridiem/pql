@@ -171,6 +171,7 @@ func newTicketCmd() *cobra.Command {
 	cmd.AddCommand(newTicketRelabelCmd())
 	cmd.AddCommand(newTicketAssignCmd())
 	cmd.AddCommand(newTicketSetParentCmd())
+	cmd.AddCommand(newTicketDecisionCmd())
 	cmd.AddCommand(newTicketBlockCmd())
 	cmd.AddCommand(newTicketUnblockCmd())
 	cmd.AddCommand(newTicketTeamCmd())
@@ -838,6 +839,64 @@ func newTicketSetParentCmd() *cobra.Command {
 			var results []repo.Ticket
 			for _, id := range ids {
 				if err := repo.SetParent(ctx, pdb.SQL(), id, parentID, ""); err != nil {
+					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
+				}
+				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				if tk != nil {
+					results = append(results, *tk)
+				}
+			}
+
+			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
+				return err
+			}
+			return renderTicketResults(cmd, results)
+		},
+	}
+}
+
+// --- decision ---
+
+func newTicketDecisionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "decision <id[,id,...]> <decision-id | none>",
+		Short: "Link one or more tickets to a decision record, or clear the link",
+		Long: `Set or clear the decision a ticket implements. Use commas to batch:
+
+  pql ticket decision T-9 D-5
+  pql ticket decision T-9,T-10,T-12 D-5
+  pql ticket decision T-9 none
+
+The link is what ` + "`pql decisions show <id> --with-tickets`" + ` reports, so a
+missing one makes a decision look unimplemented. It can also be set at creation
+time with ` + "`pql ticket new --decision`" + `; this verb is how it gets repaired
+afterwards. An unknown decision id is rejected — sync the DQR tree first if the
+record was only just written.`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			ids := parseIDs(args[0])
+			decisionID := args[1]
+			if decisionID == "none" {
+				decisionID = ""
+			}
+
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+
+			var results []repo.Ticket
+			for _, id := range ids {
+				if err := repo.SetDecision(ctx, pdb.SQL(), id, decisionID, ""); err != nil {
 					return &exitError{code: diag.DataErr, msg: fmt.Sprintf("%s: %v", id, err)}
 				}
 				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)

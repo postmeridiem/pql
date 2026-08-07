@@ -1401,6 +1401,68 @@ func TestIntegration_TicketList_Oneline(t *testing.T) {
 	}
 }
 
+// Decision linkage used to be settable only at `ticket new`, so a tree created
+// without --decision could never be repaired and the decision's own
+// implementation-status view (D-20) quietly under-reported (T-61).
+func TestIntegration_TicketDecision_LinksAfterCreation(t *testing.T) {
+	vault := initVaultIT(t)
+	writeFileIT(t, filepath.Join(vault, "governance", "decisions", "architecture.md"), `### D-1: Linked later
+- **Date:** 2026-08-07
+- **Decision:** Tickets can be attached after the fact.
+`)
+	pqlIT(t, vault, "decisions", "sync")
+
+	// Two tickets created the way a delegated agent gets it wrong: no --decision.
+	pqlIT(t, vault, "ticket", "new", "task", "first", "--id-only")
+	pqlIT(t, vault, "ticket", "new", "task", "second", "--id-only")
+
+	decisionRefs := func() []string {
+		t.Helper()
+		out := pqlIT(t, vault, "decisions", "show", "D-1", "--with-tickets")
+		var shown struct {
+			Tickets []struct {
+				ID string `json:"id"`
+			} `json:"tickets"`
+		}
+		if err := json.Unmarshal([]byte(out), &shown); err != nil {
+			t.Fatalf("invalid JSON: %v\n%s", err, out)
+		}
+		ids := make([]string, 0, len(shown.Tickets))
+		for _, tk := range shown.Tickets {
+			ids = append(ids, tk.ID)
+		}
+		return ids
+	}
+	if got := decisionRefs(); len(got) != 0 {
+		t.Fatalf("decision starts with tickets %v, want none", got)
+	}
+
+	// Batch repair, the shape the motivating case needed.
+	pqlIT(t, vault, "ticket", "decision", "T-1,T-2", "D-1")
+	if got := decisionRefs(); len(got) != 2 {
+		t.Errorf("after linking, --with-tickets reports %v, want both tickets", got)
+	}
+
+	// And it clears, mirroring `setparent … none`.
+	pqlIT(t, vault, "ticket", "decision", "T-1", "none")
+	if got := decisionRefs(); len(got) != 1 || got[0] != "T-2" {
+		t.Errorf("after clearing T-1, --with-tickets reports %v, want [T-2]", got)
+	}
+}
+
+func TestIntegration_TicketDecision_UnknownDecisionExits65(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "orphan", "--id-only")
+
+	_, stderr, code := run(t, vault, "ticket", "decision", "T-1", "D-404")
+	if code != 65 {
+		t.Errorf("exit = %d, want 65 for an unknown decision", code)
+	}
+	if !strings.Contains(string(stderr), "D-404") {
+		t.Errorf("stderr should name the missing decision, got: %s", stderr)
+	}
+}
+
 func TestIntegration_DecisionsList_FieldsAndOneline(t *testing.T) {
 	vault := initVaultIT(t)
 	writeFileIT(t, filepath.Join(vault, "governance", "decisions", "architecture.md"), `### D-1: Test decision
