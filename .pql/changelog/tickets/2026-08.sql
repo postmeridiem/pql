@@ -1006,3 +1006,46 @@ Independent of the ordering fix: that one prevents the class, `--verify` makes a
 future replay divergence visible instead of silent. Follows the output contract —
 result on stdout as JSON, diagnostics as JSON-per-line on stderr; a divergence is a
 warning, not a non-zero exit, unless rows were actually lost.', 'done', 'medium', NULL, NULL, 'D-16', '2026-08-07 12:58:39.239', '2026-08-07 14:36:57.431', NULL, '86910a1cb35c560b3ff9de6db9f16490', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at > tickets.updated_at OR (excluded.updated_at = tickets.updated_at AND excluded.hash > tickets.hash);
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRKB21T80RKVFZ81PJH2H8M', 'bug', NULL, 'vault discovery resolves a git worktree to its main checkout', 'Source: feature-request.md FR-4 (settled-reach field hits 2026-07-08 and 2026-07-24).
+
+Mechanism. `internal/config/discover.go` `walkUp()` accepts a marker only when
+`os.Stat` reports a **directory** (`info.IsDir()`). In a linked git worktree `.git`
+is a **file** holding a `gitdir:` pointer, so the `.git` pass skips the worktree
+root and keeps ascending.
+
+Reproduced in this repo on 2026-08-07 (probe worktrees since removed):
+
+- Worktree at `<repo>/.worktrees/probe` — `pql doctor` reports
+  `vault.path=/var/mnt/data/projects/pql`, `discovered_via=".git/ ancestor at
+  /var/mnt/data/projects/pql"`, and `decisions list` returns main''s 39 records.
+- Worktree outside the main checkout (`/tmp/.../wt`) — no marker matches at all;
+  `discovered_via="cwd fallback"`. A second, different wrong answer.
+
+Consequence from the field: `decisions validate` returns ok:true against main''s
+unchanged markdown while the edits sit in the worktree (a false positive), and
+`decisions sync` parses main''s DQR and rewrites main''s pql.db plus the tracked
+`governance/README.md`, ignoring the worktree entirely. `--db <worktree>/.pql/pql.db`
+alone does not rescue it; only `--vault` redirects both the parse side and the
+vault-derived DB coherently.
+
+Fix.
+
+1. Treat a `.git` **file** as a repo marker. The vault root is the directory
+   *containing* it — the worktree checkout — so the `gitdir:` pointer never needs
+   to be followed.
+2. Marker ordering is load-bearing and is not covered by (1) alone. `walkUp` runs
+   two full ascents: `.obsidian` first, then `.git`. For a worktree nested under a
+   vault whose root has `.obsidian`, the `.obsidian` pass still resolves to the main
+   checkout before the `.git` pass ever runs. Replace the two passes with a single
+   ascent that checks both markers at each level, first hit wins. Without this the
+   fix only covers non-Obsidian repos (which is why settled-reach hit it and a
+   vault-shaped repo would stay broken).
+3. Consider a stderr warning from the mutating verbs (`decisions sync`, `plan
+   rebuild`/`import`) when the resolved vault root is not the cwd''s own worktree
+   root. FR-4''s "bonus" ask for doctor visibility is already satisfied — `pql doctor`
+   leads with `vault.path` + `discovered_via`.
+
+Acceptance: unit tests in `internal/config` for (a) a `.git` file marker, (b) a
+worktree nested under an `.obsidian` vault root, (c) a worktree outside the main
+checkout; an integration test running `decisions validate` from a worktree and
+asserting it sees the worktree''s markdown.', 'done', 'high', NULL, NULL, 'D-3', '2026-08-07 12:58:06.734', '2026-08-07 14:37:46.943', NULL, 'e90f38f1f95c00767c17879547c3d8dd', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
