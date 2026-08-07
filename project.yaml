@@ -14,7 +14,7 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.11.0
+version: 1.12.0
 status: v1.11.0 — planning list verbs project (D-27). `pql ticket list` drops `description` from its default output (it measured ~81% of real-world dumps and blew agent tool-output budgets); `--full` opts back in, `--fields id,status,title` returns exactly the named keys in order, and `--oneline` emits a plain id/status/title index. `pql decisions list` gains the same `--fields`/`--oneline` surface. Raised as FR-1 by two downstream consumers, accepted as T-56.
 
 repository: https://github.com/postmeridiem/pql

@@ -11,6 +11,26 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.12.0]
+
+### Fixed
+
+- **A `git worktree` session no longer resolves to its main checkout (T-58).**
+  Vault discovery required `.git` to be a *directory*, but a linked worktree
+  carries a `.git` **file** holding a `gitdir:` pointer — so the walk-up skipped
+  the worktree root and kept ascending. From a worktree, `pql decisions
+  validate` returned `ok:true` against the main checkout's unchanged markdown
+  while the actual edits sat unread (a false positive), and `decisions sync`
+  would parse main's DQR and rewrite main's `pql.db` and `governance/README.md`.
+  `--db` alone did not rescue it; only `--vault` did. Discovery now accepts a
+  `.git` file as a repo marker, and — because the fix is incomplete without it —
+  checks every marker at each level of the walk instead of running one full
+  ascent per marker: a worktree nested inside an Obsidian-shaped vault would
+  otherwise still resolve to the enclosing vault, since the `.obsidian` pass ran
+  to completion first. Within a level `.obsidian` still wins, so a repo checked
+  out inside a vault is still that vault. `pql doctor` names the linked-worktree
+  case explicitly in `discovered_via`.
+
 ## [1.11.0] - 2026-07-08
 
 ### Added

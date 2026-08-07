@@ -27,9 +27,9 @@ type VaultOpts struct {
 // DiscoverVault implements the documented precedence chain:
 //  1. --vault flag
 //  2. $PQL_VAULT env var
-//  3. walk cwd up until a .obsidian/ directory is found
-//  4. walk cwd up until a .git/ directory is found
-//  5. cwd (with a Reason that callers should surface as a stderr warning)
+//  3. walk cwd up until a directory carrying a vault marker is found —
+//     .obsidian/ or .git (see walkUp for the per-level ordering)
+//  4. cwd (with a Reason that callers should surface as a stderr warning)
 //
 // All returned paths are absolute and lexically cleaned.
 func DiscoverVault(opts VaultOpts) (VaultDiscovery, error) {
@@ -61,21 +61,12 @@ func DiscoverVault(opts VaultOpts) (VaultDiscovery, error) {
 		return VaultDiscovery{}, fmt.Errorf("config: resolve start dir %q: %w", start, err)
 	}
 
-	if dir := walkUp(start, ".obsidian"); dir != "" {
-		return VaultDiscovery{
-			Path:   dir,
-			Reason: fmt.Sprintf(".obsidian/ ancestor at %s", dir),
-		}, nil
-	}
-	if dir := walkUp(start, ".git"); dir != "" {
-		return VaultDiscovery{
-			Path:   dir,
-			Reason: fmt.Sprintf(".git/ ancestor at %s", dir),
-		}, nil
+	if dir, reason := walkUp(start); dir != "" {
+		return VaultDiscovery{Path: dir, Reason: reason}, nil
 	}
 	return VaultDiscovery{
 		Path:   start,
-		Reason: "cwd fallback (no .obsidian/ or .git/ ancestor found)",
+		Reason: "cwd fallback (no .obsidian/ or .git ancestor found)",
 	}, nil
 }
 
@@ -105,22 +96,48 @@ func absDir(p string) (string, error) {
 	return p, nil
 }
 
-// walkUp searches for `marker` (a directory name) at start and each ancestor.
-// Returns the directory containing the marker, or "" if none found before
-// hitting the filesystem root.
-func walkUp(start, marker string) string {
-	dir := start
+// walkUp searches for a vault marker at start and each ancestor, returning the
+// directory that carries it plus a human-readable Reason. Returns "", "" if the
+// filesystem root is reached without a match.
+//
+// Every marker is checked at each level before ascending, rather than running
+// one full ascent per marker. Marker-major order would resolve a linked git
+// worktree nested inside an Obsidian vault to the *enclosing vault*: the
+// worktree's own .git sits below the vault's .obsidian, so the .obsidian pass
+// would reach the wrong root first. Within a level, .obsidian wins — a repo
+// checked out inside a vault is still that vault.
+func walkUp(start string) (dir, reason string) {
+	dir = start
 	for {
-		candidate := filepath.Join(dir, marker)
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return dir
+		if isDir(filepath.Join(dir, ".obsidian")) {
+			return dir, fmt.Sprintf(".obsidian/ ancestor at %s", dir)
+		}
+		if info, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			switch {
+			case info.IsDir():
+				return dir, fmt.Sprintf(".git/ ancestor at %s", dir)
+			case info.Mode().IsRegular():
+				// A .git *file* is a linked worktree's `gitdir:` pointer. The
+				// pointer never needs following — the vault root is the
+				// directory holding the file, which is the worktree checkout
+				// the user is standing in. Requiring a .git directory here is
+				// what silently resolved worktree sessions to their main
+				// checkout, validating and rewriting the wrong tree.
+				return dir, fmt.Sprintf(".git file (linked worktree) at %s", dir)
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return ""
+			return "", ""
 		}
 		dir = parent
 	}
+}
+
+// isDir reports whether path exists and is a directory.
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // IsRootFallback reports whether the discovery resolved via the cwd-fallback

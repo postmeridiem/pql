@@ -136,6 +136,11 @@ committed changelog). Per D-19 there is no in-place migration.
 A single `pql` invocation, in order:
 
 1. Resolve the vault root (CLI/env/walk-up — see `internal/config/discover.go`).
+   The walk-up checks every marker at each level before ascending: `.obsidian/`
+   wins over `.git` within the same directory, and `.git` counts whether it is a
+   directory (ordinary checkout) or a **file** (a linked `git worktree`'s
+   `gitdir:` pointer). So a worktree resolves to itself, not to the main
+   checkout it was created from.
 2. Load `.pql/config.yaml` if present (vault-local, then `~/.config/pql/config.yaml` global).
 3. Resolve the index location: `--db` / `PQL_DB` / `db:` override → otherwise `<vault>/.pql/index.db` → fall back to user cache if the vault is read-only.
 4. Open or create the index, applying or verifying the v1 schema. (State-store commands also open `<vault>/.pql/pql.db` lazily; no cache fallback — a write-intent command against a read-only vault fails with a clear diagnostic.)

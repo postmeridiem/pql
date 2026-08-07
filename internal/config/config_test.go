@@ -81,6 +81,84 @@ func TestDiscoverVault_GitAncestorUsedWhenNoObsidian(t *testing.T) {
 	}
 }
 
+// A linked git worktree carries a .git *file* (a `gitdir:` pointer), not a
+// directory. Requiring a directory made discovery skip the worktree and keep
+// ascending — silently resolving to the main checkout (T-58).
+func TestDiscoverVault_GitFileMarksWorktreeRoot(t *testing.T) {
+	root := t.TempDir()
+	wt := filepath.Join(root, "wt")
+	mkdir(t, wt)
+	writeFile(t, filepath.Join(wt, ".git"), "gitdir: /somewhere/.git/worktrees/wt\n")
+
+	d, err := DiscoverVault(VaultOpts{StartDir: wt})
+	if err != nil {
+		t.Fatalf("DiscoverVault: %v", err)
+	}
+	if d.Path != wt {
+		t.Errorf("Path = %q, want worktree %q", d.Path, wt)
+	}
+	if !strings.Contains(d.Reason, "linked worktree") {
+		t.Errorf("Reason = %q, want it to name the linked worktree", d.Reason)
+	}
+}
+
+// The .git-file fix alone is not enough: with one full ascent per marker, a
+// worktree nested under an Obsidian vault still resolves to the vault, because
+// the .obsidian pass runs to completion before .git is ever considered. Every
+// marker must be checked at each level (T-58).
+func TestDiscoverVault_WorktreeNestedUnderObsidianVault(t *testing.T) {
+	vault := t.TempDir()
+	mkdir(t, filepath.Join(vault, ".obsidian"))
+	mkdir(t, filepath.Join(vault, ".git"))
+	wt := filepath.Join(vault, ".worktrees", "feature")
+	mkdir(t, wt)
+	writeFile(t, filepath.Join(wt, ".git"), "gitdir: "+vault+"/.git/worktrees/feature\n")
+
+	d, err := DiscoverVault(VaultOpts{StartDir: wt})
+	if err != nil {
+		t.Fatalf("DiscoverVault: %v", err)
+	}
+	if d.Path != wt {
+		t.Errorf("Path = %q, want worktree %q, not the enclosing vault", d.Path, wt)
+	}
+}
+
+// A worktree placed outside its main checkout used to match no marker at all
+// and land on the cwd fallback — a second, quieter wrong answer (T-58).
+func TestDiscoverVault_WorktreeOutsideMainCheckout(t *testing.T) {
+	wt := t.TempDir()
+	writeFile(t, filepath.Join(wt, ".git"), "gitdir: /elsewhere/.git/worktrees/detached\n")
+
+	d, err := DiscoverVault(VaultOpts{StartDir: wt})
+	if err != nil {
+		t.Fatalf("DiscoverVault: %v", err)
+	}
+	if d.Path != wt {
+		t.Errorf("Path = %q, want worktree %q", d.Path, wt)
+	}
+	if d.IsRootFallback() {
+		t.Errorf("IsRootFallback = true, expected a marker match (Reason=%q)", d.Reason)
+	}
+}
+
+// Deeper inside a worktree the same rule has to hold, one level up at a time.
+func TestDiscoverVault_StartsDeepInsideWorktree(t *testing.T) {
+	vault := t.TempDir()
+	mkdir(t, filepath.Join(vault, ".obsidian"))
+	wt := filepath.Join(vault, ".worktrees", "feature")
+	deep := filepath.Join(wt, "governance", "decisions")
+	mkdir(t, deep)
+	writeFile(t, filepath.Join(wt, ".git"), "gitdir: "+vault+"/.git/worktrees/feature\n")
+
+	d, err := DiscoverVault(VaultOpts{StartDir: deep})
+	if err != nil {
+		t.Fatalf("DiscoverVault: %v", err)
+	}
+	if d.Path != wt {
+		t.Errorf("Path = %q, want worktree root %q", d.Path, wt)
+	}
+}
+
 func TestDiscoverVault_CWDFallbackWhenNoMarkers(t *testing.T) {
 	dir := t.TempDir()
 	d, err := DiscoverVault(VaultOpts{StartDir: dir})
