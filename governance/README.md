@@ -69,6 +69,7 @@ You might also want, project-permitting:
 - [D-24: Ticket status set is configurable, modelled as four classes](decisions/architecture.md#d-24-ticket-status-set-is-configurable-modelled-as-four-classes) — _architecture_
 - [D-25: Parent-completion guard — a ticket can't close while children are open](decisions/architecture.md#d-25-parent-completion-guard--a-ticket-cant-close-while-children-are-open) — _architecture_
 - [D-26: Ticket identity split — record_id (underwater) vs ticket_id (friendly label)](decisions/architecture.md#d-26-ticket-identity-split--record-id-underwater-vs-ticket-id-friendly-label) — _architecture_
+- [D-27: Planning list verbs project — ticket list drops description by default](decisions/architecture.md#d-27-planning-list-verbs-project--ticket-list-drops-description-by-default) — _architecture_
 
 ## Open questions
 

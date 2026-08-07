@@ -17,9 +17,132 @@ opts back in). Evidence and measurements live in the D-27 record
 
 ---
 
-## FR-2 — Rank the planning dataset against arbitrary text ("coverage overlap")
+## FR-3 — BUG: same-second create→append silently loses the append on changelog rebuild *(accepted 2026-08-07 → T-59, T-60; write side already shipped in 1.10.4)*
 
-- **Status:** idea — needs a design decision before any code.
+- **Status:** accepted (bug, data loss). Triage: the write-side half shipped
+  before this was filed — 1.10.4 (commit `8d5a53b`) moved write timestamps to
+  millisecond precision, so *new* same-second mutations no longer tie. The
+  residual is that pre-1.10.4 rows keep second granularity forever and the LWW
+  guard still tie-breaks them on content hash → **T-59**. The `--verify`
+  proposal → **T-60**.
+- **Source:** settled-reach, 2026-07-08 — ticket T-1057's description was authored as
+  create-placeholder + immediate `ticket append` in one script pass (2026-06-12).
+  The live DB served the placeholder for a month; the real text survived only as a
+  changelog row.
+- **Severity:** silent data loss on a documented, recommended flow (`--id-only`
+  create → `append` is the tree-creation-script pattern the skill itself teaches).
+
+### Mechanism (diagnosed against the settled-reach vault)
+
+Both the creation row and the append row carried the identical `updated_at`
+(`2026-06-12 10:40:59` — same wall-clock second). On `pql plan rebuild` /
+`post-checkout` replay, the LWW `ON CONFLICT` upsert tie-breaks equal
+`updated_at` by comparing row-hash strings; the placeholder's hash
+(`965ad2…`) lexicographically beat the real append's (`60d7cd…`), so the
+rebuilt `pql.db` kept `"(description follows in first append)"` and dropped
+the appended description. Write-through order was correct at authoring time —
+the loss only manifests on replay/rebuild, i.e. on every fresh clone and
+branch switch thereafter.
+
+### Proposal
+
+- Tie-break equal `updated_at` by **changelog file order** (append position is
+  already a total order within a month file) or add a monotonic per-mutation
+  sequence column to changelog rows — not by content-hash comparison, which is
+  arbitrary w.r.t. causality.
+- Cheap hardening alternative/addition: sub-second precision on `updated_at`
+  (the column is TEXT; `strftime('%Y-%m-%d %H:%M:%f')` suffices).
+- A `pql plan rebuild --verify` that diffs pre/post row counts+hashes and warns
+  on dropped-newer-row candidates would have surfaced this a month earlier.
+
+---
+
+## FR-4 — BUG: vault-root discovery walks up for a `.git` *directory*, so it resolves a worktree to its main checkout *(accepted 2026-08-07 → T-58, high)*
+
+- **Status:** accepted (bug, silent wrong-target). Reproduced in the pql repo
+  itself on 2026-08-07. Triage added one finding the report did not have: the
+  `.git`-file fix alone is insufficient, because `walkUp` runs a **full**
+  `.obsidian` ascent before the `.git` one — a worktree nested under an
+  Obsidian-shaped vault still resolves to the main checkout. The fix is a
+  single ascent checking both markers per level. Detail in T-58.
+- **Source:** settled-reach, 2026-07-08 — a subagent editing `governance/*.md` inside a
+  `git worktree` ran `pql decisions sync`/`validate` from the worktree and it silently
+  read/wrote the **main checkout's** vault, not the worktree's.
+
+### Mechanism
+
+`internal/config/discover.go:70` (`walkUp`) locates the vault root by ascending until it
+finds a `.git` **directory**. In a linked `git worktree`, `.git` is a **file** (a
+`gitdir:` pointer), not a directory — so `walkUp` skips it and keeps ascending to the
+main working tree, resolving the vault to `main`. Consequences from the field:
+- `pql decisions validate` returned `ok:true` against main's unchanged markdown while the
+  actual edits sat in the worktree — a **false positive** (validated the wrong files).
+- `pql decisions sync` would parse main's DQR and rewrite **main's** `pql.db` + the
+  tracked `governance/README.md`, ignoring the worktree edits entirely.
+- Workaround that works: `pql --vault <worktree-abs-path> decisions validate`. But the
+  default (no `--vault`) is silently wrong, which is the dangerous part.
+- **Second field hit (settled-reach, 2026-07-24):** a new D-record written in a worktree
+  synced 389-not-390 records (main's tree) with `validate` green — the false-positive
+  class again. New datapoint: `--db <worktree>/.pql/pql.db` **alone does not rescue it**
+  (`decisions show` still reported not-found); only `--vault` redirects both the parse
+  side and the vault-derived DB coherently. Until fixed, worktree sessions must pass
+  `--vault` on **every** decisions call, not just sync.
+
+### Proposal
+
+- In `walkUp`, treat a `.git` **file** as a repo marker too (parse its `gitdir:` line to
+  find the real git dir, but the *vault root* is the directory containing the `.git`
+  file — the worktree checkout — which is what the user means).
+- Minimum: stop requiring `.git` to be a directory — `os.Stat` match on either a dir or a
+  file named `.git` fixes the resolution to the worktree.
+- Bonus: `pql doctor` could print the resolved vault root prominently so a wrong-target
+  resolution is visible before a destructive sync.
+
+---
+
+## FR-5 — `--decision` is settable only at `ticket new`; there is no way to link an existing ticket to a D-record *(accepted 2026-08-07 → T-61)*
+
+- **Status:** accepted (friction, hit for real — settled-reach, 2026-07-27).
+  Taken as the dedicated-subcommand shape, with comma-batched ids like
+  `setparent`, since the motivating case is 19 tickets at once.
+- **Severity:** low mechanically, but it silently degrades the feature it belongs to
+  — `pql decisions show <id> --with-tickets` is the project's implementation-status
+  view (D-20), and it is only as complete as the links happen to be.
+
+**What happened.** A delegated agent created a 19-ticket tree implementing a freshly
+written D-record and omitted `--decision` on every `ticket new`. Discovered on review.
+There is no way to repair it: `--decision` exists only on `ticket new`, and
+`ticket refine write` explicitly rejects anything outside `title`, `description`,
+`priority`, `type` ("Status, parent, assignee, team, and labels have dedicated
+subcommands"). Decision has neither a writable field nor a dedicated subcommand.
+
+Every other structural attribute of a ticket is repairable after the fact — `setparent`
+for hierarchy, `block`/`unblock` for dependencies, `assign`, `team`, `label`, `status`,
+even `relabel` for a colliding id. Decision linkage is the only one that is
+create-time-or-never, which makes it the only one where a delegation mistake is
+permanent. The realistic alternatives are all bad: recreate the tickets (loses the
+ids, and the changelog already recorded them), or leave the D-record's
+`--with-tickets` view lying about its own implementation status.
+
+**Ask.** A dedicated subcommand mirroring the ones that already exist, e.g.
+
+```
+pql ticket decision T-1211 D-258        # set/replace
+pql ticket decision T-1211 none         # clear, mirroring `setparent … none`
+```
+
+Adding `decision` to `refine write`'s writable set would work equally well; the
+dedicated-subcommand shape just matches the precedent set by `setparent`/`team`/`assign`.
+
+---
+
+## FR-2 — Rank the planning dataset against arbitrary text ("coverage overlap") *(accepted 2026-08-07 → epic T-62)*
+
+- **Status:** accepted as an epic — still needs a design decision before any
+  code. Children: **T-63** (the D-record for Path A + the Q-record keeping Path
+  B question-shaped; gates the rest), **T-64** (implement Path A — blocked by
+  T-63), **T-65** (the golden eval set from the T-359 mapping), **T-66** (the
+  doc reframe below).
 - **Source:** same session. Motivating task: *"how much of `fable-ous.md`
   (a 25 KB review doc) is already captured as tickets?"*
 
