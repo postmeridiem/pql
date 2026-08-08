@@ -122,6 +122,23 @@ profile-mem: ## Memory profile against the largest fixture vault.
 clean: ## Remove build artefacts.
 	rm -rf $(BIN_DIR) dist/
 
+SCRATCH_VAULT ?= /tmp/pql-scratch-vault
+.PHONY: scratch-vault
+scratch-vault: build ## Build a disposable vault under /tmp with both surfaces, safe to mutate.
+	@rm -rf "$(SCRATCH_VAULT)"
+	@mkdir -p "$(SCRATCH_VAULT)"
+	@cp -r testdata/council-snapshot/. "$(SCRATCH_VAULT)/"
+	@cp -r governance "$(SCRATCH_VAULT)/"
+	@mkdir -p "$(SCRATCH_VAULT)/.pql"
+	@cp -r .pql/changelog "$(SCRATCH_VAULT)/.pql/"
+	@$(BIN_DIR)/pql --vault "$(SCRATCH_VAULT)" plan import >/dev/null
+	@$(BIN_DIR)/pql --vault "$(SCRATCH_VAULT)" decisions sync >/dev/null
+	@echo "Scratch vault ready: $(SCRATCH_VAULT)"
+	@echo "  Surface 1 (vault):    markdown + .base files from testdata/council-snapshot"
+	@echo "  Surface 2 (planning): this repo's tickets and decisions, replayed"
+	@echo "  Safe to mutate — it is a copy. Re-run this target to reset it."
+	@echo "  Use with: pql --vault $(SCRATCH_VAULT) <command>"
+
 COUNCIL_SRC ?= /var/mnt/data/projects/council
 .PHONY: refresh-fixtures
 refresh-fixtures: ## Re-copy the Council vault snapshot into testdata/. Manual; never runs in CI.

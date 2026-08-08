@@ -82,31 +82,33 @@ round trip and teaches the agent to distrust the document.
 Verification catches lies; only use catches unusability. Attempt tasks a
 caller would actually bring, using **only** what the skill told you.
 
-**Test against fixtures, not live repos.** Two vaults cover both surfaces
-without touching anyone's work:
+**Test against the scratch vault, never a live repo.** One command builds it:
 
-- `testdata/council-snapshot/` — a committed snapshot of a real Obsidian
-  vault, including `.base` files. Covers Surface 1 in full. Refresh it with
-  `make refresh-fixtures`, never by pointing tests at the source vault.
-- This repo — tickets and a `governance/` DQR tree. Covers Surface 2.
+```bash
+make scratch-vault
+```
 
-Use `pql --vault <path> <command>` to target one without changing directory.
+That stands up a disposable vault under `/tmp` carrying both surfaces —
+markdown and `.base` files from `testdata/council-snapshot`, and this repo's
+real tickets and decisions replayed out of the committed `.pql/changelog/`.
+Real data, real shapes, and never stale, because it is rebuilt from the log
+of record rather than copied from a snapshot that drifts. Re-run the target
+to reset it.
 
-A consumer repo is a last resort, only for something the fixtures genuinely
-cannot show — scale is the usual argument, and it is weaker than it sounds,
-since the projection and filter flags behave the same at seventy tickets as
-at twelve hundred. If you do use one, get the owner's agreement first, and
-confine yourself to read-only verbs: `files`, `tags`, `backlinks`,
-`outlinks`, `meta`, `schema`, `base`, `query`, `search`, `related`,
-`context`, `doctor`, `version`, `ticket list|show|board|statuslist`,
-`decisions list|show|read|refs|validate`, `plan status|whatsnext|review`,
-and `--help`.
+```bash
+pql --vault /tmp/pql-scratch-vault <command>
+```
 
-**Anything that writes goes in a scratch vault under /tmp**, built for the
-purpose. That covers every mutating verb — `ticket new` and friends,
-`decisions sync`, `plan upgrade|import|export|rebuild`, `pql init`,
-`skill install`, `watch start`. Testing a write path is legitimate; testing
-it in a vault someone depends on is not.
+Because it is a copy, **every verb is fair game** — `ticket new`,
+`decisions sync`, `plan rebuild`, `pql init`, anything. That is the point:
+write paths are a large part of the skill's surface, and a procedure that
+can only exercise reads leaves half of it untested. Testing a write is
+legitimate; testing it somewhere someone depends on is not.
+
+A consumer repo is not a fallback for this. If you believe one is genuinely
+needed — scale is the usual argument, and it is weaker than it sounds, since
+the projection and filter flags behave the same at seventy tickets as at
+twelve hundred — get the owner's agreement first and stay read-only.
 
 Cover both surfaces and escalate in complexity. Suggested shape:
 
