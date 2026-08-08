@@ -11,6 +11,8 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [2.2.1]
+
 ## [2.2.0] - 2026-08-08
 
 ### Changed
