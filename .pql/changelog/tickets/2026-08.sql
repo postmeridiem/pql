@@ -1312,3 +1312,41 @@ with "the discipline is permanent; the exclusion is conditional."
 
 Maintainer-side edit by design — the consumer repo flagged it rather than editing
 this repo''s philosophy doc from the outside.', 'backlog', 'low', NULL, NULL, NULL, '2026-08-07 13:02:34.996', '2026-08-08 08:28:07.484', NULL, '0cf648ce53d20e2ec549ef946cd9db2f', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY1N5XNKDTCQ354QCFAPQAA4', 'bug', NULL, 'ci/release.sh is dead code; release.yaml calls goreleaser directly', NULL, 'backlog', 'medium', NULL, NULL, NULL, '2026-08-08 10:04:26.412', '2026-08-08 10:04:26.412', NULL, '758943f950618089e95dab833581b051', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY1N5XNKDTCQ354QCFAPQAA4', 'bug', NULL, 'ci/release.sh is dead code; release.yaml calls goreleaser directly', 'Found 2026-08-08 while auditing the Makefile for the divergence that broke the
+2.0.0 release (`make lint` had drifted from `ci/lint.sh`).
+
+`CLAUDE.md` states: "CI substance lives in `ci/{lint,test,release,eval}.sh`.
+GitHub Actions workflows in `.github/workflows/` are thin wrappers around these —
+keeps local and CI behaviour identical and lets the provider be swapped without
+rewriting the scripts."
+
+That is true for lint and test, and false for the other two:
+
+- **`ci/release.sh` is invoked by nothing.** `release.yaml` uses
+  `goreleaser/goreleaser-action@v6` with `args: release --clean` directly. The
+  script runs `goreleaser release --clean`, so today they agree by coincidence —
+  but nothing keeps them in step, and the stated swap-the-provider property does
+  not hold for the one workflow that publishes binaries.
+- **`ci/eval.sh` is invoked by nothing either.** Its header calls it a scheduled
+  job, but no workflow schedules it. `make eval` now delegates to it, so it is at
+  least exercised locally.
+
+Options for release, in preference order:
+
+1. Point `release.yaml` at `./ci/release.sh`, installing goreleaser the way the
+   lint job does. Restores the documented property. Costs the action''s built-in
+   caching and version pinning, which is worth checking before assuming it is
+   free — the action pins a goreleaser version, the script uses whatever is on
+   PATH.
+2. Delete `ci/release.sh` and amend `CLAUDE.md` to say the release path
+   deliberately uses the action. Honest, smaller, and gives up the swap property
+   for that one workflow.
+
+Either is fine; drifting docs are not. Pick one and make the doc match.
+
+For eval: decide whether it is a scheduled job (add the schedule) or a manual
+local tool (say so in the script header and in CLAUDE.md).
+
+Deliberately not done during the 2.0.0 release — editing the release workflow
+while a release is in flight re-triggers it.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-08 10:04:26.412', '2026-08-08 10:04:50.754', NULL, 'e267b7bfda6964ede8deaeae05f329b8', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

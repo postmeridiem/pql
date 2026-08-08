@@ -569,3 +569,40 @@ INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, chang
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRKYCM4CJQPRRTPBTWAWDRC', 'status', 'ready', 'backlog', NULL, '2026-08-08 08:28:02', '2026-08-08 08:28:02.984', '2026-08-08 08:28:02.984', NULL, 'c1164b95c593876f09564042cc836564', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRM482B08DQ71BZQY9257XC', 'status', 'ready', 'backlog', NULL, '2026-08-08 08:28:05', '2026-08-08 08:28:05.322', '2026-08-08 08:28:05.322', NULL, '797ce0bf562430da3ad93ae668e7071a', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRMBSYFHEMSA8D0RVF9B9SG', 'status', 'ready', 'backlog', NULL, '2026-08-08 08:28:07', '2026-08-08 08:28:07.485', '2026-08-08 08:28:07.485', NULL, '7b183e8dd839784df8a3f474c3570339', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY1N5XNKDTCQ354QCFAPQAA4', 'description', NULL, 'Found 2026-08-08 while auditing the Makefile for the divergence that broke the
+2.0.0 release (`make lint` had drifted from `ci/lint.sh`).
+
+`CLAUDE.md` states: "CI substance lives in `ci/{lint,test,release,eval}.sh`.
+GitHub Actions workflows in `.github/workflows/` are thin wrappers around these —
+keeps local and CI behaviour identical and lets the provider be swapped without
+rewriting the scripts."
+
+That is true for lint and test, and false for the other two:
+
+- **`ci/release.sh` is invoked by nothing.** `release.yaml` uses
+  `goreleaser/goreleaser-action@v6` with `args: release --clean` directly. The
+  script runs `goreleaser release --clean`, so today they agree by coincidence —
+  but nothing keeps them in step, and the stated swap-the-provider property does
+  not hold for the one workflow that publishes binaries.
+- **`ci/eval.sh` is invoked by nothing either.** Its header calls it a scheduled
+  job, but no workflow schedules it. `make eval` now delegates to it, so it is at
+  least exercised locally.
+
+Options for release, in preference order:
+
+1. Point `release.yaml` at `./ci/release.sh`, installing goreleaser the way the
+   lint job does. Restores the documented property. Costs the action''s built-in
+   caching and version pinning, which is worth checking before assuming it is
+   free — the action pins a goreleaser version, the script uses whatever is on
+   PATH.
+2. Delete `ci/release.sh` and amend `CLAUDE.md` to say the release path
+   deliberately uses the action. Honest, smaller, and gives up the swap property
+   for that one workflow.
+
+Either is fine; drifting docs are not. Pick one and make the doc match.
+
+For eval: decide whether it is a scheduled job (add the schedule) or a manual
+local tool (say so in the script header and in CLAUDE.md).
+
+Deliberately not done during the 2.0.0 release — editing the release workflow
+while a release is in flight re-triggers it.', NULL, '2026-08-08 10:04:50', '2026-08-08 10:04:50.755', '2026-08-08 10:04:50.755', NULL, '6ca43640e931bc66b0b41fe7bf10f9f3', 2) ON CONFLICT(hash) DO NOTHING;
