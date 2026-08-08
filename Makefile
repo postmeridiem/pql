@@ -1,5 +1,16 @@
 # pql — local dev targets. CI scripts in ci/ shell out to these where useful.
 
+# Toolchain resolution. Non-interactive shells — git hooks, agent tool runners,
+# anything not started from a login shell — skip /etc/profile.d, so a
+# Homebrew-installed Go, golangci-lint or goreleaser is not on PATH there. That
+# is why the pre-push hook failed on a missing golangci-lint while the same
+# command worked in a terminal. Resolve it here instead of making every caller
+# prefix PATH; no-op when Homebrew is absent.
+HOMEBREW_BIN := $(firstword $(wildcard /home/linuxbrew/.linuxbrew/bin /opt/homebrew/bin /usr/local/homebrew/bin))
+ifneq ($(HOMEBREW_BIN),)
+  export PATH := $(HOMEBREW_BIN):$(PATH)
+endif
+
 GO       ?= go
 BIN_DIR  ?= bin
 
@@ -41,8 +52,13 @@ build: ## Build the pql binary into ./bin/pql with version stamped.
 	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/pql ./cmd/pql
 
 .PHONY: install
-install: build ## Install ./bin/pql into $(INSTALL_DIR).
+install: build ## Install ./bin/pql into $(INSTALL_DIR) and refresh its skill.
 	install -m 0755 $(BIN_DIR)/pql $(INSTALL_DIR)/pql
+	@# The skill is //go:embed'd, so installing the binary without refreshing
+	@# the skill leaves the installed copy describing the previous build —
+	@# and `pql skill status` reports "current" throughout, because it
+	@# compares against the binary's own embed. Keep the two together.
+	@$(INSTALL_DIR)/pql skill install >/dev/null && echo "skill refreshed from the installed binary"
 
 .PHONY: install-dev
 install-dev: build ## Symlink ./bin/pql as $(INSTALL_DIR)/pql-dev (tracks rebuilds).
