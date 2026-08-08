@@ -467,11 +467,19 @@ const pqlPostMergeMarker = "# --- pql plan import ---"
 func renderPostMergeHook(pqlPath string) string {
 	q := shellQuote(pqlPath)
 	return `# --- pql plan import ---
-# Auto-installed by pql init. Replays new changelog files into
+# Auto-installed by pql init. Migrates the changelog forward if the
+# pull brought in an older format, replays new changelog files into
 # pql.db, then re-syncs decisions from decisions/*.md so the
 # markdown-sourced half stays in step with whatever the merge
-# brought in. Both ops are idempotent — a no-op merge is a no-op
-# hook (D-8, D-16).
+# brought in. All three ops are idempotent — a no-op merge is a no-op
+# hook (D-8, D-16, D-28).
+#
+# The upgrade runs here, on a pull, rather than on every pql
+# invocation: it rewrites tracked files under .pql/changelog/, and a
+# pull is where a working-tree change is expected rather than
+# surprising. The rewrite belongs in a commit; check git status after
+# a pull that reports one.
+` + q + ` plan upgrade 2>/dev/null || true
 ` + q + ` plan import 2>/dev/null || true
 ` + q + ` decisions sync 2>/dev/null || true
 # --- end pql ---
@@ -987,6 +995,11 @@ func ensureChangelogDirs(dir string) initChangelogStat {
 			return stat
 		}
 		stat.TablesSeeded = append(stat.TablesSeeded, table)
+	}
+	// Stamp the format a new changelog is born in, so it is never mistaken for
+	// the unversioned shape that predates the marker (D-28).
+	if err := changelog.WriteFormatMarker(dir); err != nil {
+		stat.Skipped = err.Error()
 	}
 	return stat
 }

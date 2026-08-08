@@ -148,3 +148,19 @@ A single `pql` invocation, in order:
 6. Hand control to the requested subcommand.
 
 `pql doctor` prints exactly what each step resolved and why, so users never have to guess.
+
+## Versioned artefacts
+
+`.pql/` holds three independently-versioned things: `index.db` (a pure cache,
+dropped and rebuilt on mismatch), `pql.db` (schema shape plus row
+canonicalisation, migrated forward and regenerable from the changelog as a last
+resort), and `.pql/changelog/` (the on-disk replication format, carried forward
+in place — it is the log of record and cannot be rebuilt from anything).
+
+`.pql/changelog/0000-format.sql` declares the changelog's format. It is
+comments only and is never executed: replay descends into the per-table
+directories and does not read the changelog root. A changelog with no marker is
+format 1, the shape that predates versioning.
+
+`pql version --build-info` reports every axis; `docs/versions.md` explains what
+each governs and maps them to releases.

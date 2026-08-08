@@ -1401,6 +1401,161 @@ func TestIntegration_TicketList_Oneline(t *testing.T) {
 	}
 }
 
+// toFormatOneIT rewrites a vault's changelog back to the format-1 conflict
+// clause and drops the marker, standing in for a changelog committed before
+// formats were versioned.
+func toFormatOneIT(t *testing.T, vault string) {
+	t.Helper()
+	root := filepath.Join(vault, ".pql", "changelog")
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".sql") {
+			return err
+		}
+		if strings.HasSuffix(path, "0000-schema.sql") {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		table := filepath.Base(filepath.Dir(path))
+		old := strings.ReplaceAll(string(body),
+			"WHERE excluded.updated_at >= "+table+".updated_at;",
+			"WHERE excluded.updated_at > "+table+".updated_at OR (excluded.updated_at = "+
+				table+".updated_at AND excluded.hash > "+table+".hash);")
+		return os.WriteFile(path, []byte(old), 0o644)
+	})
+	if err != nil {
+		t.Fatalf("downgrade changelog: %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, "0000-format.sql")); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("remove marker: %v", err)
+	}
+}
+
+func TestIntegration_PlanUpgrade_MigratesChangelogForward(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "one", "--id-only")
+	toFormatOneIT(t, vault)
+
+	// Dry run first: reports, changes nothing.
+	dry := pqlIT(t, vault, "plan", "upgrade", "--dry-run")
+	var dryRes struct {
+		FoundFormat    int      `json:"found_format"`
+		CurrentFormat  int      `json:"current_format"`
+		FilesRewritten []string `json:"files_rewritten"`
+		DryRun         bool     `json:"dry_run"`
+	}
+	if err := json.Unmarshal([]byte(dry), &dryRes); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, dry)
+	}
+	if dryRes.FoundFormat != 1 || dryRes.CurrentFormat < 2 {
+		t.Errorf("dry run reported found=%d current=%d, want 1 and ≥2",
+			dryRes.FoundFormat, dryRes.CurrentFormat)
+	}
+	if len(dryRes.FilesRewritten) == 0 || !dryRes.DryRun {
+		t.Errorf("dry run should list files and mark itself: %s", dry)
+	}
+
+	ticketsFile := filepath.Join(vault, ".pql", "changelog", "tickets")
+	entries, err := os.ReadDir(ticketsFile)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no ticket changelog files: %v", err)
+	}
+
+	// Real run.
+	out := pqlIT(t, vault, "plan", "upgrade")
+	var res struct {
+		Steps          []struct{ ID string } `json:"steps"`
+		FilesRewritten []string              `json:"files_rewritten"`
+		Schema         struct {
+			Found   int `json:"found"`
+			Current int `json:"current"`
+		} `json:"schema"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if len(res.Steps) != 1 || res.Steps[0].ID != "changelog-guard-by-position" {
+		t.Errorf("steps = %+v, want the guard step", res.Steps)
+	}
+	if len(res.FilesRewritten) == 0 {
+		t.Error("upgrade rewrote nothing")
+	}
+	if res.Schema.Found != res.Schema.Current {
+		t.Errorf("schema axis = %+v, want a stamped, current database", res.Schema)
+	}
+
+	// Idempotent: a second run finds nothing to do.
+	again := pqlIT(t, vault, "plan", "upgrade")
+	var second struct {
+		Steps          []struct{} `json:"steps"`
+		FilesRewritten []string   `json:"files_rewritten"`
+	}
+	if err := json.Unmarshal([]byte(again), &second); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, again)
+	}
+	if len(second.Steps) != 0 || len(second.FilesRewritten) != 0 {
+		t.Errorf("second upgrade was not a no-op: %s", again)
+	}
+}
+
+// An older format still replays — the rows are readable — but never silently.
+func TestIntegration_PlanImport_WarnsOnStaleFormat(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "one", "--id-only")
+	toFormatOneIT(t, vault)
+
+	stdout, stderr, code := run(t, vault, "plan", "import")
+	if code != 0 {
+		t.Fatalf("import exit = %d, want 0 — an older format is replayable\nstdout: %s", code, stdout)
+	}
+	if !strings.Contains(string(stderr), "format_stale") {
+		t.Errorf("stderr should carry the stale-format diagnostic, got: %s", stderr)
+	}
+	if !strings.Contains(string(stderr), "plan upgrade") {
+		t.Errorf("diagnostic should name the verb that fixes it, got: %s", stderr)
+	}
+}
+
+// A format from the future is refused rather than replayed under rules this
+// binary does not know.
+func TestIntegration_PlanRebuild_RefusesNewerFormat(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "one", "--id-only")
+	marker := filepath.Join(vault, ".pql", "changelog", "0000-format.sql")
+	if err := os.WriteFile(marker, []byte("-- pql:changelog_format: 99\n"), 0o644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	_, stderr, code := run(t, vault, "plan", "rebuild")
+	if code != 65 {
+		t.Errorf("exit = %d, want 65 for a changelog newer than the binary", code)
+	}
+	if !strings.Contains(string(stderr), "99") {
+		t.Errorf("refusal should name the format found, got: %s", stderr)
+	}
+}
+
+func TestIntegration_VersionBuildInfo_ReportsEveryAxis(t *testing.T) {
+	cmd := pqlCmd(t, "version", "--build-info")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("version --build-info: %v", err)
+	}
+	var info map[string]any
+	if err := json.Unmarshal(out, &info); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	for _, key := range []string{
+		"schema_version", "planning_schema_version", "canonical_version", "changelog_format",
+	} {
+		if _, ok := info[key]; !ok {
+			t.Errorf("build info is missing the %s axis: %s", key, out)
+		}
+	}
+}
+
 // A clean vault verifies clean, and --verify stays exit 0 — the flag is a
 // report, not a gate (T-60).
 func TestIntegration_PlanRebuildVerify_CleanVaultExits0(t *testing.T) {

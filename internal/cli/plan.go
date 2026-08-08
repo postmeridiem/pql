@@ -14,6 +14,7 @@ import (
 
 	"github.com/postmeridiem/pql/internal/cli/render"
 	"github.com/postmeridiem/pql/internal/diag"
+	"github.com/postmeridiem/pql/internal/planning"
 	"github.com/postmeridiem/pql/internal/planning/changelog"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
@@ -35,7 +36,86 @@ func newPlanCmd() *cobra.Command {
 	cmd.AddCommand(newPlanExportCmd())
 	cmd.AddCommand(newPlanRebuildCmd())
 	cmd.AddCommand(newPlanImportCmd())
+	cmd.AddCommand(newPlanUpgradeCmd())
 	return cmd
+}
+
+// --- upgrade ---
+
+func newPlanUpgradeCmd() *cobra.Command {
+	var dryRun bool
+	cmd := &cobra.Command{
+		Use:   "upgrade",
+		Short: "Migrate .pql/changelog/ forward to the format this pql writes",
+		Long: `Bring a vault's replication artefacts up to the versions this binary
+speaks. Today that means the changelog file format.
+
+The changelog is the log of record — unlike pql.db it cannot be
+regenerated from anything — so an older format is migrated forward in
+place rather than dropped and rebuilt. The rows are staged through
+SQLite, which is what parses them correctly, and re-emitted through the
+same renderer a normal export uses, so the output is byte-identical to
+what this pql would have written. Row data is untouched; what changes is
+the inline conflict guard each line carries.
+
+  pql plan upgrade              # migrate and stamp the new format
+  pql plan upgrade --dry-run    # list the files that would change
+
+This also runs from the post-merge hook installed by pql init, because a
+pull is where a working-tree change to tracked files is expected. It
+rewrites files under .pql/changelog/, so the result belongs in a commit.
+Every clone should land the same upgrade commit before writing new rows:
+a union merge between an upgraded and a non-upgraded clone doubles each
+row until the next upgrade collapses it. See D-28.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+
+			res, err := changelog.Upgrade(ctx, cfg.Vault.Path, dryRun)
+			if err != nil {
+				return &exitError{code: diag.DataErr, msg: err.Error()}
+			}
+
+			// The pql.db axis reports alongside, so one verb answers "where
+			// does this vault sit on every axis" rather than one per artefact.
+			pdb, err := openPlanningDB(ctx, cfg)
+			if err != nil {
+				return &exitError{code: diag.Unavail, msg: err.Error()}
+			}
+			defer func() { _ = pdb.Close() }()
+			schemaAxis, err := planning.SchemaStatus(ctx, pdb.SQL())
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+
+			out := &struct {
+				*changelog.UpgradeResult
+				Schema planning.SchemaAxisStatus `json:"schema"`
+			}{res, schemaAxis}
+			return renderOne(cmd, out)
+		},
+	}
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what would change without writing")
+	return cmd
+}
+
+// warnChangelogFormat surfaces a changelog whose format differs from what this
+// binary writes. An older format replays under superseded rules — survivable,
+// but never silently; a newer one is a hard stop, because a format this binary
+// does not know may encode rows it would misread.
+func warnChangelogFormat(vaultPath string) error {
+	_, warning, err := changelog.CheckFormat(vaultPath)
+	if err != nil {
+		return &exitError{code: diag.DataErr, msg: err.Error()}
+	}
+	if warning != "" {
+		diag.Warn("pql.plan.format_stale", warning)
+	}
+	return nil
 }
 
 // --- status ---
@@ -364,6 +444,10 @@ warning, not a failure; only rows that disappear outright exit non-zero.`,
 			}
 			rOpts.Out = cmd.OutOrStdout()
 
+			if err := warnChangelogFormat(cfg.Vault.Path); err != nil {
+				return err
+			}
+
 			if !verify {
 				res, err := changelog.Rebuild(ctx, pdb.SQL(), cfg.Vault.Path)
 				if err != nil {
@@ -465,6 +549,13 @@ old pql-plan.json; T-23 polishes this into an automatic migration.`,
 
 			if legacyFile != "" {
 				return importLegacySnapshot(ctx, pdb.SQL(), legacyFile, cmd.OutOrStdout())
+			}
+
+			// Detect only — never rewrite from a read path. A fresh clone has
+			// no merge to hook, so this is where a stale format most often
+			// surfaces first.
+			if err := warnChangelogFormat(cfg.Vault.Path); err != nil {
+				return err
 			}
 
 			res, err := changelog.Import(ctx, pdb.SQL(), cfg.Vault.Path)

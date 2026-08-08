@@ -11,6 +11,50 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [1.13.0]
+
+### Added
+
+- **`pql plan upgrade [--dry-run]` and a versioned changelog format (T-68, T-44,
+  T-69; D-28).** `.pql/changelog/` now declares its format in
+  `0000-format.sql`, and an older format is migrated forward in place. This
+  matters because 1.12.0's tie-break fix (T-59) changed SQL text that is baked
+  into every already-committed changelog line — so until those files are
+  rewritten, existing repos keep replaying under the superseded rule. The
+  upgrade stages rows through SQLite (which is what parses them correctly) and
+  re-emits them through the same renderer a normal export uses, so its output is
+  byte-identical to a fresh export and two clones upgrading independently agree.
+  Row data is untouched; only the conflict guard on each line changes.
+  It runs from the `post-merge` hook installed by `pql init` — a pull is where a
+  working-tree change to tracked files is expected — and from the explicit verb.
+  `plan import` and `plan rebuild` detect and report but never rewrite: an older
+  format warns (`pql.plan.format_stale`) and replays, a **newer** one is refused
+  with exit `65`, mirroring the long-standing `canonical_version` guard.
+
+  **Consumers (clide, settled-reach, council): land the upgrade commit in every
+  clone before writing new planning rows.** `.gitattributes` sets `merge=union`
+  on changelog files, and union merge dedupes identical lines only — so merging
+  an upgraded clone with a non-upgraded one leaves each row twice, differing
+  only in its guard clause. Replay still converges and the next `plan upgrade`
+  collapses the duplicates, but the tidy path is to upgrade once, commit, and
+  pull everywhere.
+
+- **`pql.db` forward migrations (T-44).** A `schema_migrations` ledger records
+  how far a database has been migrated, and `Migrate` runs any applicable steps
+  before verifying the shape. The step list ships empty — the schema is current,
+  so there is nothing to migrate — but the runner, ledger, baseline stamping and
+  refusal paths are live, and the next schema change is one entry rather than a
+  new mechanism. This retires D-19's "no migration runner, ever" (see D-28 for
+  why the changelog forced the question early); `rm .pql/pql.db && pql plan
+  rebuild` remains the recovery for a database no step can reach.
+
+- **`pql version --build-info` reports every version axis.** Alongside
+  `schema_version` it now carries `planning_schema_version`, `canonical_version`
+  and `changelog_format`, so a consumer can diff what it holds against what a
+  binary speaks without reading source. All four are declared in `project.yaml`,
+  and a test parses that file so the Go constants cannot drift from it.
+  `docs/versions.md` explains each axis and maps them to releases.
+
 ## [1.12.0]
 
 ### Added
