@@ -79,9 +79,34 @@ round trip and teaches the agent to distrust the document.
 
 ### Step 3 — Run real work against a real vault
 
-Verification catches lies; only use catches unusability. Use a vault with
-substance — this repo, or another consumer — and attempt tasks a caller would
-actually bring, using **only** what the skill told you.
+Verification catches lies; only use catches unusability. Attempt tasks a
+caller would actually bring, using **only** what the skill told you.
+
+**Test against fixtures, not live repos.** Two vaults cover both surfaces
+without touching anyone's work:
+
+- `testdata/council-snapshot/` — a committed snapshot of a real Obsidian
+  vault, including `.base` files. Covers Surface 1 in full. Refresh it with
+  `make refresh-fixtures`, never by pointing tests at the source vault.
+- This repo — tickets and a `governance/` DQR tree. Covers Surface 2.
+
+Use `pql --vault <path> <command>` to target one without changing directory.
+
+A consumer repo is a last resort, only for something the fixtures genuinely
+cannot show — scale is the usual argument, and it is weaker than it sounds,
+since the projection and filter flags behave the same at seventy tickets as
+at twelve hundred. If you do use one, get the owner's agreement first, and
+confine yourself to read-only verbs: `files`, `tags`, `backlinks`,
+`outlinks`, `meta`, `schema`, `base`, `query`, `search`, `related`,
+`context`, `doctor`, `version`, `ticket list|show|board|statuslist`,
+`decisions list|show|read|refs|validate`, `plan status|whatsnext|review`,
+and `--help`.
+
+**Anything that writes goes in a scratch vault under /tmp**, built for the
+purpose. That covers every mutating verb — `ticket new` and friends,
+`decisions sync`, `plan upgrade|import|export|rebuild`, `pql init`,
+`skill install`, `watch start`. Testing a write path is legitimate; testing
+it in a vault someone depends on is not.
 
 Cover both surfaces and escalate in complexity. Suggested shape:
 
