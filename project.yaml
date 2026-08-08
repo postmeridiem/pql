@@ -14,17 +14,34 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 1.12.0
+version: 1.13.0
 status: v1.11.0 — planning list verbs project (D-27). `pql ticket list` drops `description` from its default output (it measured ~81% of real-world dumps and blew agent tool-output budgets); `--full` opts back in, `--fields id,status,title` returns exactly the named keys in order, and `--oneline` emits a plain id/status/title index. `pql decisions list` gains the same `--fields`/`--oneline` surface. Raised as FR-1 by two downstream consumers, accepted as T-56.
 
 repository: https://github.com/postmeridiem/pql
 license: MIT
 module: github.com/postmeridiem/pql
 
-# Index schema version exposed via `pql version --build-info`. Bumped when
-# the binary's expected SQLite schema changes. Mirror in
-# internal/version.SchemaVersion when bumping.
+# The version axes, all exposed via `pql version --build-info`. Each is
+# declared here and in internal/version; internal/version/version_test.go
+# parses this file and fails on drift, so the two cannot diverge.
+# docs/versions.md explains what each axis governs and maps them to releases.
+#
+# index.db schema. Bumped when the binary's expected SQLite schema changes;
+# index.db is a pure cache, so a mismatch drops and rebuilds it.
 schema_version: 1
+
+# pql.db schema generation. Bumped alongside each forward migration step; a
+# database records how far it has been migrated in its schema_migrations table.
+planning_schema_version: 1
+
+# pql.db row canonicalisation — the rules behind each planning row's content
+# hash. Bumped when a projection rule changes.
+canonical_version: 2
+
+# .pql/changelog/ file format. Not regenerable (the changelog is the log of
+# record), so an older format is migrated forward in place — `pql plan upgrade`,
+# and automatically from the post-merge hook. See D-28.
+changelog_format: 2
 
 # Toolchain. Mirror in go.mod when bumping.
 go_version: ">=1.25"
