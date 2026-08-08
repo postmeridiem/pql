@@ -1485,3 +1485,190 @@ INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, chang
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C99ZKBZWAYDVY8PFYFHEM', 'status', 'ready', 'in_progress', NULL, '2026-08-08 19:33:56', '2026-08-08 19:33:56.415', '2026-08-08 19:33:56.415', NULL, '64385b86c32480a763490519741b795b', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5H3J0H3JC5ZQZ9QCPT3P9R', 'status', 'ready', 'in_progress', NULL, '2026-08-08 19:33:56', '2026-08-08 19:33:56.415', '2026-08-08 19:33:56.415', NULL, 'b02aa2295b00d87f2df7769e26a9ceb3', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5PDDXT59VGNRYSC4E4XRSR', 'status', 'ready', 'in_progress', NULL, '2026-08-08 19:33:56', '2026-08-08 19:33:56.416', '2026-08-08 19:33:56.416', NULL, '9756036a5a901ed0021b845c21ef3be7', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5H3J0H3JC5ZQZ9QCPT3P9R', 'description', 'Resolves the open half of audit finding #23, and it is a real defect rather than the .base file''s doing.
+
+Same key, same file, two answers:
+
+  pql meta members/holt/persona.md   ->  "voting": true
+  pql query "SELECT fm.voting ..."   ->  {"fm.voting": 1}
+
+pql base inherits it, since base compiles to the DSL — which is where the auditor met it.
+
+Cause, in internal/query/dsl/eval/compile.go around line 345. The fm.<key> reference compiles to a type-dispatching subquery: CASE type WHEN ''string'' THEN value_text WHEN ''number'' THEN value_num WHEN ''bool'' THEN value_num ELSE value_json END. For a bool that yields SQLite''s 1/0. The comment says the shape is chosen so SQLite can compare directly against literals, which is true and is why WHERE fm.voting = true works — the parser lowers true to 1. The problem is that the same expression is used for projection, where the comparison-friendly shape is the wrong one and the schema already stores the right one in value_json.
+
+So the fix is not to change the CASE. Comparison genuinely wants value_num; projection wants value_json, or a type-aware decode on the way out. Changing it in one place breaks the other — verified that both = true and = 1 currently match, and both should keep matching.
+
+Scope check before fixing: bool is the visible case, but the same CASE returns value_num for ''number'' too, so check whether an integer frontmatter value round-trips as an integer or as a REAL — value_num is REAL, so a year like 2026 may well be emitting 2026.0. And ''list''/''object'' fall to value_json, which is a JSON string in a JSON field, so confirm whether those come back as nested structures or as escaped strings. Worth settling all three at once rather than patching bool alone.
+
+Not filed against the base surface: pql base returns exactly the columns the .base declares, which the same investigation confirmed — see the note on T-87.
+
+Scope settled by probe, and narrower than the ticket first guessed. Planted a file carrying one of each frontmatter type and read it through both paths:
+
+  DSL   {"fm.abool":0,  "fm.alist":["a","b"], "fm.anobj":{"k":"v"}, "fm.num_float":1.5, "fm.num_int":2026}
+  meta  {"abool":false, "alist":["a","b"],    "anobj":{"k":"v"},    "num_float":1.5,    "num_int":2026}
+
+So bool is the only divergence. The speculation in the description above was wrong on both counts and is retracted: integers do not come back as REAL — 2026 stays 2026, not 2026.0 — and list/object values decode into real nested JSON rather than escaped strings, so the ELSE value_json branch is already doing the right thing.
+
+That makes the fix small and local: the CASE needs one more arm so a bool projects as its JSON form while still comparing numerically. Everything else in the expression is correct as written. Both spellings — WHERE fm.abool = false and = 0 — must keep matching after the change; they both match today.', 'Resolves the open half of audit finding #23, and it is a real defect rather than the .base file''s doing.
+
+Same key, same file, two answers:
+
+  pql meta members/holt/persona.md   ->  "voting": true
+  pql query "SELECT fm.voting ..."   ->  {"fm.voting": 1}
+
+pql base inherits it, since base compiles to the DSL — which is where the auditor met it.
+
+Cause, in internal/query/dsl/eval/compile.go around line 345. The fm.<key> reference compiles to a type-dispatching subquery: CASE type WHEN ''string'' THEN value_text WHEN ''number'' THEN value_num WHEN ''bool'' THEN value_num ELSE value_json END. For a bool that yields SQLite''s 1/0. The comment says the shape is chosen so SQLite can compare directly against literals, which is true and is why WHERE fm.voting = true works — the parser lowers true to 1. The problem is that the same expression is used for projection, where the comparison-friendly shape is the wrong one and the schema already stores the right one in value_json.
+
+So the fix is not to change the CASE. Comparison genuinely wants value_num; projection wants value_json, or a type-aware decode on the way out. Changing it in one place breaks the other — verified that both = true and = 1 currently match, and both should keep matching.
+
+Scope check before fixing: bool is the visible case, but the same CASE returns value_num for ''number'' too, so check whether an integer frontmatter value round-trips as an integer or as a REAL — value_num is REAL, so a year like 2026 may well be emitting 2026.0. And ''list''/''object'' fall to value_json, which is a JSON string in a JSON field, so confirm whether those come back as nested structures or as escaped strings. Worth settling all three at once rather than patching bool alone.
+
+Not filed against the base surface: pql base returns exactly the columns the .base declares, which the same investigation confirmed — see the note on T-87.
+
+Scope settled by probe, and narrower than the ticket first guessed. Planted a file carrying one of each frontmatter type and read it through both paths:
+
+  DSL   {"fm.abool":0,  "fm.alist":["a","b"], "fm.anobj":{"k":"v"}, "fm.num_float":1.5, "fm.num_int":2026}
+  meta  {"abool":false, "alist":["a","b"],    "anobj":{"k":"v"},    "num_float":1.5,    "num_int":2026}
+
+So bool is the only divergence. The speculation in the description above was wrong on both counts and is retracted: integers do not come back as REAL — 2026 stays 2026, not 2026.0 — and list/object values decode into real nested JSON rather than escaped strings, so the ELSE value_json branch is already doing the right thing.
+
+That makes the fix small and local: the CASE needs one more arm so a bool projects as its JSON form while still comparing numerically. Everything else in the expression is correct as written. Both spellings — WHERE fm.abool = false and = 0 — must keep matching after the change; they both match today.
+
+Fixed 2026-08-08 for 2.2.0, commit 09df675. The compiler now tracks whether it is emitting the SELECT list; the bool arm of the type-dispatching CASE projects CAST(value_json AS BLOB) there and keeps value_num everywhere else.
+
+The BLOB is the load-bearing part and worth recording. normalise() in exec.go turns a []byte holding valid JSON into json.RawMessage but deliberately refuses to reinterpret a bare string ''true'' — otherwise a frontmatter string whose value happens to be the word true would come back as a JSON bool. Selecting value_json as text would have produced that second wrong answer. The BLOB is what separates ''this is JSON'' from ''this is text that looks like JSON'', and only the bool branch can make the claim because only it has consulted the type column.
+
+Verified: fm.abool -> false, fm.btrue -> true, fm.strtrue (a string ''true'') -> "true", fm.num_int -> 2026, fm.alist -> ["a","b"]. Comparison unchanged — = true, = 1, = false, = 0 all behave as before, and ORDER BY still sorts numerically. base council-members now returns fm.voting: true, matching meta, which is where the audit met this.
+
+Guarded by TestBoolProjection_DiffersFromComparison, which asserts the BLOB cast appears in SELECT and does not appear in WHERE or ORDER BY. TestCompile_FmTypeDispatchInSubquery had required value_num in a SELECT, so it was pinning the bug rather than catching it; that assertion is removed and the reason recorded in the test.', NULL, '2026-08-08 19:36:32', '2026-08-08 19:36:32.759', '2026-08-08 19:36:32.759', NULL, '1f8370ee85f929b0065f61ac9dd8c3b5', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5H3J0H3JC5ZQZ9QCPT3P9R', 'status', 'in_progress', 'done', NULL, '2026-08-08 19:36:32', '2026-08-08 19:36:32.782', '2026-08-08 19:36:32.782', NULL, 'b3c26a4d93b3e09c7f9827ca3fa8e007', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5PDDXT59VGNRYSC4E4XRSR', 'description', 'Found while fixing T-93, and it is the worse of the two.
+
+  pql query "SELECT path, name"
+  [{"name":"albu","path":"album.md"},
+   {"name":"diagra","path":"diagram.md"},
+   {"name":"secon","path":"second.md"},
+   {"name":"README","path":"README.md"}]
+
+  pql meta second.md  ->  "name": "second"
+
+Cause: fileColumn("name") in internal/query/dsl/eval/compile.go derives the basename and then calls rtrim(..., ''.md''). SQLite''s two-argument rtrim removes any trailing characters that appear in the second argument treated as a SET, not as a literal suffix. So it strips the extension and then keeps going through any trailing d, m or period in the stem. README survives because it ends in E; types survives because it ends in s; album, diagram, second, keyword, system, method, problem do not.
+
+Severity: name is a documented built-in column, it appears in the skill''s DSL examples and in the routing table, and the failure is silent — a wrong string, not an error. Any vault with a file ending in m or d gets corrupted output from a core column, and those endings are common.
+
+meta is unaffected because it derives the name in Go, which is also why the audit never caught this: it exercised meta and read name from ranked output, never SELECT name against a filename in the affected set.
+
+Fix: replace the rtrim with a real suffix strip — CASE WHEN <basename> LIKE ''%.md'' THEN substr(<basename>, 1, length(<basename>) - 3) ELSE <basename> END. Verbose because the basename expression repeats, but correct. Check whether folder has the same class of defect while there — it uses instr/substr arithmetic rather than rtrim, so probably not, but confirm rather than assume.
+
+Regression test must cover a name ending in each of d, m and period, plus one unaffected, plus a file with no extension.', 'Found while fixing T-93, and it is the worse of the two.
+
+  pql query "SELECT path, name"
+  [{"name":"albu","path":"album.md"},
+   {"name":"diagra","path":"diagram.md"},
+   {"name":"secon","path":"second.md"},
+   {"name":"README","path":"README.md"}]
+
+  pql meta second.md  ->  "name": "second"
+
+Cause: fileColumn("name") in internal/query/dsl/eval/compile.go derives the basename and then calls rtrim(..., ''.md''). SQLite''s two-argument rtrim removes any trailing characters that appear in the second argument treated as a SET, not as a literal suffix. So it strips the extension and then keeps going through any trailing d, m or period in the stem. README survives because it ends in E; types survives because it ends in s; album, diagram, second, keyword, system, method, problem do not.
+
+Severity: name is a documented built-in column, it appears in the skill''s DSL examples and in the routing table, and the failure is silent — a wrong string, not an error. Any vault with a file ending in m or d gets corrupted output from a core column, and those endings are common.
+
+meta is unaffected because it derives the name in Go, which is also why the audit never caught this: it exercised meta and read name from ranked output, never SELECT name against a filename in the affected set.
+
+Fix: replace the rtrim with a real suffix strip — CASE WHEN <basename> LIKE ''%.md'' THEN substr(<basename>, 1, length(<basename>) - 3) ELSE <basename> END. Verbose because the basename expression repeats, but correct. Check whether folder has the same class of defect while there — it uses instr/substr arithmetic rather than rtrim, so probably not, but confirm rather than assume.
+
+Regression test must cover a name ending in each of d, m and period, plus one unaffected, plus a file with no extension.
+
+Fixed 2026-08-08 for 2.2.0, commit 09df675. rtrim(basename, ''.md'') replaced with a literal-suffix strip: CASE WHEN <basename> LIKE ''%.md'' THEN substr(<basename>, 1, length(<basename>) - 3) ELSE <basename> END. The basename expression is hoisted to a sqlBasename constant and the strip to stripMDSuffix, since SQLite has no scalar LET binding and the expression would otherwise appear four times inline.
+
+Verified across the affected endings and the ones that hid it: album.md -> album, diagram.md -> diagram, second.md -> second, README.md -> README, types.md -> types, deep/er/keyword.md -> keyword, and folder still resolves on nested paths.
+
+Scope check from the ticket, answered: folder does not share the defect. It uses instr/substr arithmetic with no rtrim, and nested paths return the right prefix.
+
+Guarded by TestName_StripsOnlyTheExtension, which covers a stem ending in each of d and m, an unaffected one, a nested path and a single-character stem in the set. TestCompile_NameAndFolderUseSubstr had required the rtrim to be present, so it was holding the bug in place; it now asserts the opposite — no rtrim, and a LIKE ''%.md'' guard — with the reason recorded.
+
+Worth noting for the audit record: this was not found by the skill audit. The auditor exercised meta, which derives the name in Go and is correct, and read name from ranked output rather than SELECT name. It surfaced only because a T-93 probe happened to create a file called second.md.', NULL, '2026-08-08 19:36:43', '2026-08-08 19:36:43.706', '2026-08-08 19:36:43.706', NULL, '18602561d65c1d6d49c18f6a5759e860', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5PDDXT59VGNRYSC4E4XRSR', 'status', 'in_progress', 'done', NULL, '2026-08-08 19:36:43', '2026-08-08 19:36:43.725', '2026-08-08 19:36:43.725', NULL, 'a13aa08748b35b6e3db8f1f1a500c175', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C6ZEE2W3DEZX0MGF3EYF0', 'description', 'Implements D-29 on the three ranked verbs.
+
+pql related, pql context and pql search take a path argument and do not check it exists. A typo returns [] at exit 0, which reads as ''nothing is related to this file'' when the truth is ''there is no such file''. pql meta on the same typo exits 66, so the identical mistake is loud on one verb and silent on the neighbouring one — and the silent one is the verb the skill tells an agent to reach for first.
+
+D-29 settles the rule: an argument that names a thing is validated, a value that filters a set is not. These three arguments name things.
+
+Fix: resolve the path against files before ranking, exit 66 naming the path when absent. context already does exactly this for its outbound targets (T-73), so the query shape exists. One extra query on a path that already opens the store.
+
+Not in scope: backlinks and outlinks, whose argument is matched against link text rather than resolved. Validating there needs the normalization Q-6 is still open about, so they keep returning [] and the skill says why. Nor the DSL, where WHERE path = ''nope.md'' is a filter and correctly empty.
+
+Behaviour change — a caller relying on the empty gets 66. Ships in a minor with a compatibility note.', 'Implements D-29 on the three ranked verbs.
+
+pql related, pql context and pql search take a path argument and do not check it exists. A typo returns [] at exit 0, which reads as ''nothing is related to this file'' when the truth is ''there is no such file''. pql meta on the same typo exits 66, so the identical mistake is loud on one verb and silent on the neighbouring one — and the silent one is the verb the skill tells an agent to reach for first.
+
+D-29 settles the rule: an argument that names a thing is validated, a value that filters a set is not. These three arguments name things.
+
+Fix: resolve the path against files before ranking, exit 66 naming the path when absent. context already does exactly this for its outbound targets (T-73), so the query shape exists. One extra query on a path that already opens the store.
+
+Not in scope: backlinks and outlinks, whose argument is matched against link text rather than resolved. Validating there needs the normalization Q-6 is still open about, so they keep returning [] and the skill says why. Nor the DSL, where WHERE path = ''nope.md'' is a filter and correctly empty.
+
+Behaviour change — a caller relying on the empty gets 66. Ships in a minor with a compatibility note.
+
+Implemented 2026-08-08 for 2.2.0, commit 66ee8b4. related and context resolve their path argument against files before ranking and exit 66 naming it when absent. Exact match only — accepting spellings here would re-introduce the guessing Q-6 is about, and the argument is the vault-relative path every other command returns.
+
+Applied before the --flat-search short-circuit, so the primitive path enforces it too: the argument is still a name there.
+
+search is untouched, per D-29''s line. Its argument is a query, a query is a filter, and an unmatched filter is correctly empty at exit 0. TestIntegration_RankedVerbs_RejectUnindexedPath asserts that explicitly rather than leaving it implied, so a future change that over-generalises the check fails a test instead of quietly breaking search.
+
+Verified: related and context on an unindexed path exit 66 naming it, --flat-search likewise, a real path still ranks, and search on an unmatched query still returns [] at exit 0.
+
+Behaviour change, so it lands in a minor with a compatibility note in the CHANGELOG — a caller relying on the empty result for a bad path now gets 66.', NULL, '2026-08-08 19:36:58', '2026-08-08 19:36:58.369', '2026-08-08 19:36:58.369', NULL, '115efcdee0f386d1262e0961f41d12a5', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C6ZEE2W3DEZX0MGF3EYF0', 'status', 'in_progress', 'done', NULL, '2026-08-08 19:36:58', '2026-08-08 19:36:58.391', '2026-08-08 19:36:58.391', NULL, '28b7bee0580c0ab727454564b5f35ae5', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C99ZKBZWAYDVY8PFYFHEM', 'description', 'Implements D-31.
+
+D-31 declines to add absence filters — no decisions list --unimplemented, no --without-<x> family — on the grounds that each is a join predicate in disguise and adding them one at a time turns a query surface into an ad-hoc ORM. The supported route is a batched positive call plus a client-side fold, which is cheap now that batching and projection both work.
+
+Two things make that decision honest, and neither is done.
+
+First, the skill has to carry a worked example, because an agent will not discover a fold pattern from a flag list. Something like: decisions list --oneline to source the ids, decisions show <ids> --with-tickets --fields id,tickets, then filter for the missing tickets key. That is the route the audit reconstructed by hand across four calls.
+
+Second, ticket list --decision none currently returns empty silently, which is worse than not supporting the question — it looks like a supported filter that found nothing. Per D-29''s closed-set rule it should exit 64 naming the supported values. Same for any other spelling that reads as a negative filter and is not one.', 'Implements D-31.
+
+D-31 declines to add absence filters — no decisions list --unimplemented, no --without-<x> family — on the grounds that each is a join predicate in disguise and adding them one at a time turns a query surface into an ad-hoc ORM. The supported route is a batched positive call plus a client-side fold, which is cheap now that batching and projection both work.
+
+Two things make that decision honest, and neither is done.
+
+First, the skill has to carry a worked example, because an agent will not discover a fold pattern from a flag list. Something like: decisions list --oneline to source the ids, decisions show <ids> --with-tickets --fields id,tickets, then filter for the missing tickets key. That is the route the audit reconstructed by hand across four calls.
+
+Second, ticket list --decision none currently returns empty silently, which is worse than not supporting the question — it looks like a supported filter that found nothing. Per D-29''s closed-set rule it should exit 64 naming the supported values. Same for any other spelling that reads as a negative filter and is not one.
+
+Implemented 2026-08-08 for 2.2.0, commits 66ee8b4 and a1e5172. Both halves.
+
+Code: ticket list --decision now refuses none, null, nil, empty, unset and - at exit 64, with a message naming what the flag does take and pointing at the pattern that answers the question. A real id remains a filter, so an unmatched one still returns [] at exit 0 — the refusal must not turn every value into a lookup, and the test asserts that direction too.
+
+Documentation: the skill now carries the absence pattern as a worked example under decisions — list the ids, batch-show them with --with-tickets, fold for the absent tickets key — with the warning that --fields id alone drops the join and makes every row look unimplemented. That last point is the trap the audit actually fell into, so it is stated rather than implied. Generalised in one line: batch the positive facts, fold client side.
+
+Scope note: the case-insensitive match means --decision None is refused too, which is right — the caller meant the same thing.', NULL, '2026-08-08 19:36:58', '2026-08-08 19:36:58.406', '2026-08-08 19:36:58.406', NULL, 'b9e1462358ab99c3bd1824b552bf8e02', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C99ZKBZWAYDVY8PFYFHEM', 'status', 'in_progress', 'done', NULL, '2026-08-08 19:36:58', '2026-08-08 19:36:58.422', '2026-08-08 19:36:58.422', NULL, 'aa059700f7b283f6cf38c434129472e3', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C83X7F5WDSXK11XWKM47C', 'description', 'Implements D-30.
+
+The mutation verbs return whatever each one happened to return. ticket assign gives a whole record including a 2 KB description; ticket label gives {ticket_ids, action, label}. Neither is documented, and --fields is rejected, so the verbs with the fattest output are the ones with no way to trim.
+
+D-30 keeps projection off the mutation surface — a mutation''s return value is a receipt, and a caller who trimmed it to id has confirmed nothing — and standardises the shapes instead. One record changed returns that record whole. Several changed return a summary object naming the ids and what was applied, which is what ticket label already does.
+
+Work: audit every mutation verb (status, assign, team, label, setparent, decision, block, unblock, append, refine write) for which shape it currently returns, converge the batch cases on the summary, and document both shapes in the skill. The documentation half is worth doing first and separately — it is the part a caller is blocked on today, and it does not change behaviour.
+
+The shape change lands in a minor.', 'Implements D-30.
+
+The mutation verbs return whatever each one happened to return. ticket assign gives a whole record including a 2 KB description; ticket label gives {ticket_ids, action, label}. Neither is documented, and --fields is rejected, so the verbs with the fattest output are the ones with no way to trim.
+
+D-30 keeps projection off the mutation surface — a mutation''s return value is a receipt, and a caller who trimmed it to id has confirmed nothing — and standardises the shapes instead. One record changed returns that record whole. Several changed return a summary object naming the ids and what was applied, which is what ticket label already does.
+
+Work: audit every mutation verb (status, assign, team, label, setparent, decision, block, unblock, append, refine write) for which shape it currently returns, converge the batch cases on the summary, and document both shapes in the skill. The documentation half is worth doing first and separately — it is the part a caller is blocked on today, and it does not change behaviour.
+
+The shape change lands in a minor.
+
+Split 2026-08-08. The documentation half shipped in 2.2.0 (commit a1e5172): the skill now states that mutation verbs reject --fields deliberately — a receipt trimmed to id confirms nothing — that changing one record returns that record whole including its description, that changing several returns a summary object, and that not every batch verb has converged on the summary yet.
+
+That was the half blocking callers, since the shapes were entirely undocumented. What remains is the convergence itself: audit status, assign, team, label, setparent, decision, block, unblock, append and refine write for which shape each returns today, and move the batch cases onto the summary.
+
+Held back from 2.2.0 deliberately. It changes ten verbs'' output shapes with real regression surface, immediately after a release, and none of it is blocking anyone now that the current behaviour is written down. Stays ready rather than backlog — it is well-specified and can be picked up whenever, it just should not have been rushed alongside two behaviour changes.', NULL, '2026-08-08 19:37:06', '2026-08-08 19:37:06.514', '2026-08-08 19:37:06.514', NULL, 'deb5163fe41777d73510cc1a0deeb430', 2) ON CONFLICT(hash) DO NOTHING;
