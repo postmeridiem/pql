@@ -93,23 +93,37 @@ pql returned them in a usable form, and whether the skill led you there, is.
 If a retrieval requires you to fold, join or count client-side, that is a
 finding about pql's surface — record the post-processing, not the answer.
 
-Cover, at minimum:
+#### Core set — run all of these, every time
 
-- **A filtered set** — everything matching a status, type or label. Check the
-  filter vocabulary is documented and that an invalid value fails loudly.
-- **A projection over a large set** — enough rows that payload size matters.
-  Check the skill names the fields available and that the output is not
-  truncated by volume.
-- **One record in full**, with whatever context flags the skill offers.
-- **A cross-surface retrieval** — data joining tickets to decisions in one
-  call. Check whether the flag or field needed for that exists and is
-  documented; if it takes N calls, say so.
-- **A structural query needing the DSL**, written from the skill's syntax
-  notes alone.
-- **A ranked query**, checked against what the skill led you to expect.
-- **A write, then a read-back** confirming it landed. Safe in the scratch vault.
-- **Something the skill explicitly warns about**, to check the warning is
-  findable and correct.
+Stated as goals, never as commands: working out which command serves the goal
+is the thing being tested. Run them in order and give each its own friction-log
+row, keeping the R-numbers so runs can be compared.
+
+| # | Goal, in caller's terms |
+|---|---|
+| R1 | List every ticket in one given status |
+| R2 | List tickets matching a status that does not exist |
+| R3 | Get one ticket with everything needed to start work on it |
+| R4 | List every ticket under one parent, however deep |
+| R5 | Get an index of all tickets small enough to read in one go |
+| R6 | For one decision, find what implements it |
+| R7 | Across all decisions, find which have nothing implementing them |
+| R8 | List every note carrying a given frontmatter value |
+| R9 | Find the notes most related to one note |
+| R10 | Find notes about a topic given two words to describe it |
+| R11 | Create a ticket, then read it back to confirm it landed |
+| R12 | Follow one thing the skill explicitly warns about |
+
+R2, R7 and R10 are the load-bearing ones: they probe silent-empty filtering,
+cross-surface joining, and the substring-match limit respectively. Do not skip
+them because they look likely to fail — that they fail cleanly, loudly and with
+guidance is exactly what is being checked.
+
+#### Then explore
+
+Beyond the core set, follow whatever the vault and the skill suggest. New
+retrievals find defects a fixed list cannot. Number these E1, E2 … and log them
+the same way.
 
 ### 4. Read the source
 
@@ -118,13 +132,16 @@ Confirm each finding and locate its fix. Also diff the shipped skill against
 
 ### 5. Report
 
-Group by severity: **Wrong** (says something untrue) → **Missing** (exists,
-undocumented) → **Unusable** (documented, insufficient to act on) → **Bloat**
-(correct, not worth its context). Give the command run and the output seen for
-each, plus a concrete suggested edit. Rank by severity.
+Now — and not before — read `references/report-template.md` and fill it in.
 
-State what you exercised and found clean. A report that only lists defects is
-indistinguishable from one that stopped looking.
+It is a separate file on purpose. Knowing the report's shape while testing
+bends the testing toward filling in its sections, the same way reading source
+before step 4 hides omissions.
+
+Keep a running friction note from step 3 onward: goal, command, whether the
+skill routed you there, whether the output was workable, what post-processing
+you needed. Reconstructing that at the end produces a tidy account of a process
+that was not tidy, and the friction is the measurement.
 
 ## Shapes to probe for
 

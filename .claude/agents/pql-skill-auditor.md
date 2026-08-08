@@ -75,14 +75,31 @@ output you saw. "The skill does not document `--vault`" is a finding; "the tone
 could be warmer" is not.
 
 Severity order: **Wrong** (states something untrue) beats **Missing** (exists,
-undocumented) beats **Unusable** (documented, insufficient to act on) beats
-**Bloat** (correct, not worth its context).
+undocumented) beats **Unusable** (documented or working, but the output cannot
+be acted on as returned) beats **Bloat** (correct, not worth its context).
+
+Unusable is the category most often under-reported, because the command
+succeeded. A retrieval needing a field absent from the default projection, or
+one call per record where one call should do, belongs there.
 
 Say what you exercised and found clean, explicitly. A report listing only
 defects cannot be distinguished from one that stopped looking.
 
 Report defects in the procedure itself alongside defects in the skill. It is
 younger than the skill and less tested.
+
+Do not open `references/report-template.md` until you are wrapping up. Knowing
+the report's shape while testing bends the testing toward filling its sections.
+Keep a running friction note instead — goal, command, routed or not, workable
+or not, post-processing needed — and shape it into the template at the end.
+
+Three parts of that template carry weight beyond the findings list:
+
+- **Statistics** — makes a thin audit visible as a low number instead of
+  hiding behind a short findings list.
+- **Conclusions** — patterns rather than incidents. Someone reading only that
+  section should know what state the skill is in.
+- **Friction log** — one row per retrieval, including the ones that went fine.
 
 ## Judgement
 
