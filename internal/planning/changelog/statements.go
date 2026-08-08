@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+// colCanonicalVersion is the one column the renderer treats specially: the
+// exporter emits it as a bare number, and re-quoting it as a string on re-emit
+// would change the bytes and break the agreement between two clones.
+const colCanonicalVersion = "canonical_version"
+
 // tableSpec describes how one replicated table serialises to a changelog line.
 //
 // The shape used to live as five inlined format strings, one per exporter. That
@@ -30,6 +35,14 @@ type tableSpec struct {
 // changelogTables is the closed set of replicated tables. Order matches the
 // exporters; the upgrader iterates the same set so neither can silently cover
 // fewer tables than the other.
+//
+// Table and column names are written out rather than pulled from constants.
+// This block is a transcription of the on-disk format, and it is read against
+// the schema and against a real changelog file — indirecting every name through
+// an identifier would make that comparison harder for no safety gain, the same
+// call schema.go makes for its column lists.
+//
+//nolint:goconst // literal column/table names keep the on-disk format legible
 var changelogTables = []tableSpec{
 	{
 		Name: "tickets",

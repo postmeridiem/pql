@@ -18,15 +18,23 @@ type RebuildResult struct {
 	Collisions []TicketCollision `json:"collisions,omitempty"`
 }
 
-// replicatedTables lists, in foreign-key-safe order for DELETE, the
-// tables that participate in changelog replication. Children come
-// first so DELETE doesn't trip parent FK constraints.
-var replicatedTables = []string{
-	"ticket_history",
-	"ticket_labels",
-	"ticket_deps",
-	"ticket_idmap",
-	"tickets",
+// replicatedTables lists, in foreign-key-safe order for DELETE, the tables that
+// participate in changelog replication. Children come first so DELETE doesn't
+// trip parent FK constraints.
+//
+// Derived from changelogTables rather than restated: they are the same closed
+// set, and a table present in one but not the other would either replicate
+// without being cleared or be cleared without replicating. changelogTables runs
+// parent-first (tickets before the tables referencing it), which is the order an
+// INSERT needs, so the delete order is exactly its reverse.
+var replicatedTables = deleteOrder()
+
+func deleteOrder() []string {
+	out := make([]string, 0, len(changelogTables))
+	for i := len(changelogTables) - 1; i >= 0; i-- {
+		out = append(out, changelogTables[i].Name)
+	}
+	return out
 }
 
 // Rebuild truncates the replicated planning tables, resets the

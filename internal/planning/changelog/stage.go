@@ -156,9 +156,10 @@ func (s *staged) loadTable(ctx context.Context, spec tableSpec, tableDir string)
 // non-upgraded clone, where the same row arrives twice differing only in the
 // guard clause it carried; without this the doubling would persist forever.
 func (s *staged) renderFile(ctx context.Context, spec tableSpec, srcFile string) ([]string, error) {
-	cols := strings.Join(spec.Columns, ", ")
-	rows, err := s.db.QueryContext(ctx, //nolint:gosec // G202: closed-set table and column names from the spec list
-		"SELECT "+cols+" FROM "+spec.Name+" WHERE src_file = ? ORDER BY seq", srcFile)
+	//nolint:gosec // G202: table and column names come from the closed spec list, never from input
+	query := "SELECT " + strings.Join(spec.Columns, ", ") +
+		" FROM " + spec.Name + " WHERE src_file = ? ORDER BY seq"
+	rows, err := s.db.QueryContext(ctx, query, srcFile)
 	if err != nil {
 		return nil, fmt.Errorf("changelog: read staged %s: %w", spec.Name, err)
 	}
@@ -202,7 +203,7 @@ func stagedLiteral(column string, v sql.NullString) string {
 	if !v.Valid {
 		return sqlNull
 	}
-	if column == "canonical_version" {
+	if column == colCanonicalVersion {
 		return v.String
 	}
 	return sqlStr(v.String)

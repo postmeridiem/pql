@@ -43,15 +43,24 @@ type VerifyReport struct {
 	RowsLost int `json:"rows_lost"`
 }
 
-// keyColumns names the primary key of each replicated table, in the order the
+// keyColumns names the primary key of each verifiable table, in the order the
 // key is rendered for reporting.
-var keyColumns = map[string][]string{
-	"tickets":       {"record_id"},
-	"ticket_idmap":  {"record_id"},
-	"ticket_deps":   {"blocker_record_id", "blocked_record_id"},
-	"ticket_labels": {"ticket_record_id", "label"},
-	// ticket_history has no natural key — it dedupes on hash and is
-	// append-only, so a row cannot "change". Verified by count alone.
+//
+// Taken from the statement specs, which already carry each table's conflict
+// target — that *is* its key. Append-only tables are skipped: ticket_history
+// dedupes on a content hash and its rows never mutate, so "this row came back
+// changed" is not a thing that can happen to it. It is verified by count alone.
+var keyColumns = verifiableKeys()
+
+func verifiableKeys() map[string][]string {
+	out := make(map[string][]string, len(changelogTables))
+	for _, spec := range changelogTables {
+		if spec.AppendOnly {
+			continue
+		}
+		out[spec.Name] = spec.Key
+	}
+	return out
 }
 
 // rowState is one row's identity as far as verification cares.
@@ -60,10 +69,11 @@ type rowState struct {
 	updatedAt string
 }
 
-// snapshot reads key → {hash, updated_at} for every verifiable table.
-func snapshot(ctx context.Context, db *sql.DB) (map[string]map[string]rowState, map[string]int, error) {
-	states := make(map[string]map[string]rowState, len(keyColumns))
-	counts := make(map[string]int, len(replicatedTables))
+// snapshot reads key → {hash, updated_at} for every verifiable table, plus a
+// row count per replicated table.
+func snapshot(ctx context.Context, db *sql.DB) (states map[string]map[string]rowState, counts map[string]int, err error) {
+	states = make(map[string]map[string]rowState, len(keyColumns))
+	counts = make(map[string]int, len(replicatedTables))
 
 	for _, table := range replicatedTables {
 		var n int
@@ -76,8 +86,10 @@ func snapshot(ctx context.Context, db *sql.DB) (map[string]map[string]rowState, 
 		if !ok {
 			continue
 		}
-		rows, err := db.QueryContext(ctx, //nolint:gosec // G202: closed-set table and column whitelist
-			"SELECT "+joinCols(cols)+", COALESCE(hash,''), COALESCE(updated_at,'') FROM "+table)
+		//nolint:gosec // G202: table and column names come from the closed whitelists above, never from input
+		query := "SELECT " + joinCols(cols) +
+			", COALESCE(hash,''), COALESCE(updated_at,'') FROM " + table
+		rows, err := db.QueryContext(ctx, query)
 		if err != nil {
 			return nil, nil, fmt.Errorf("changelog: snapshot %s: %w", table, err)
 		}
