@@ -1,6 +1,6 @@
 module github.com/postmeridiem/pql
 
-go 1.25.11
+go 1.25.12
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
