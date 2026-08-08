@@ -372,3 +372,53 @@ func TestCompile_RealisticVaultQuery(t *testing.T) {
 		}
 	}
 }
+
+// The unknown-column error is the only route a consuming agent has to the
+// DSL vocabulary — the grammar doc is not shipped with the binary. So the
+// list it prints has to be the list fileColumn actually accepts, or the
+// error becomes a confident lie (T-86).
+func TestFileColumns_MatchesErrorList(t *testing.T) {
+	for _, name := range fileColumns {
+		if _, ok := fileColumn(name); !ok {
+			t.Errorf("error message advertises %q but fileColumn rejects it", name)
+		}
+	}
+
+	// The other direction: a column added to fileColumn without a line in
+	// fileColumns stays invisible to every caller who guessed wrong. There
+	// is no way to enumerate a switch, so probe the identifiers a reasonable
+	// contributor might add and assert each is either rejected or listed.
+	candidates := []string{
+		"path", "name", "folder", "size", "mtime", "ctime", "content_hash",
+		"last_scanned", "ext", "depth", "basename", "dir", "modified",
+		"created", "bytes", "title", "id", "hash", "scanned",
+	}
+	listed := make(map[string]bool, len(fileColumns))
+	for _, n := range fileColumns {
+		listed[n] = true
+	}
+	for _, n := range candidates {
+		if _, ok := fileColumn(n); ok && !listed[n] {
+			t.Errorf("fileColumn accepts %q but the error message does not list it", n)
+		}
+	}
+}
+
+// Naming an unknown column must hand back the vocabulary, not just repeat
+// the mistake back.
+func TestUnknownColumn_ErrorListsTheVocabulary(t *testing.T) {
+	q, err := parse.Parse("SELECT bogus_column")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	_, err = Compile(q)
+	if err == nil {
+		t.Fatal("expected an error for an unknown column")
+	}
+	msg := err.Error()
+	for _, want := range []string{"bogus_column", "path", "folder", "headings", "fm.<key>"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error should mention %q, got: %s", want, msg)
+		}
+	}
+}

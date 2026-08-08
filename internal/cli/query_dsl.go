@@ -24,7 +24,7 @@ func newQueryCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "query [DSL]",
 		Short: "Run a PQL DSL query against the indexed vault",
-		Long: `Run a PQL query as documented in docs/pql-grammar.md.
+		Long: `Run a PQL query against the indexed vault.
 
 Three input modes (mutually exclusive):
 
@@ -32,13 +32,29 @@ Three input modes (mutually exclusive):
   pql query --file q.sql                               # from a file
   echo "SELECT name" | pql query --stdin               # from stdin
 
+Columns: path, name, folder, size, mtime, tags, headings, and fm.<key>
+for any frontmatter key. Naming one that does not exist exits 65 listing
+the built-ins.
+
+SELECT DISTINCT works and is the way to find which values a frontmatter
+key actually takes — pql schema reports keys and types, never values.
+WHERE supports =, !=, <, >, <=, >=, LIKE, AND, OR, NOT, and IN against
+tags and headings. Aggregates (COUNT, GROUP BY) are not supported and
+fail at exit 65.
+
+  pql query "SELECT DISTINCT fm.status"
+  pql query "SELECT path WHERE folder = 'members/vaasa'"
+  pql query "SELECT path WHERE 'Design notes' IN headings"
+  pql query "SELECT path, size WHERE path LIKE 'notes/%' AND size > 5000"
+
 The DSL bypasses ranking and provenance — rows out are exactly what the
 query selects, in the order ORDER BY (if any) requests. For ranked
 results with attached connections, use an intent subcommand instead.
 
-Exit codes follow docs/output-contract.md: 0 with results, 2 with zero
-matches, 65 on parse/compile errors (DataErr), 64 on bad flags, 66/69
-on the usual config/store failures, 70 on runtime SQL errors.`,
+Exit codes follow docs/output-contract.md: 0 on success — including zero
+matches, which returns an empty array, not a distinct code (D-22) — 65 on
+parse, unknown-column and evaluation errors, 64 on bad flags, 66/69 on the
+usual config/store failures, 70 on runtime SQL errors.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			src, err := readDSLSource(args, fromFile, fromStdin, cmd.InOrStdin())

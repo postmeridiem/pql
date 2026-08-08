@@ -272,6 +272,25 @@ func fileColumn(name string) (string, bool) {
 	return "", false
 }
 
+// fileColumns is the list fileColumn accepts, for error messages. Kept
+// beside it so a column added above without a line here is visible in
+// review; TestFileColumns_MatchesErrorList fails if they diverge.
+//
+// The unknown-column error used to name only the offending identifier,
+// which made the vocabulary undiscoverable: the grammar doc is not shipped
+// to consumers, and a consuming agent that guessed wrong had nowhere to go.
+// Listing the valid set turns the error into a lookup, the way the --fields
+// error already is (T-86).
+var fileColumns = []string{
+	"path", "name", "folder", "size", "mtime", "ctime",
+	"content_hash", "last_scanned",
+}
+
+// arrayColumns are usable only on the right of IN, so they belong in the
+// error's vocabulary but need the qualifier — naming them bare is a
+// different, more specific error.
+var arrayColumns = []string{colTags, colHeadings, colInlinks, colOutlinks}
+
 func (c *compiler) ref(r *parse.Ref) error {
 	// Single-part: must be a known file column. Any other root identifier
 	// (tags, outlinks, body, …) is only meaningful in specific operator
@@ -300,7 +319,9 @@ func (c *compiler) ref(r *parse.Ref) error {
 		}
 		return &Error{
 			Code: "pql.eval.unknown_column",
-			Msg:  fmt.Sprintf("unknown column %q", name),
+			Msg: fmt.Sprintf(
+				"unknown column %q (columns: %s; array columns, usable on the right of IN: %s; frontmatter: fm.<key>)",
+				name, strings.Join(fileColumns, ", "), strings.Join(arrayColumns, ", ")),
 			Line: r.P.Line, Col: r.P.Col,
 		}
 	}
