@@ -122,6 +122,10 @@ profile-mem: ## Memory profile against the largest fixture vault.
 clean: ## Remove build artefacts.
 	rm -rf $(BIN_DIR) dist/
 
+.PHONY: skill-drift
+skill-drift: ## Compare the repo, shipped and installed copies of the pql skill.
+	@./.claude/skills/pql-testing/scripts/check-drift.sh
+
 SCRATCH_VAULT ?= /tmp/pql-scratch-vault
 .PHONY: scratch-vault
 scratch-vault: build ## Build a disposable vault under /tmp with both surfaces, safe to mutate.

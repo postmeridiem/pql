@@ -34,11 +34,17 @@ Target it explicitly on every call:
 pql --vault /tmp/pql-scratch-vault <command>
 ```
 
-Rebuild before auditing, or you test a stale artefact:
+Confirm the binary is not stale. The skill is embedded at build time, so an
+edited-but-unrebuilt tree means auditing an artefact nobody ships:
 
 ```bash
-make build && cp ./bin/pql ~/.local/bin/pql
+make skill-drift
 ```
+
+It compares the repo file, the copy embedded in the binary, and the installed
+copy, and tells you what to run if they disagree. Neither `pql skill status`
+nor `pql doctor` can detect this — both compare the installed file against the
+binary's own embed, so a stale build reads as "current" in each.
 
 ## Procedure
 
