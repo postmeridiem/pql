@@ -90,6 +90,24 @@ func runIntent(
 	}
 	stopIndex()
 
+	// A path argument names a thing; an unknown one is an error, not an
+	// empty result (D-29). Without this a typo returned `[]` at exit 0,
+	// which reads as "nothing is related to this file" when the truth is
+	// "there is no such file" — and `pql meta` on the same typo already
+	// exits 66, so the identical mistake was loud on one verb and silent on
+	// the neighbouring one. `search` passes an empty targetPath: its
+	// argument is a query, which is a filter, and an unmatched filter is
+	// correctly empty.
+	if targetPath != "" {
+		indexed, err := pathIsIndexed(ctx, st, targetPath)
+		if err != nil {
+			return &exitError{code: diag.Software, msg: err.Error()}
+		}
+		if !indexed {
+			return &exitError{code: diag.NoInput, msg: fmt.Sprintf("file not indexed: %s", targetPath)}
+		}
+	}
+
 	flatSearch, _ := cmd.Flags().GetBool("flat-search")
 	if flatSearch {
 		return runFlatFallback(cmd, st, cfg, targetPath, proj)
@@ -115,6 +133,19 @@ func runIntent(
 	return renderProjectedList(cmd, results, proj, func(e connect.Enriched) string {
 		return e.Path + "\t" + strconv.FormatFloat(e.Score, 'f', 4, 64)
 	})
+}
+
+// pathIsIndexed reports whether path is a row in files. Exact match only:
+// the argument these verbs take is the vault-relative path every other
+// command returns, so accepting spellings here would re-introduce the
+// guessing that Q-6 is about.
+func pathIsIndexed(ctx context.Context, st *store.Store, path string) (bool, error) {
+	var n int
+	err := st.DB().QueryRowContext(ctx, `SELECT count(*) FROM files WHERE path = ?`, path).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("check path %s: %w", path, err)
+	}
+	return n > 0, nil
 }
 
 func runFlatFallback(cmd *cobra.Command, st *store.Store, cfg *config.Config, path string, proj *projection) error {

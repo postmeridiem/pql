@@ -1450,6 +1450,76 @@ func TestIntegration_PqlignoreWorksWithoutConfig(t *testing.T) {
 	}
 }
 
+// `--decision none` reads as a supported negative filter and is not one. It
+// matched no decision ref and returned empty, which is indistinguishable from
+// a real no-match — so pql now refuses the spelling rather than lying quietly
+// (D-31, T-92).
+func TestIntegration_TicketList_RejectsAbsenceSpellings(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "unlinked", "--id-only")
+
+	for _, v := range []string{"none", "None", "null", "unset", "-"} {
+		_, stderr, code := run(t, vault, "ticket", "list", "--decision", v)
+		if code != 64 {
+			t.Errorf("--decision %s: exit %d, want 64", v, code)
+		}
+		if !strings.Contains(string(stderr), "no negative filter") {
+			t.Errorf("--decision %s should explain why:\n%s", v, stderr)
+		}
+	}
+
+	// A real id is still a filter, and an unmatched one is still empty at
+	// exit 0 — the refusal must not have turned every value into a lookup.
+	stdout, _, code := run(t, vault, "ticket", "list", "--decision", "D-99")
+	if code != 0 {
+		t.Errorf("unmatched decision id: exit %d, want 0", code)
+	}
+	if got := strings.TrimSpace(string(stdout)); got != "[]" {
+		t.Errorf("unmatched decision id = %q, want []", got)
+	}
+}
+
+// A path argument names a thing, so an unknown one is an error rather than an
+// empty result (D-29). These verbs used to return [] at exit 0 for a typo,
+// which reads as "nothing is related to this file" — while `meta` on the same
+// typo exited 66, so the identical mistake was loud on one verb and silent on
+// the neighbouring one (T-90).
+func TestIntegration_RankedVerbs_RejectUnindexedPath(t *testing.T) {
+	vault := councilVault(t)
+
+	for _, verb := range []string{"related", "context"} {
+		_, stderr, code := run(t, vault, verb, "members/nobody/persona.md")
+		if code != 66 {
+			t.Errorf("%s on an unindexed path: exit %d, want 66", verb, code)
+		}
+		if !strings.Contains(string(stderr), "members/nobody/persona.md") {
+			t.Errorf("%s error should name the path:\n%s", verb, stderr)
+		}
+	}
+
+	// --flat-search takes the primitive path but the argument is still a
+	// name, so the same rule applies.
+	if _, _, code := run(t, vault, "related", "members/nobody/persona.md", "--flat-search"); code != 66 {
+		t.Errorf("--flat-search on an unindexed path: exit %d, want 66", code)
+	}
+
+	// A real path still works, so the check is not simply refusing everything.
+	if rows := rankedRowsIT(t, vault, "related", "members/vaasa/persona.md"); len(rows) == 0 {
+		t.Error("a real path should still rank")
+	}
+
+	// `search` takes a query, not a path. A query is a filter, and an
+	// unmatched filter is correctly empty at exit 0 — D-29 draws the line
+	// here, so guard it against an over-eager future change.
+	stdout, _, code := run(t, vault, "search", "zzz-no-such-topic-zzz")
+	if code != 0 {
+		t.Errorf("search with no matches: exit %d, want 0", code)
+	}
+	if got := strings.TrimSpace(string(stdout)); got != "[]" {
+		t.Errorf("search with no matches = %q, want []", got)
+	}
+}
+
 // --- ranked projection: search / related / context (T-74) -----------------
 
 // rankedRowsIT runs a ranked verb and decodes its rows, failing on a non-zero

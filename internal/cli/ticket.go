@@ -147,6 +147,18 @@ func collectDecisionRefs(t *repo.Ticket, ancestors []repo.Ticket) []string {
 //
 //	"T-001"             → ["T-001"]
 //	"T-001,T-002,T-003" → ["T-001", "T-002", "T-003"]
+// isAbsenceSpelling reports whether a filter value is one of the words a
+// caller reaches for when they want the negative of a filter. None of them
+// is a supported value, and all of them would otherwise match nothing and
+// return an empty list at exit 0 — which reads as a real answer (D-31).
+func isAbsenceSpelling(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "none", "null", "nil", "empty", "unset", "-":
+		return true
+	}
+	return false
+}
+
 func parseIDs(arg string) []string {
 	parts := strings.Split(arg, ",")
 	ids := make([]string, 0, len(parts))
@@ -352,6 +364,18 @@ whole records.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
+			// `--decision none` looks like a supported negative filter and
+			// is not one — it matched no decision ref and returned empty,
+			// which is indistinguishable from "no tickets link to that
+			// decision". pql answers what is; absence is the caller's fold
+			// (D-31), so the spelling that implies otherwise fails loudly
+			// rather than lying quietly.
+			if isAbsenceSpelling(decisionFlag) {
+				return &exitError{code: diag.Usage, msg: "--decision takes a decision id (e.g. D-5); " +
+					"there is no negative filter. For tickets with no decision, list them and filter on the absent " +
+					"decision_ref: pql ticket list --fields id,decision_ref"}
+			}
+
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
