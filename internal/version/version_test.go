@@ -18,12 +18,12 @@ func TestDeclaredVersionsMatchProjectYAML(t *testing.T) {
 
 	for _, tc := range []struct {
 		key  string
-		got  int
+		got  string
 		what string
 	}{
-		{"schema_version", SchemaVersion, "index.db schema"},
+		{"schema_version", strconv.Itoa(SchemaVersion), "index.db schema"},
+		{"canonical_version", strconv.Itoa(CanonicalVersion), "pql.db row canonicalisation"},
 		{"planning_schema_version", PlanningSchemaVersion, "pql.db schema"},
-		{"canonical_version", CanonicalVersion, "pql.db row canonicalisation"},
 		{"changelog_format", ChangelogFormat, ".pql/changelog/ file format"},
 	} {
 		want, ok := declared[tc.key]
@@ -33,16 +33,30 @@ func TestDeclaredVersionsMatchProjectYAML(t *testing.T) {
 			continue
 		}
 		if want != tc.got {
-			t.Errorf("%s: project.yaml says %d, internal/version says %d — bump both, they describe the same thing",
+			t.Errorf("%s: project.yaml says %s, internal/version says %s — bump both, they describe the same thing",
 				tc.key, want, tc.got)
 		}
 	}
 }
 
-// parseProjectYAML pulls the integer-valued top-level keys out of project.yaml.
-// Deliberately not a YAML library: this is a drift guard, and it should not be
-// able to fail for reasons unrelated to drift.
-func parseProjectYAML(t *testing.T) map[string]int {
+// The two migrated axes carry a release, not a counter. A bare number here
+// would mean someone reverted the scheme without updating its rationale.
+func TestMigratedAxesCarryAReleaseVersion(t *testing.T) {
+	for name, v := range map[string]string{
+		"PlanningSchemaVersion": PlanningSchemaVersion,
+		"ChangelogFormat":       ChangelogFormat,
+		"PreVersionedChangelog": PreVersionedChangelog,
+	} {
+		if strings.Count(v, ".") != 2 {
+			t.Errorf("%s = %q, want a MAJOR.MINOR.PATCH release version", name, v)
+		}
+	}
+}
+
+// parseProjectYAML pulls the scalar top-level keys out of project.yaml, with
+// surrounding quotes stripped. Deliberately not a YAML library: this is a drift
+// guard, and it should not be able to fail for reasons unrelated to drift.
+func parseProjectYAML(t *testing.T) map[string]string {
 	t.Helper()
 	path := findProjectYAML(t)
 	body, err := os.ReadFile(path) //nolint:gosec // G304: path resolved by walking up from the test's own directory
@@ -50,7 +64,7 @@ func parseProjectYAML(t *testing.T) map[string]int {
 		t.Fatalf("read %s: %v", path, err)
 	}
 
-	out := make(map[string]int)
+	out := make(map[string]string)
 	for _, line := range strings.Split(string(body), "\n") {
 		if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "#") {
 			continue // nested key or comment
@@ -59,11 +73,7 @@ func parseProjectYAML(t *testing.T) map[string]int {
 		if !found {
 			continue
 		}
-		n, err := strconv.Atoi(strings.TrimSpace(value))
-		if err != nil {
-			continue // not an integer-valued key
-		}
-		out[strings.TrimSpace(key)] = n
+		out[strings.TrimSpace(key)] = strings.Trim(strings.TrimSpace(value), `"`)
 	}
 	return out
 }

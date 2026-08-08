@@ -223,6 +223,9 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, planningSchema); err != nil {
 		return fmt.Errorf("planning: create schema: %w", err)
 	}
+	if err := ensureLedgerShape(ctx, db); err != nil {
+		return err
+	}
 	if _, err := db.ExecContext(ctx, schemaMigrations); err != nil {
 		return fmt.Errorf("planning: create schema_migrations: %w", err)
 	}

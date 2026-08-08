@@ -1441,16 +1441,16 @@ func TestIntegration_PlanUpgrade_MigratesChangelogForward(t *testing.T) {
 	// Dry run first: reports, changes nothing.
 	dry := pqlIT(t, vault, "plan", "upgrade", "--dry-run")
 	var dryRes struct {
-		FoundFormat    int      `json:"found_format"`
-		CurrentFormat  int      `json:"current_format"`
+		FoundFormat    string   `json:"found_format"`
+		CurrentFormat  string   `json:"current_format"`
 		FilesRewritten []string `json:"files_rewritten"`
 		DryRun         bool     `json:"dry_run"`
 	}
 	if err := json.Unmarshal([]byte(dry), &dryRes); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, dry)
 	}
-	if dryRes.FoundFormat != 1 || dryRes.CurrentFormat < 2 {
-		t.Errorf("dry run reported found=%d current=%d, want 1 and ≥2",
+	if dryRes.FoundFormat != "1.11.0" || dryRes.CurrentFormat != "2.0.0" {
+		t.Errorf("dry run reported found=%s current=%s, want the pre-versioned 1.11.0 and 2.0.0",
 			dryRes.FoundFormat, dryRes.CurrentFormat)
 	}
 	if len(dryRes.FilesRewritten) == 0 || !dryRes.DryRun {
@@ -1469,8 +1469,8 @@ func TestIntegration_PlanUpgrade_MigratesChangelogForward(t *testing.T) {
 		Steps          []struct{ ID string } `json:"steps"`
 		FilesRewritten []string              `json:"files_rewritten"`
 		Schema         struct {
-			Found   int `json:"found"`
-			Current int `json:"current"`
+			Found   string `json:"found"`
+			Current string `json:"current"`
 		} `json:"schema"`
 	}
 	if err := json.Unmarshal([]byte(out), &res); err != nil {

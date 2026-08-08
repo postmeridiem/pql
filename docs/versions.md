@@ -41,18 +41,26 @@ forward instead.
 
 Which release moved which axis. Add a row when an axis is bumped.
 
-| Release | app | index.db | pql.db | canonical | changelog |
-|---|---|---|---|---|---|
-| 1.6.0 | 1.6.0 | 1 | — | 1 | 1 (implicit) |
-| 1.9.0 | 1.9.0 | 1 | — | 2 | 1 (implicit) |
-| 1.12.0 | 1.12.0 | 1 | — | 2 | 1 (implicit) |
-| 1.13.0 | 1.13.0 | 1 | 1 | 2 | **2** |
+| Release | index.db `schema_version` | canonical | pql.db schema | changelog format |
+|---|---|---|---|---|
+| 1.6.0 | 1 | 1 | — | unversioned |
+| 1.9.0 | 1 | 2 | — | unversioned |
+| 1.11.0 | 1 | 2 | — | unversioned |
+| 2.0.0 | 1 | 2 | **2.0.0** | **2.0.0** |
 
-"Implicit" means the artefact carried no version marker at all. A changelog with
-no `0000-format.sql` marker is format 1 by definition — that is the shape that
-existed before formats were versioned. `pql.db` had no declared schema version
-before 1.13.0; databases from earlier releases are stamped at 1 on first open
-once their column shape verifies.
+Note the two schemes. The **migrated** axes carry the release that introduced
+their format, so a marker reading `2.0.0` tells you both that you are behind and
+which pql changed it. The **counters** — index.db's `schema_version` and the
+per-row `canonical_version` — stay integers: they are written per database or per
+row and compared for equality, so widening them would be a data migration for no
+readability gain.
+
+"Unversioned" means the artefact carried no marker at all. A changelog with no
+`0000-format.sql` is reported as `1.11.0`, the last release before formats were
+versioned, because "your changelog is in the 1.11.0-era format" is actionable
+where an empty string is not. `pql.db` had no declared schema version before
+2.0.0; databases from earlier releases are stamped once their column shape
+verifies.
 
 ## Adding an axis version
 

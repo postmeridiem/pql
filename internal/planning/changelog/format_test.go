@@ -67,8 +67,9 @@ func TestDetectFormat_NoMarkerIsFormatOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DetectFormat: %v", err)
 	}
-	if got != 1 {
-		t.Errorf("format = %d, want 1 — a changelog written before formats were versioned is format 1", got)
+	if got != version.PreVersionedChangelog {
+		t.Errorf("format = %s, want the pre-versioned %s — a changelog written before formats\n"+
+			"were versioned carries the shape that existed then", got, version.PreVersionedChangelog)
 	}
 }
 
@@ -79,7 +80,7 @@ func TestDetectFormat_AbsentChangelogIsCurrent(t *testing.T) {
 		t.Fatalf("DetectFormat: %v", err)
 	}
 	if got != version.ChangelogFormat {
-		t.Errorf("format = %d, want the current %d for a vault with no changelog",
+		t.Errorf("format = %s, want the current %s for a vault with no changelog",
 			got, version.ChangelogFormat)
 	}
 }
@@ -179,7 +180,7 @@ func TestUpgrade_IsIdempotentAndByteStable(t *testing.T) {
 		t.Fatalf("second Upgrade: %v", err)
 	}
 	if !second.UpToDate() {
-		t.Errorf("second upgrade found format %d, want it to see the stamped %d",
+		t.Errorf("second upgrade found format %s, want it to see the stamped %s",
 			second.FoundFormat, second.CurrentFormat)
 	}
 	if len(second.Steps) != 0 || len(second.FilesRewritten) != 0 {
@@ -302,8 +303,8 @@ func TestUpgrade_DryRunReportsWithoutWriting(t *testing.T) {
 	if got := readFile(t, path); got != before {
 		t.Error("dry run modified the changelog")
 	}
-	if got, _ := DetectFormat(vault); got != 1 {
-		t.Errorf("dry run stamped the marker: format is now %d", got)
+	if got, _ := DetectFormat(vault); got != version.PreVersionedChangelog {
+		t.Errorf("dry run stamped the marker: format is now %s", got)
 	}
 }
 
@@ -342,7 +343,7 @@ func TestUpgrade_ResumesAfterInterruptionBeforeStamping(t *testing.T) {
 		t.Errorf("resumed upgrade rewrote %v, but the files were already correct", res.FilesRewritten)
 	}
 	if got, _ := DetectFormat(vault); got != version.ChangelogFormat {
-		t.Errorf("marker not restored: format = %d", got)
+		t.Errorf("marker not restored: format = %s", got)
 	}
 }
 
@@ -358,8 +359,8 @@ func TestCheckFormat_OlderWarnsAndNewerRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckFormat: %v", err)
 	}
-	if found != 1 || warning == "" {
-		t.Errorf("found=%d warning=%q, want format 1 with a warning", found, warning)
+	if found != version.PreVersionedChangelog || warning == "" {
+		t.Errorf("found=%s warning=%q, want the pre-versioned format with a warning", found, warning)
 	}
 	if !strings.Contains(warning, "pql plan upgrade") {
 		t.Errorf("warning should name the verb that fixes it, got %q", warning)

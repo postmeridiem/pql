@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/postmeridiem/pql/internal/planning/migrate"
@@ -23,9 +22,9 @@ const formatAxisName = "changelog format"
 // UpgradeResult reports what an upgrade did.
 type UpgradeResult struct {
 	// FoundFormat is the version detected on disk before any step ran.
-	FoundFormat int `json:"found_format"`
+	FoundFormat migrate.Version `json:"found_format"`
 	// CurrentFormat is the version this binary writes.
-	CurrentFormat int `json:"current_format"`
+	CurrentFormat migrate.Version `json:"current_format"`
 	// Steps applied, in order. Empty when the changelog was already current.
 	Steps []migrate.Applied `json:"steps,omitempty"`
 	// FilesRewritten lists the changelog files whose contents changed,
@@ -40,48 +39,44 @@ func (r *UpgradeResult) UpToDate() bool { return r.FoundFormat == r.CurrentForma
 
 // DetectFormat reads the format version a changelog declares.
 //
-// A changelog with no marker is format 1: every changelog written before this
-// mechanism existed is, by definition, the format that existed then. An absent
-// changelog directory reports the current format — there is nothing to migrate,
-// and a fresh vault should not be told it is stale.
-func DetectFormat(vaultPath string) (int, error) {
+// A changelog with no marker reports the pre-versioned format: every changelog
+// written before this mechanism existed is, by definition, the shape that
+// existed then. An absent changelog directory reports the current format —
+// there is nothing to migrate, and a fresh vault should not be told it is stale.
+func DetectFormat(vaultPath string) (migrate.Version, error) {
 	root := filepath.Join(vaultPath, ChangelogDir)
 	if _, err := os.Stat(root); os.IsNotExist(err) {
 		return version.ChangelogFormat, nil
 	} else if err != nil {
-		return 0, fmt.Errorf("changelog: stat %s: %w", root, err)
+		return "", fmt.Errorf("changelog: stat %s: %w", root, err)
 	}
 
 	body, err := os.ReadFile(filepath.Join(root, formatMarkerFile)) //nolint:gosec // G304: fixed filename under the vault's changelog dir
 	if err != nil {
 		if os.IsNotExist(err) {
-			return 1, nil
+			return version.PreVersionedChangelog, nil
 		}
-		return 0, fmt.Errorf("changelog: read format marker: %w", err)
+		return "", fmt.Errorf("changelog: read format marker: %w", err)
 	}
 
 	raw := readMarker(body, "pql:changelog_format")
 	if raw == "" {
-		return 1, nil
+		return version.PreVersionedChangelog, nil
 	}
-	found, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fmt.Errorf("changelog: invalid pql:changelog_format %q in %s",
-			raw, formatMarkerFile)
-	}
-	return found, nil
+	return migrate.Version(raw), nil
 }
 
 // formatAxis describes the changelog format axis for a given vault.
-func formatAxis(vaultPath string, found int) migrate.Axis {
+func formatAxis(vaultPath string, found migrate.Version) migrate.Axis {
 	return migrate.Axis{
 		Name:    formatAxisName,
 		Current: version.ChangelogFormat,
 		Found:   found,
 		Steps: []migrate.Step{
 			{
-				To: 2,
-				ID: "changelog-guard-by-position",
+				From: version.PreVersionedChangelog,
+				To:   "2.0.0",
+				ID:   "changelog-guard-by-position",
 				Apply: func(ctx context.Context) error {
 					// Format 2 changes no row data at all: the entire delta is
 					// the inline conflict clause, which moved from a
@@ -281,7 +276,7 @@ func WriteFormatMarker(vaultPath string) error {
 		"-- by `pql plan upgrade` (and automatically from the post-merge hook);\n" +
 		"-- a newer one is refused rather than replayed under rules this binary\n" +
 		"-- does not know. See D-28 and docs/versions.md.\n" +
-		"-- pql:changelog_format: " + strconv.Itoa(version.ChangelogFormat) + "\n" +
+		"-- pql:changelog_format: " + version.ChangelogFormat + "\n" +
 		"-- pql:written_by: " + version.Version + "\n"
 	path := filepath.Join(root, formatMarkerFile)
 	return writeFileAtomic(path, body)
@@ -296,23 +291,23 @@ func WriteFormatMarker(vaultPath string) error {
 // does not know may encode rows in ways it would misread, and there is no
 // backward step. That asymmetry mirrors the canonical_version guard the
 // importer has always applied to schema fixtures.
-func CheckFormat(vaultPath string) (found int, warning string, err error) {
+func CheckFormat(vaultPath string) (found migrate.Version, warning string, err error) {
 	found, err = DetectFormat(vaultPath)
 	if err != nil {
-		return 0, "", err
+		return "", "", err
 	}
-	current := version.ChangelogFormat
-	switch {
-	case found == current:
+	current := migrate.Version(version.ChangelogFormat)
+	switch cmp := migrate.Compare(found, current); {
+	case cmp == 0:
 		return found, "", nil
-	case found > current:
+	case cmp > 0:
 		return found, "", fmt.Errorf(
-			"%s is version %d but this pql writes version %d — refusing to replay; "+
-				"upgrade pql to one that understands version %d",
+			"%s is version %s but this pql writes version %s — refusing to replay; "+
+				"upgrade pql to one that understands version %s",
 			formatAxisName, found, current, found)
 	default:
 		return found, fmt.Sprintf(
-			"%s is version %d, this pql writes version %d — replaying under the older "+
+			"%s is version %s, this pql writes version %s — replaying under the older "+
 				"rules; run `pql plan upgrade` to migrate the changelog forward",
 			formatAxisName, found, current), nil
 	}

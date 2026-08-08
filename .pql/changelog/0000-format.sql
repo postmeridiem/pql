@@ -7,5 +7,5 @@
 -- by `pql plan upgrade` (and automatically from the post-merge hook);
 -- a newer one is refused rather than replayed under rules this binary
 -- does not know. See D-28 and docs/versions.md.
--- pql:changelog_format: 2
--- pql:written_by: 1.13.0
+-- pql:changelog_format: 2.0.0
+-- pql:written_by: 2.0.0

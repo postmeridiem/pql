@@ -37,7 +37,7 @@ func TestMigrate_StampsBaselineOnAFreshDatabase(t *testing.T) {
 		t.Fatalf("detect: %v", err)
 	}
 	if got != version.PlanningSchemaVersion {
-		t.Errorf("schema version = %d, want the current %d", got, version.PlanningSchemaVersion)
+		t.Errorf("schema version = %s, want the current %s", got, version.PlanningSchemaVersion)
 	}
 
 	var id string
@@ -93,6 +93,89 @@ func TestMigrate_StaleShapeStillGetsTheDetailedRecoveryHint(t *testing.T) {
 	}
 }
 
+// The ledger cannot be migrated by the mechanism it powers, so it has to fix
+// its own shape. A `version INTEGER PRIMARY KEY` column — SQLite's rowid alias,
+// which rejects a release version outright — is the shape that actually
+// shipped in an interim build.
+func TestMigrate_RepairsTheLedgersOwnShape(t *testing.T) {
+	ctx := context.Background()
+	db := migrateTestDB(t)
+
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE schema_migrations (
+		    version    INTEGER PRIMARY KEY,
+		    id         TEXT NOT NULL,
+		    applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))
+		);
+		INSERT INTO schema_migrations (version, id) VALUES (1, 'baseline');
+	`); err != nil {
+		t.Fatalf("seed old ledger: %v", err)
+	}
+
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatalf("Migrate over an INTEGER-keyed ledger: %v — it must repair its own shape", err)
+	}
+
+	var declared string
+	if err := db.QueryRowContext(ctx,
+		`SELECT type FROM pragma_table_info('schema_migrations') WHERE name = 'version'`).
+		Scan(&declared); err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if declared != "TEXT" {
+		t.Errorf("version column is %s, want TEXT", declared)
+	}
+	got, err := detectSchemaVersion(ctx, db)
+	if err != nil {
+		t.Fatalf("detect: %v", err)
+	}
+	if got != version.PlanningSchemaVersion {
+		t.Errorf("schema version = %q, want %s after the rebuild", got, version.PlanningSchemaVersion)
+	}
+}
+
+// A ledger stamp this binary cannot interpret must not strand the database.
+// Reached for real: databases stamped during the window when this axis used
+// bare counters would otherwise refuse every open, with a recovery hint telling
+// the user to delete a database whose shape is perfectly fine.
+func TestMigrate_HealsAnUninterpretableLedgerStamp(t *testing.T) {
+	ctx := context.Background()
+	db := migrateTestDB(t)
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatalf("first Migrate: %v", err)
+	}
+
+	// Rewrite the ledger the way the counter-based scheme left it.
+	if _, err := db.ExecContext(ctx, `DELETE FROM schema_migrations`); err != nil {
+		t.Fatalf("clear ledger: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO schema_migrations (version, id) VALUES ('1', 'baseline')`); err != nil {
+		t.Fatalf("seed counter stamp: %v", err)
+	}
+
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatalf("Migrate over a counter-stamped ledger: %v — it should heal, not refuse", err)
+	}
+
+	got, err := detectSchemaVersion(ctx, db)
+	if err != nil {
+		t.Fatalf("detect: %v", err)
+	}
+	if got != version.PlanningSchemaVersion {
+		t.Errorf("schema version = %q, want it re-stamped at %s", got, version.PlanningSchemaVersion)
+	}
+
+	var stale int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM schema_migrations WHERE version = '1'`).Scan(&stale); err != nil {
+		t.Fatalf("count stale: %v", err)
+	}
+	if stale != 0 {
+		t.Error("the uninterpretable row is still in the ledger")
+	}
+}
+
 // The step list ships empty on purpose, but the runner it feeds must work.
 // Synthetic steps prove ordering, ledger recording and no-op re-runs without
 // inventing a schema change nobody made.
@@ -104,16 +187,20 @@ func TestSchemaAxis_AppliesAndRecordsSyntheticSteps(t *testing.T) {
 	}
 
 	var applied []string
+	const (
+		next  = "2.1.0"
+		after = "2.2.0"
+	)
 	axis := migrate.Axis{
 		Name:    schemaAxisName,
-		Current: version.PlanningSchemaVersion + 2,
+		Current: after,
 		Found:   version.PlanningSchemaVersion,
 		Steps: []migrate.Step{
-			{To: version.PlanningSchemaVersion + 2, ID: "second", Apply: func(context.Context) error {
+			{From: next, To: after, ID: "second", Apply: func(context.Context) error {
 				applied = append(applied, "second")
 				return nil
 			}},
-			{To: version.PlanningSchemaVersion + 1, ID: "first", Apply: func(context.Context) error {
+			{From: version.PlanningSchemaVersion, To: next, ID: "first", Apply: func(context.Context) error {
 				applied = append(applied, "first")
 				return nil
 			}},
@@ -133,8 +220,8 @@ func TestSchemaAxis_AppliesAndRecordsSyntheticSteps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("detect: %v", err)
 	}
-	if got != version.PlanningSchemaVersion+2 {
-		t.Errorf("ledger high-water = %d, want %d", got, version.PlanningSchemaVersion+2)
+	if got != after {
+		t.Errorf("ledger high-water = %s, want %s", got, after)
 	}
 
 	// Re-running with the ledger now ahead is a no-op.
@@ -159,7 +246,7 @@ func TestSchemaStatus_ReportsBothSides(t *testing.T) {
 		t.Fatalf("SchemaStatus: %v", err)
 	}
 	if st.Found != version.PlanningSchemaVersion || st.Current != version.PlanningSchemaVersion {
-		t.Errorf("status = %+v, want both sides at %d", st, version.PlanningSchemaVersion)
+		t.Errorf("status = %+v, want both sides at %s", st, version.PlanningSchemaVersion)
 	}
 	if st.Name == "" {
 		t.Error("status carries no axis name")

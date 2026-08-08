@@ -1244,3 +1244,71 @@ them back apart deliberately rather than by drift.
 Both axes want a decision record. The existing D-19 covers the pql.db stance;
 whether this epic amends it or adds a companion record is the first thing to
 settle.', 'done', 'high', NULL, NULL, 'D-19', '2026-08-07 14:34:16.212', '2026-08-08 08:07:53.503', NULL, '5e6f1ad1cfb5a655f0c5decb47f98e6e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRKYCM4CJQPRRTPBTWAWDRC', 'epic', NULL, 'rank the planning dataset against document-length text', 'Source: feature-request.md FR-2. Motivating failure: answering "how much of
+`fable-ous.md` (25 KB, ~40 findings) is already captured as tickets?" required
+hand-fanning three agents across ~425 tickets. Plain grep missed semantically
+equivalent phrasings ("PTY leaks its master fd" vs. a ticket titled "fd not closed
+on natural exit"). No surface ranks tickets by overlap with a body of text.
+
+Measured gap (2026-06-17, clide vault):
+
+- Corpus gap — every `pql search` result is a vault `.md` path. `search` reads
+  `index.db` (414 KB of vault notes); tickets live in `pql.db` (2.6 MB), which
+  `search` never opens. The ticket-coverage question is invisible to it.
+- A specific finding query returned `[]`.
+- No lexical signal participates in rank: `pql search "terminal"` scored its top
+  hits almost entirely on recency (weight 0.25), with `link_overlap`, `tag_overlap`,
+  `path_proximity` and `centrality` all 0.
+
+So the blockers are corpus plus signal wiring, not embeddings — Path A is viable
+precisely because the pipeline, signal framework, and eval harness already exist and
+are simply not pointed at the planning dataset.
+
+Children: the design record first (Path A''s shape, plus Path B as an open
+question), then the corpus/signal implementation, an eval set built from an existing
+labelled mapping, and the doc reframe of the "Why not vectors" section. Path B (a
+vector/embedding index) stays deferred and question-shaped per
+`docs/structure/design-philosophy.md` — if it is ever taken it is a design-philosophy
+amendment carrying the observed failure data, not a feature ticket.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-07 13:00:45.089', '2026-08-08 08:28:02.984', NULL, 'b07d0308553c77243618252b00771230', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRM482B08DQ71BZQY9257XC', 'task', '06FXRKYCM4CJQPRRTPBTWAWDRC', 'author the design record for planning-dataset ranking, plus the Path B question', 'FR-2 is explicitly "needs a design decision before any code". This ticket produces
+the governance records; it gates the implementation ticket.
+
+Two records:
+
+1. A D-record for Path A. What the planning corpus looks like to
+   generate → rank → bundle (tickets and decisions out of `pql.db` — a second
+   corpus alongside `index.db`, which is a real architectural statement given D-3''s
+   two-store split); which signals carry it (a textual/lexical-match signal is the
+   one that is missing today); the document-length input shape
+   (`ticket search --text-file` versus a `plan related --text-file` intent); and how
+   it stays inside the consumer-agnostic core — `internal/intent/` and
+   `internal/query/` must not import `internal/cli/`, and the same applies to
+   whatever corpus adapter is added.
+2. A Q-record for Path B (a vector/embedding index), anchored to FR-2''s evidence, so
+   the "no vectors" stance is revisited only against data — exactly as the philosophy
+   demands.
+
+Mechanics: `pql decisions claim D architecture "…"` and `pql decisions claim Q
+architecture "…"` for the ids, write the bodies into `governance/`, then
+`pql decisions sync`.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-07 13:01:33.075', '2026-08-08 08:28:05.322', NULL, '5bef8612e8611d56acff1419c4be848e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRMBSYFHEMSA8D0RVF9B9SG', 'task', '06FXRKYCM4CJQPRRTPBTWAWDRC', 'reframe the design-philosophy vectors section', '`docs/structure/design-philosophy.md`, section "Why not vectors", fuses two
+different claims and contradicts itself: line 17 calls the absence of a vector layer
+"not a gap to be filled later" (permanent), while line 19 says "if semantic
+retrieval becomes necessary, it will be because a specific failure mode has been
+observed repeatedly in production use" (conditional). FR-2 is the first logged
+instance of exactly that trigger, so the wording now decides an argument instead of
+merely setting a tone.
+
+Split what the section fuses:
+
+- Permanent — the discipline. Exhaust the cheap, inspectable signals before reaching
+  for anything opaque. This never expires, vectors or no vectors.
+- For now — the mechanism. The exclusion of a vector store, gated on the evidence
+  trigger the section already names.
+
+Suggested minimal reframe, from the FR: "…is not a gap to be filled later." becomes
+"…is a deliberate constraint for now, not a permanent verdict," optionally closing
+with "the discipline is permanent; the exclusion is conditional."
+
+Maintainer-side edit by design — the consumer repo flagged it rather than editing
+this repo''s philosophy doc from the outside.', 'backlog', 'low', NULL, NULL, NULL, '2026-08-07 13:02:34.996', '2026-08-08 08:28:07.484', NULL, '0cf648ce53d20e2ec549ef946cd9db2f', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
