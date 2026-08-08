@@ -272,10 +272,10 @@ Prefer these over piping to `jq`: they are cheaper and they compose with
 
 ## Anti-patterns
 
-- **Don't chain with `&&`.** Run one command per invocation; many consuming
-  projects allowlist `pql` by prefix and a chain fails the check.
-- **Don't shell-substitute** (`id=$(pql …)`) for the same reason. Run the
-  command, read the id from its output.
+- **One command per invocation.** No `&&`, no pipes, no `$(…)`, no
+  redirection — the permission rules match by prefix and a shell construction
+  containing pql is not a pql command. See Permissions below for what to use
+  instead.
 - **Don't chain `files` then `meta`** to filter — one `query` with a `WHERE`
   does it in a single pass.
 - **Don't parse error text** — pass the stderr diagnostic through.
@@ -299,7 +299,10 @@ Prefer these over piping to `jq`: they are cheaper and they compose with
 scaffolding, git hooks, gitignore entries — and is idempotent, so re-running
 it after a pql upgrade is how hooks pick up new behaviour.
 
-The consuming project's `.claude/settings.json` should allow:
+## Permissions
+
+`pql init` writes these into the consuming project's
+`.claude/settings.json`. If prompts appear on every call, they are missing:
 
 ```json
 {
@@ -309,11 +312,49 @@ The consuming project's `.claude/settings.json` should allow:
 }
 ```
 
+**These rules match by prefix, and that shapes how commands must be
+written.** `Bash(pql *)` matches an invocation that *is* a pql command. It
+does not match a shell construction that merely contains one, so each of
+these prompts even though the pql part is allowed:
+
+```bash
+pql decisions sync && pql decisions list   # chained
+pql ticket show T-5 | head -20             # piped
+id=$(pql ticket new task "x" --id-only)    # substituted
+pql ticket list > out.json                 # redirected
+```
+
+Run one command per invocation and read its output instead. Use `--limit`,
+`--fields` and `--oneline` where you would have piped, and `--pretty` where
+you would have formatted.
+
+**Metacharacters inside quoted arguments can also break the match**, which is
+less obvious. A title or description containing `<`, `>`, `|` or backticks
+can cause the whole invocation to be rejected as unparseable even though the
+characters are safely quoted:
+
+```bash
+pql ticket new task "add <id> | none handling"   # may be refused
+```
+
+Pass content like that through a file instead — `--file` and `--stdin` are
+available on `ticket append`, `refine write` and `query`, and they avoid the
+problem entirely while also handling newlines and quotes cleanly.
+
+If prompts persist after the allow rules are in place, check for a `deny`
+entry that overrides them, and confirm which settings file is actually being
+loaded — a project-level file does not merge the way you might expect with a
+user-level one.
+
+## Diagnosing
+
 `pql doctor` prints what resolved and why: vault root and how it was found,
 config path, database locations, index state, skill status. It is the first
 thing to run when pql seems to be looking at the wrong place.
 
-For this skill itself: `pql skill status` reports drift, `pql skill install`
+## Keeping this skill current
+
+`pql skill status` reports drift, `pql skill install`
 writes or updates it (`--force` overrides hand edits), and `pql skill show
 [name]` echoes what the running binary actually ships — useful for confirming
 which version of this document an installed binary carries.
