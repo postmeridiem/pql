@@ -61,6 +61,37 @@ four defects nobody had hit from the inside.
   substitution, both of which fail under the prefix allowlists consuming
   projects use.
 
+- **The embedded skill is corrected against a real outside-in audit** (T-79).
+  The third `pql-skill-auditor` run was the first to execute — 15/15 core
+  retrievals, 44 exploratory, ~130 invocations — and returned 26 findings.
+  Corrected here: the output-shape contract (an incomplete enumeration replaced
+  by a rule, plus the batching verbs and the `{"message": …}` shape), the
+  omitted-not-null rule (scoped, with the DSL exception stated), the `backlinks`
+  spelling claim (see below), the ranked-verb recency heuristic (dropped — it
+  produced a confidently wrong reading of correct output), the
+  `--fields`/joins interaction, and the `--fields` vocabulary, which omitted
+  every join key while promising to save you a round trip.
+
+  **Three of those were defects in work shipped the same day**, by the author
+  who then documented it. That is the argument for the gate.
+
+- **The DSL is documented.** `folder`, `headings`, `size`, `mtime`, `ctime`,
+  `content_hash`, `last_scanned`, `DISTINCT` and `LIKE` all worked and none was
+  mentioned, so "notes in this folder" and "notes with this heading" looked
+  impossible from the skill alone. `SELECT DISTINCT fm.<key>` is in particular
+  the single-call answer to "which values does this key take", which had no
+  documented route at all — `pql schema` gives types and counts, never values.
+
+  The unknown-column error now lists the vocabulary instead of only repeating
+  the bad name back, so it works as a lookup the way the `--fields` error does.
+  The grammar doc is not shipped to consumers, so that error was the only
+  discovery route and it was a dead end.
+
+- **`pql query --help` no longer advertises exit code 2**, retired by D-22. An
+  agent consulting `--help` to fill a gap in the skill was being told to treat
+  every empty result as a distinct failure code — precisely the misreading D-22
+  existed to prevent, delivered by the tool itself.
+
 - **`pql skill status` reports `lines` and `words` per snapshot.** The audit
   report asks for the size of the *shipped* skill, and the only route to that
   was `pql skill show --raw | wc -l` — a pipe, which the procedure, the skill
@@ -120,6 +151,16 @@ four defects nobody had hit from the inside.
   `ignore_files:` explicitly keeps whatever it set.
 
 ### Fixed
+
+- **`plan export`, `plan import` and `plan rebuild` emitted `null` for their
+  file lists** when they had nothing to report (T-81), against the contract's
+  own never-null rule. They return `[]` now.
+
+  Worth recording why this survived T-75, which claimed to have swept the whole
+  output surface: that sweep was a grep over Go struct tags, so it could not see
+  the DSL — which builds dynamic maps — and it saw `FilesWritten []string` in
+  its own results and dismissed it without testing the zero-write case. The
+  claim that `doctor.index` was the only violation was wrong.
 
 - **`ticket show --with-children` returned nothing, ever** — and so did the
   children half of `--with-context`. `repo.ChildrenOf` is keyed on

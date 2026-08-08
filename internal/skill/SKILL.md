@@ -82,8 +82,10 @@ These work on every command:
 | "What is this file about / what should I read alongside it?" | `pql context`, `pql related` |
 | "Which notes mention this topic?" | `pql search` — but read the caveat below |
 | "Which files match this exact structure?" | `pql query`, `pql files`, `pql tags` |
+| "What values does this frontmatter key take?" | `pql query "SELECT DISTINCT fm.<key>"` — not `pql schema`, which gives types |
 | "What links to / from this file?" | `pql backlinks`, `pql outlinks` |
 | "What is in this one file?" | `pql meta` |
+| "What saved views does this vault have?" | `pql base` (bare, to list them) |
 | "What did we decide about X?" | `pql decisions` |
 | "What should I work on?" | `pql plan whatsnext`, `pql ticket` |
 | "Where is this vault resolving from?" | `pql doctor` |
@@ -111,10 +113,16 @@ They differ in how they weight the same signals: `related` on link overlap
 `search` on centrality (0.40) with recency second (0.25).
 
 Those weights only bite where the signal exists. In a link-sparse vault
-centrality is 0 on every candidate, so **recency decides** and a vague query
-returns the most recently modified files rather than the most central ones. If
-results look arbitrary, run the same command with `--full` and read `signals[]`
-— a score exactly equal to the recency weight means nothing else contributed.
+centrality and link overlap are 0 on every candidate, so a vague query gets
+decided by whatever is left — often recency or path proximity — and returns the
+most recently touched or most adjacent files rather than the most relevant.
+
+**If results look arbitrary, re-run with `--full` and read `signals[]`.** Do not
+try to infer the mechanism from the score: a score that happens to equal one
+weight does not mean that signal decided it, and the weights differ per command
+(recency is 0.25 on `search` but 0.05 on `related` and `context`). `signals[]`
+gives you the raw value, weight and contribution for every signal, which is the
+whole reason it exists.
 
 **`pql search` is a substring filter, not a search engine.** Read this
 before using it. The query is matched as **one literal lowercase substring**
@@ -161,8 +169,8 @@ result relates. Naming a key in `--fields` always returns it, so
 |---|---|
 | `pql files [glob]` | Indexed files, optionally glob-filtered |
 | `pql tags [--sort count]` | Distinct tags with counts |
-| `pql backlinks <path>` | Files linking **to** a path. Accepts any spelling of the file — full path, extensionless, or bare basename — and matches links written in any of them, with or without a `#anchor` |
-| `pql outlinks <path>` | Links **from** a file, in document order |
+| `pql backlinks <path>` | Links pointing **at** a path — one row per link occurrence, `{path, name, line, via}`. Read the matching caveat below before trusting `[]` |
+| `pql outlinks <path>` | Links **from** a file, in document order — `{target, alias, line, via}`. `target` is the raw text of the link, not a resolved path |
 | `pql meta <path>` | One file's frontmatter, tags, outlinks and headings |
 | `pql schema` | Inferred frontmatter schema across the vault |
 | `pql base [name] [--view V]` | Execute an Obsidian `.base` file. **Bare `pql base` lists the bases it found** with their names — the only discovery route, since `files '*.base'` returns `[]`. `--view` picks among a base's named views |
@@ -174,11 +182,41 @@ pql meta members/vaasa/persona.md --pretty
 pql backlinks members/koskela/persona.md
 ```
 
-`backlinks` compares link *spellings*, it does not resolve them. The three ways
-a file is normally addressed all work, but a link that reaches it by a relative
-prefix (`../members/koskela/persona`) is a different string and will not match.
-So `[]` means "no link written in a spelling I recognise" — strong evidence, not
-proof.
+### Links are matched as text, not resolved
+
+This is the single biggest trap in the vault surface, and it cuts both ways.
+
+**`backlinks` compares spellings.** It tries the path you give, that path
+without `.md`, the bare basename, and each with a `#anchor` — but a link written
+any other way is simply a different string. The common miss is a
+directory-relative link: a file at `governance/README.md` writing
+`[](decisions/architecture.md)` is *not* found by
+`backlinks governance/decisions/architecture.md`, even though that is the
+correct vault-relative path and the one every other pql command returns.
+
+So `[]` from `backlinks` means "no link written in a spelling I recognise". It
+is evidence, not proof. When it looks wrong:
+
+```bash
+pql outlinks governance/README.md          # find how the link is actually written
+pql backlinks decisions/architecture.md    # then query that exact string
+```
+
+**`outlinks` returns the raw link text**, so its `target` is often not something
+another command accepts:
+
+```bash
+pql outlinks notes/a.md     # -> {"target":"notes/b","alias":"B","line":12,"via":"wiki"}
+pql meta notes/b            # exit 66 — file not indexed
+pql meta notes/b.md         # works
+```
+
+Append `.md` when the target has no extension. If it still 66s, the link is
+relative or shortest-path and you will have to resolve it yourself.
+
+`pql context` is the exception worth knowing: it *does* resolve outbound targets
+against the index, so every path it returns can be fed straight to another
+command. Prefer it when you want "what does this file point at, as real paths".
 
 ## The DSL
 
@@ -192,8 +230,28 @@ SELECT path WHERE 'project' IN tags ORDER BY path
 SELECT name, fm.date WHERE fm.date BETWEEN '2024-01-01' AND '2024-12-31'
 ```
 
-`fm.<key>` reads frontmatter; `tags`, `path` and `name` are built in. Use
-`--file q.pql` or `--stdin` for long queries, and never interpolate vault
+**Columns.** `path`, `name`, `folder`, `size`, `mtime`, `ctime`,
+`content_hash`, `last_scanned`, plus `fm.<key>` for any frontmatter key.
+`tags`, `headings`, `inlinks` and `outlinks` are array columns — usable only on
+the right of `IN`, not selected bare. An unknown name exits `65` and lists the
+set, so the error is a usable lookup.
+
+**Operators.** `=`, `!=`, `<`, `>`, `<=`, `>=`, `LIKE`, `BETWEEN`, `IN`, `AND`,
+`OR`, `NOT`. `SELECT DISTINCT` works. Aggregates do not — `COUNT(*)` and
+`GROUP BY` fail loudly at exit `65`, so count client-side or use `pql tags`.
+
+**`SELECT DISTINCT` is how you find which values a frontmatter key takes.**
+`pql schema` reports keys, types and file counts — never values. This is the
+only route, and it is one call:
+
+```bash
+pql query "SELECT DISTINCT fm.status"
+pql query "SELECT path, folder WHERE folder = 'members/vaasa'"
+pql query "SELECT path WHERE 'Design notes' IN headings"
+pql query "SELECT path, size WHERE path LIKE 'notes/%' AND size > 5000"
+```
+
+Use `--file q.pql` or `--stdin` for long queries, and never interpolate vault
 content into the command line.
 
 ## Keeping the index current
@@ -332,14 +390,26 @@ The changelog carries a format version. An older one replays with a loud
 
 ## Output
 
-- **stdout:** JSON — an **array** from the list and query verbs, a single
-  **object** from record-level and dashboard verbs (`ticket show <one-id>`,
-  `decisions show`, `plan status`, `plan whatsnext`, `doctor`, `version
-  --build-info`, `watch status`, `ticket new`). Do not write one parser assuming
-  an array. `--jsonl` for one object per line, `--pretty` for humans, `--limit N`
-  to cap. Two surfaces opt out of JSON deliberately: `ticket new --id-only`
-  prints a bare id, and `--oneline` prints `id<TAB>status<TAB>title` on the list
-  verbs, `path<TAB>score` on the ranked ones.
+- **stdout:** JSON, and the shape follows one rule: **verbs that answer "which
+  things" return an array; everything else returns a single object.** Arrays
+  come from `files`, `tags`, `backlinks`, `outlinks`, `schema`, `base`, `query`,
+  the ranked verbs, and the `list` verbs. Objects come from everything else —
+  one record (`meta`, `ticket show <one-id>`, `decisions show <one-id>`,
+  `decisions read`), a dashboard (`plan status`, `doctor`, `version
+  --build-info`, `watch status`), or a summary of what a command did
+  (`ticket new`, `decisions sync`, `plan export`).
+
+  Two edges worth knowing. **The batching verbs switch shape**: `ticket show`
+  and `decisions show` return an object for one id and an array for several.
+  And `plan whatsnext` / `plan review` return `{"message": "..."}` instead of a
+  record when there is nothing to hand back — reaching straight for `.id` gets
+  you nothing and no error.
+
+  Do not write one parser assuming an array. `--jsonl` for one object per line,
+  `--pretty` for humans, `--limit N` to cap. Two surfaces opt out of JSON
+  deliberately: `ticket new --id-only` prints a bare id, and `--oneline` prints
+  `id<TAB>status<TAB>title` on the list verbs, `path<TAB>score` on the ranked
+  ones.
 - **stderr:** JSON diagnostics, one per line. Codes come in two shapes:
   `pql.<phase>.<kind>` for index, parse, eval and plan problems
   (`pql.parse.unexpected_token`), and `cli.error` / `cli.exit` for flag and
@@ -364,9 +434,23 @@ key exits `64` listing the valid ones) and `ticket board --status` (unknown
 status exits `64` listing the vocabulary). Everywhere else, assume a filter
 value is passed straight through.
 
-Empty fields are **omitted** from JSON rather than set to `null` — a ticket
-with no parent has no `parent_id` key, and a decision with no tickets has no
-`tickets` key. Check for presence, not for null.
+**Nothing is ever `null` — but "empty" takes two forms.** On the planning
+surface an empty field is **omitted**: a ticket with no parent has no
+`parent_id` key, a decision with no tickets has no `tickets` key, `doctor` with
+no index has no `index` key. Elsewhere an empty *collection* is present and
+empty: `meta` returns `"tags": []`, `plan export` returns
+`"files_written": []`. So test for presence **or** emptiness, and never
+dereference assuming a key that is present is populated.
+
+The one deliberate exception is the DSL, which does emit `null`:
+
+```bash
+pql query "SELECT name, fm.lens"   # {"fm.lens":null,"name":"NOTE"}
+```
+
+That is meaningful rather than sloppy — a `SELECT` over files where some carry
+the key and some do not needs to say which is which, and a missing key would
+make the rows ragged. Null-check frontmatter columns from `query`.
 
 ## Projection
 
@@ -381,20 +465,39 @@ Two verbs trim their default output because one key dominates the payload:
 `--fields` always returns it.
 
 `--fields` also works on `ticket show` and `decisions show`, with the same
-vocabulary — one projection language across the planning surface. On the show
-verbs it narrows the **top level only**: the join-trees that `--with-context`,
-`--with-blockers`, `--with-children` and `--tree` attach are all-or-nothing.
-`--oneline` and `--full` remain list-verb flags and exit `64` on `show`.
+vocabulary — one projection language across the planning surface. `--oneline`
+and `--full` remain list-verb flags and exit `64` on `show`.
+
+**On the show verbs, `--fields` selects the joins too.** A join key you do not
+name is dropped even though you passed its `--with-…` flag — silently, at exit
+`0`:
+
+```bash
+pql ticket show T-5 --with-context --fields id,title            # no ancestors
+pql ticket show T-5 --with-context --fields id,title,ancestors  # ancestors present
+```
+
+So if you are trimming payload *and* asking for a join, name the join key. What
+you cannot do is project *inside* a join: you get the whole subtree or none of
+it.
 
 Valid field names, since guessing them costs a round trip:
 
 - **tickets** — `id`, `record_id`, `type`, `title`, `description`, `status`,
   `priority`, `parent_id`, `assigned_to`, `team`, `decision_ref`, `created_at`,
   `updated_at`. Note `decision_ref`, not `decision_id`.
+- **ticket joins** — `ancestors` (`--with-context`), `children`
+  (`--with-children`), `blockers` (`--with-blockers`), `subtree` (`--tree`),
+  `decisions` (`--with-context`), and `message` for the empty-result shape.
 - **decisions** — `id`, `type`, `domain`, `title`, `status`, `date`,
-  `file_path`, `synced_at`.
+  `file_path`, `synced_at`; joins `tickets` (`--with-tickets`) and `refs`
+  (`--with-refs`).
 - **ranked results** — `path`, `score`, `signals`, `connections`. Under
   `--flat-search` there is no ranking, so `path` is the only valid name.
+
+Projection does **not** reach the mutation verbs — `ticket assign`, `status`,
+`label` and friends reject `--fields` at exit `64`, and several return the whole
+record including its description. Budget for that on a batch.
 
 An unknown name exits `64` and prints the valid set, so the error is a usable
 lookup if you forget.
@@ -457,7 +560,13 @@ pql decisions sync && pql decisions list   # chained
 pql ticket show T-5 | head -20             # piped
 id=$(pql ticket new task "x" --id-only)    # substituted
 pql ticket list > out.json                 # redirected
+PQL_VAULT=/some/path pql tags              # env-var prefixed
 ```
+
+That last one matters because this document offers those env vars as an
+alternative to the flags. They work when pql is run by a human; under a prefix
+allowlist they do not, because the command string starts with `PQL_VAULT=` and
+matches no `pql` rule. **Use the flag, not the env var.**
 
 Run one command per invocation and read its output instead. Use `--limit`,
 `--fields` and `--oneline` where you would have piped, and `--pretty` where you
@@ -470,6 +579,17 @@ rather than reliable, so do not pre-empt it. React to it: if an invocation is
 refused as unparseable instead of failing on its own merits, move the content
 into a file. `--file` and `--stdin` work on `ticket append`, `refine write` and
 `query`, and handle newlines and embedded quotes cleanly as a bonus.
+
+Two argument shapes fail deterministically and are worth knowing up front. A
+positional argument starting with `-` is parsed as a flag, so a title like
+`--fields is broken` exits `64` — put `--` before it:
+
+```bash
+pql ticket new bug -- "--fields is broken"
+```
+
+And any description containing backticks or `$` will be expanded by the shell
+before pql ever sees it. Pass those through `--stdin` with a quoted heredoc.
 
 If prompts persist after the allow rules are in place, check for a `deny`
 entry that overrides them, and confirm which settings file is actually being
