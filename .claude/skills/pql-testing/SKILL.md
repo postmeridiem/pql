@@ -74,25 +74,42 @@ pql plan --help
 A documented thing that does not exist is the worst defect. A shipped thing
 that is undocumented is the second worst.
 
-### 3. Do real work using only the skill
+### 3. Retrieve real data using only the skill
 
-Attempt tasks a caller would actually bring, using only what the skill told
-you. Record for each: did it work first time, and if not, what was missing.
+Run retrievals a caller would actually need, using only what the skill told
+you. **You are testing the tool and the skill, not your own reasoning.** For
+each retrieval, judge exactly three things:
+
+1. **Routing** — did the skill get you to the right command and flags without
+   guessing, retrying, or reading source?
+2. **Workability** — is what came back something you could act on? Right
+   fields present, shape parseable, volume manageable, one call rather than N.
+3. **Unstated post-processing** — what did you have to do to the output that
+   the skill never mentioned?
+
+Do **not** evaluate whether your interpretation of the data was correct.
+Whether the vault really has twelve open questions is not under test. Whether
+pql returned them in a usable form, and whether the skill led you there, is.
+If a retrieval requires you to fold, join or count client-side, that is a
+finding about pql's surface — record the post-processing, not the answer.
 
 Cover, at minimum:
 
-- A structural query needing the DSL, written from the skill's syntax notes
-  alone.
-- A ranked query, judged against what the skill led you to expect.
-- A multi-step planning task: find work in a given state, read one item's full
-  context, follow it to a decision record.
-- **A set-level cross-surface question** — for example, which decisions have no
-  tickets implementing them, or the largest cluster of open work under one
-  parent. These expose the most defects, because they need flags and fields the
-  skill tends not to mention.
-- A write path, since half the surface mutates state. Safe in the scratch vault.
-- Something the skill explicitly warns about, to check the warning is findable
-  and correct.
+- **A filtered set** — everything matching a status, type or label. Check the
+  filter vocabulary is documented and that an invalid value fails loudly.
+- **A projection over a large set** — enough rows that payload size matters.
+  Check the skill names the fields available and that the output is not
+  truncated by volume.
+- **One record in full**, with whatever context flags the skill offers.
+- **A cross-surface retrieval** — data joining tickets to decisions in one
+  call. Check whether the flag or field needed for that exists and is
+  documented; if it takes N calls, say so.
+- **A structural query needing the DSL**, written from the skill's syntax
+  notes alone.
+- **A ranked query**, checked against what the skill led you to expect.
+- **A write, then a read-back** confirming it landed. Safe in the scratch vault.
+- **Something the skill explicitly warns about**, to check the warning is
+  findable and correct.
 
 ### 4. Read the source
 
@@ -154,6 +171,13 @@ file directly.
 **H. Omissions that block whole task classes.** After step 3, ask which flags
 or fields you needed that the skill never named. Those omissions cost more than
 any inaccuracy, because they make a task look impossible.
+
+**I. Output that is correct but not workable.** The command succeeds and the
+data is right, yet the caller cannot use it: a field needed for the obvious
+next step is absent from the default projection, the payload is large enough to
+be truncated before it arrives, the shape forces a client-side join, or the
+answer takes one call per record instead of one call. Judge every retrieval on
+whether it hands back something actionable, not merely something true.
 
 ## Rules
 

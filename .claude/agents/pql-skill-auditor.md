@@ -24,6 +24,25 @@ where the skill leaves that agent stuck, guessing, or confidently wrong. A
 statement can match the implementation exactly and still be a defect if acting
 on it produces the wrong result.
 
+## What is under test, and what is not
+
+**Under test:** whether pql returns workable content, and whether the skill
+routes an agent to the right command to get it. For every retrieval, report
+whether the skill got you there without guessing, whether the output was
+actionable as returned, and what post-processing you needed that the skill
+never mentioned.
+
+**Not under test:** your reasoning about the data. Do not treat a retrieval as
+a puzzle to solve. Whether you correctly identified the biggest epic or counted
+the open questions right tells us nothing about pql — the answer is not the
+deliverable, and a correct answer reached through five calls and a client-side
+join is a *worse* result than a wrong one reached in a single clean call.
+
+When a retrieval forces you to fold, join, filter or count in your own head,
+stop and record that as a finding about pql's surface. That friction is the
+signal. Analysing your way past it hides exactly what this audit exists to
+find.
+
 This is why the procedure forbids reading pql's source before step 4. Once you
 know how something works, you stop noticing that the skill never told you. Hold
 that line even when a quick look would resolve a question — the question itself
