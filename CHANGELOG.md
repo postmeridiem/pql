@@ -11,7 +11,32 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
-## [1.13.0]
+## [2.0.0] - 2026-08-08
+
+**Why a major.** The command surface is additive — every existing invocation
+behaves as it did. What changed is the *data contract*: `.pql/changelog/` is a
+versioned artefact now, and a `git pull` can rewrite files in your working tree
+to carry it forward. That is something a consumer must know about before it
+happens rather than discover afterwards, so it gets a major even though nothing
+in the CLI breaks.
+
+A mixed-version fleet degrades gently, which is worth knowing when planning the
+rollout. An older pql replays a format-2 changelog fine (the marker lives at the
+changelog root, which replay never reads), and if an older binary appends
+format-1 lines to an upgraded file, the next `pql plan upgrade` heals them —
+staging strips whatever conflict clause is present, so it is format-agnostic by
+construction.
+
+**Upgrading a consumer repo** (clide, settled-reach, council), once pql 2.0.0 is
+on PATH:
+
+1. `pql init` — refreshes the `post-merge` hook block, which an older `pql init`
+   planted without the upgrade step.
+2. `pql plan upgrade` — the first migration; afterwards the hook handles it.
+3. `git add .pql/changelog && git commit` — the rewrite is a working-tree change.
+
+Skipping all of it degrades to a warning on `plan import`/`plan rebuild`, not a
+failure.
 
 ### Added
 
@@ -54,10 +79,6 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   binary speaks without reading source. All four are declared in `project.yaml`,
   and a test parses that file so the Go constants cannot drift from it.
   `docs/versions.md` explains each axis and maps them to releases.
-
-## [1.12.0]
-
-### Added
 
 - **`pql plan rebuild --verify` (T-60).** Snapshots every replicated row's
   canonical hash before the drop-and-replay and compares afterwards, reporting
