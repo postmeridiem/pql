@@ -38,6 +38,21 @@ func Run(ctx context.Context, db *sql.DB, targetPath string, limit int) ([]conne
 	})
 }
 
+// gatherCandidates collects the files worth ranking against targetPath:
+// what links to it, what it links to, and what shares its tags.
+//
+// The outbound branch resolves link targets against the files table rather
+// than emitting them directly. A target is link text as written — extensionless
+// (`members/x/persona`), anchored (`guide.md#install`), or a bare same-document
+// anchor (`#some-heading`) — and emitting those unresolved put values in the
+// result's `path` field that no other command would accept: `pql meta` rejected
+// them as "file not indexed", and a bare anchor named no file at all (T-73).
+// Joining to files means every candidate is a real indexed path, which is what
+// callers need to follow a result anywhere.
+//
+// Relative-prefix targets (`../questions/architecture.md`) still fail to
+// resolve and are dropped rather than emitted broken. Resolving those properly
+// is link normalisation, Q-6.
 func gatherCandidates(ctx context.Context, db *sql.DB, targetPath string) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT DISTINCT path FROM (
@@ -46,15 +61,27 @@ func gatherCandidates(ctx context.Context, db *sql.DB, targetPath string) ([]str
 				OR ? LIKE '%/' || target_path || '.md')
 			AND source_path != ?
 			UNION
-			SELECT target_path AS path FROM links
-			WHERE source_path = ? AND target_path NOT LIKE 'http%'
+			SELECT f.path FROM (
+				SELECT CASE
+					WHEN instr(target_path, '#') > 0
+						THEN substr(target_path, 1, instr(target_path, '#') - 1)
+					ELSE target_path
+				END AS target
+				FROM links
+				WHERE source_path = ? AND target_path NOT LIKE 'http%'
+			) o
+			JOIN files f
+			  ON f.path = o.target
+			  OR f.path = o.target || '.md'
+			  OR f.path LIKE '%/' || o.target || '.md'
+			WHERE o.target != '' AND f.path != ?
 			UNION
 			SELECT DISTINCT b.path FROM tags a
 			JOIN tags b ON a.tag = b.tag
 			WHERE a.path = ? AND b.path != ?
 		)
 	`, targetPath, targetPath, targetPath, targetPath,
-		targetPath,
+		targetPath, targetPath,
 		targetPath, targetPath)
 	if err != nil {
 		return nil, fmt.Errorf("context: gather candidates: %w", err)

@@ -104,7 +104,7 @@ always accountable: you can see *why* it ranked where it did.
 |---|---|
 | `pql search <query>` | Which files are most relevant to this topic |
 | `pql related <path>` | Which files sit near this one in the graph |
-| `pql context <path>` | What to read to understand this file (returns heading anchors, not just paths) |
+| `pql context <path>` | What to read to understand this file — the files it links to, that link to it, and that share its tags |
 
 They differ in how they weight the same signals: `related` on link overlap
 (0.35), `context` on link overlap and path proximity together (0.30/0.25),

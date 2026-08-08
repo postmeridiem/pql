@@ -105,4 +105,3 @@ func Backlinks(ctx context.Context, db *sql.DB, opts BacklinksOpts) ([]Backlink,
 	}
 	return out, nil
 }
-
