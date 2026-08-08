@@ -17,7 +17,8 @@ Vault: <path>   Surfaces exercised: <vault | planning | both>
 
 | Measure | Value |
 |---|---|
-| Core retrievals run | <n> / 12 |
+| Core retrievals run | <n> / 15 |
+| Skill warnings checked | <n> / <n the skill gives> |
 | Exploratory retrievals | <n> |
 | Routed from the skill alone | <n> / <total> |
 | Workable as returned | <n> / <total> |
@@ -78,5 +79,10 @@ template, found while following them. Write "none" if none.>
   If answering one question took 28 calls because the flag for a single-call
   answer is undocumented, that gap is the finding.
 - **CLI commands verified** measures step 2's coverage, so a thin audit is
-  visible as a low number rather than hiding behind a short findings list.
+  visible as a low number rather than hiding behind a short findings list. Count
+  against the *auditable* surface, not everything `pql --help` prints: exclude
+  `completion` and `help` (cobra boilerplate), `shell` (interactive, cannot be
+  driven non-interactively), and `self-update` (the skill forbids it). State the
+  exclusions so the denominator is comparable between runs — otherwise a careful
+  auditor scores worse than one who counted boilerplate.
 - Get skill size from the shipped copy, not the repo file.

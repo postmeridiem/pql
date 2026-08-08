@@ -26,7 +26,35 @@ When in doubt, ask before starting one.
 
 ## Setup
 
-Build a disposable vault. Never test against a repo anyone works in.
+Three checks, then a vault. Do them in this order — each one prevents a whole
+class of wasted audit.
+
+**1. Confirm you are auditing the artefact you think you are.** The skill is
+embedded at build time, so an edited-but-unrebuilt tree means auditing
+something nobody ships:
+
+```bash
+make skill-drift
+```
+
+It compares the repo file, the copy embedded in the binary, and the installed
+copy. Neither `pql skill status` nor `pql doctor` can detect this — both compare
+the installed file against the binary's own embed, so a stale build reads as
+"current" in each.
+
+**2. Confirm the binary on PATH is the one just built.** `skill-drift` compares
+*skill text*, not binaries, so a stale `~/.local/bin/pql` whose embedded skill
+happens to match still passes it. Check the versions agree:
+
+```bash
+pql --version
+./bin/pql --version
+```
+
+If they differ, `make install` and start over. Everything below invokes `pql`
+from PATH.
+
+**3. Build the vault.** Never test against a repo anyone works in.
 
 ```bash
 make scratch-vault
@@ -34,25 +62,23 @@ make scratch-vault
 
 That gives `/tmp/pql-scratch-vault` with both surfaces: markdown and `.base`
 files for the vault surface, real tickets and decisions for the planning
-surface. Every verb is safe there — it is a copy. Re-run to reset.
-
-Target it explicitly on every call:
+surface. Target it explicitly on every call:
 
 ```bash
 pql --vault /tmp/pql-scratch-vault <command>
 ```
 
-Confirm the binary is not stale. The skill is embedded at build time, so an
-edited-but-unrebuilt tree means auditing an artefact nobody ships:
+The target depends on `make build`, which writes into the repo tree. If a
+sandbox refuses that, build once outside the audit and replay the target's body
+by hand — it copies `testdata/council-snapshot` and `governance/` into the
+vault, copies `.pql/changelog`, then runs `plan import` and `decisions sync`.
 
-```bash
-make skill-drift
-```
-
-It compares the repo file, the copy embedded in the binary, and the installed
-copy, and tells you what to run if they disagree. Neither `pql skill status`
-nor `pql doctor` can detect this — both compare the installed file against the
-binary's own embed, so a stale build reads as "current" in each.
+**Every verb is safe in that vault, including writes** — it is a disposable
+copy, and exercising write paths is part of the audit. Re-run
+`make scratch-vault` to reset it, and re-run it after any destructive probe
+(see shape D) so later retrievals are not reading a poisoned index. Note that
+writes you make during the audit shift the vault's counts, so a ticket total
+taken late will not match one taken early.
 
 ## Procedure
 
@@ -65,11 +91,16 @@ implementation makes omissions invisible.
 pql skill show | python3 -c 'import json,sys; print(json.load(sys.stdin)["files"]["SKILL.md"])'
 ```
 
-The raw output is one JSON-escaped string and is not readable as-is; that
-extraction is the only way to read it as prose.
-
 Read what the binary ships, not the repo file. Note what you expect to be able
 to do, and anything the text leaves ambiguous.
+
+Two things about that command are themselves evidence, so record them rather
+than working around them silently. The output is one JSON-escaped string, so
+reading it as prose needs an extraction step — and that step is a pipe, which
+the skill under audit tells callers never to use. A command whose output its own
+documentation cannot reach is a finding. So is the undeclared `python3`
+dependency: if it is absent, use any equivalent, and note that the procedure
+assumed it.
 
 ### 2. Verify both directions
 
@@ -122,16 +153,31 @@ row, keeping the R-numbers so runs can be compared.
 | R5 | Get an index of all tickets small enough to read in one go |
 | R6 | For one decision, find what implements it |
 | R7 | Across all decisions, find which have nothing implementing them |
-| R8 | List every note carrying a given frontmatter value |
-| R9 | Find the notes most related to one note |
-| R10 | Find notes about a topic given two words to describe it |
-| R11 | Create a ticket, then read it back to confirm it landed |
-| R12 | Follow one thing the skill explicitly warns about |
+| R8 | Create a ticket, then read it back to confirm it landed |
+| R9 | List every note carrying a given frontmatter value |
+| R10 | Find out which values a given frontmatter key actually takes |
+| R11 | Find the notes most related to one note |
+| R12 | Find notes about a topic, given two words to describe it |
+| R13 | Find everything that links **to** a given note |
+| R14 | Take a link out of a note and open what it points at |
+| R15 | Discover what saved queries or views the vault offers, then run one |
 
-R2, R7 and R10 are the load-bearing ones: they probe silent-empty filtering,
-cross-surface joining, and the substring-match limit respectively. Do not skip
-them because they look likely to fail — that they fail cleanly, loudly and with
-guidance is exactly what is being checked.
+Balance matters: R1–R8 cover planning, R9–R15 the vault. An earlier version was
+weighted nine to three toward planning, and most defects turned out to be in the
+vault surface — found only because the auditor explored past the list.
+
+Four are load-bearing. **R2** probes whether an invalid filter fails loudly or
+returns an empty list that reads as absence. **R7** needs a cross-surface join
+and exposes whether one exists. **R12** probes the substring-match limit.
+**R14** probes whether a value one command returns can be fed to another. Do not
+skip them for looking likely to fail — failing cleanly, loudly and with guidance
+is exactly what is under test.
+
+Then run every warning the skill gives. Read the shipped text, list its explicit
+warnings, and check each one is both findable and true. Do not pick a
+representative sample: which one you pick changes what gets covered, and the
+R-numbers exist so runs can be compared. Number these W1, W2 … in the friction
+log.
 
 #### Then explore
 
@@ -180,8 +226,15 @@ if a "raw" mode returns the same count as listing everything, it is not
 answering the question.
 
 **D. Aborts that poison every command.** One malformed input can fail an entire
-index, making every unrelated command fail too. Feed a bad file and check
-whether the skill names a recovery path.
+index, making every unrelated command fail too. Plant a bad file in the scratch
+vault and check whether the skill names a recovery path that actually works —
+follow it literally rather than reading it charitably. Then rebuild the vault,
+since the poisoned index affects everything after it.
+
+Writing that file is sanctioned and not a breach of "change nothing": that rule
+is about the repository and about fixing defects, not about the disposable vault
+you were given to exercise. Writes to the scratch vault are testing. Writes to
+the repo are fixing, and fixing is not this job.
 
 **E. Claims derived from one observation.** A single probe yields a mechanism
 that looks right and generalises wrongly. For any claim about *why* something

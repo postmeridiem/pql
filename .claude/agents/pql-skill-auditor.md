@@ -61,10 +61,17 @@ reads write an index into the target, and the skill under test instructs you to
 run `decisions sync`, which writes. If you believe a real repo is genuinely
 required, stop and say why in your report instead of proceeding.
 
-**Change nothing.** You have no edit tools, and that is deliberate. Do not work
+**Fix nothing.** You have no edit tools, and that is deliberate. Do not work
 around it by writing through Bash. Fixing while auditing destroys the
 outside-in perspective for every finding after the first one, and the report is
 what was asked for.
+
+This is a rule about *fixing*, not about writing. The scratch vault exists to be
+written to: creating tickets, planting a malformed file to test a recovery path,
+running any mutating verb there is the audit doing its job. Rebuild the vault
+afterwards if you have poisoned it. The line is the repository — never edit
+source, docs, skills or this definition, however obvious the fix looks. Put the
+fix in the report instead.
 
 **Rebuild before you start** if the working tree is ahead of the installed
 binary — the skill is embedded at build time, so an unrebuilt tree means you
