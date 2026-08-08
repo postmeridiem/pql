@@ -54,6 +54,22 @@ actually exist in `internal/cli/`. If you added a command, confirm it appears in
 `pql <cmd> --help` (cobra generates help from the command's own `Short`/`Long`,
 so help is never the stale surface — the cookbook is).
 
+Then confirm what ships is what you wrote — the skill is `//go:embed`'d, so an
+edit is invisible until the next build, and `pql skill status` reports "current"
+regardless because it compares against the binary's own embed:
+
+```bash
+make skill-drift
+```
+
+**Release gate.** If this is a release *and* `internal/skill/SKILL.md` changed
+since the last one, audit the skill before dating the CHANGELOG section — dating
+it is what triggers the publish, and a shipped skill is frozen until the next
+release. Use the `pql-skill-auditor` agent (procedure in
+`.claude/skills/pql-testing/`), then fix what it finds and rebuild. It costs
+roughly 100k tokens and half an hour, so it is a release-time step, not a
+per-edit one; `make skill-drift` covers the everyday case.
+
 ## Step 1 — Version bump
 
 Bump the **fix** version in `project.yaml` (e.g. `1.6.0` → `1.6.1`) unless the
