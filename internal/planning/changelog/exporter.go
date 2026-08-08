@@ -250,12 +250,14 @@ func exportTicketIDMap(ctx context.Context, db *sql.DB, since string, sink *file
 		if err != nil {
 			return n, err
 		}
-		line := fmt.Sprintf(
-			`INSERT INTO ticket_idmap (record_id, ticket_id, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(record_id) DO UPDATE SET ticket_id=excluded.ticket_id, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= ticket_idmap.updated_at;`,
+		line, err := renderRow("ticket_idmap", []string{
 			sqlStr(recordID), sqlStr(ticketID),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
-		)
+		})
+		if err != nil {
+			return n, err
+		}
 		wrote, err := sink.appendLine("ticket_idmap", ym, line)
 		if err != nil {
 			return n, err
@@ -301,14 +303,16 @@ func exportTickets(ctx context.Context, db *sql.DB, since string, sink *fileSink
 		if err != nil {
 			return n, err
 		}
-		line := fmt.Sprintf(
-			`INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;`,
+		line, err := renderRow("tickets", []string{
 			sqlStr(recordID), sqlStr(typ), sqlNullStr(parentRecID), sqlStr(title), sqlNullStr(description),
 			sqlStr(status), sqlStr(priority),
 			sqlNullStr(assignedTo), sqlNullStr(team), sqlNullStr(decisionRef),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
-		)
+		})
+		if err != nil {
+			return n, err
+		}
 		wrote, err := sink.appendLine("tickets", ym, line)
 		if err != nil {
 			return n, err
@@ -348,12 +352,14 @@ func exportTicketDeps(ctx context.Context, db *sql.DB, since string, sink *fileS
 		if err != nil {
 			return n, err
 		}
-		line := fmt.Sprintf(
-			`INSERT INTO ticket_deps (blocker_record_id, blocked_record_id, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(blocker_record_id, blocked_record_id) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= ticket_deps.updated_at;`,
+		line, err := renderRow("ticket_deps", []string{
 			sqlStr(blocker), sqlStr(blocked),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
-		)
+		})
+		if err != nil {
+			return n, err
+		}
 		wrote, err := sink.appendLine("ticket_deps", ym, line)
 		if err != nil {
 			return n, err
@@ -393,12 +399,14 @@ func exportTicketLabels(ctx context.Context, db *sql.DB, since string, sink *fil
 		if err != nil {
 			return n, err
 		}
-		line := fmt.Sprintf(
-			`INSERT INTO ticket_labels (ticket_record_id, label, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT(ticket_record_id, label) DO UPDATE SET updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= ticket_labels.updated_at;`,
+		line, err := renderRow("ticket_labels", []string{
 			sqlStr(ticketRecID), sqlStr(label),
 			sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
-		)
+		})
+		if err != nil {
+			return n, err
+		}
 		wrote, err := sink.appendLine("ticket_labels", ym, line)
 		if err != nil {
 			return n, err
@@ -445,13 +453,15 @@ func exportTicketHistory(ctx context.Context, db *sql.DB, since string, sink *fi
 		if err != nil {
 			return n, err
 		}
-		line := fmt.Sprintf(
-			`INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT(hash) DO NOTHING;`,
+		line, err := renderRow("ticket_history", []string{
 			sqlStr(ticketRecID), sqlStr(field),
 			sqlNullStr(oldVal), sqlNullStr(newVal), sqlNullStr(changedBy),
 			sqlStr(changedAt), sqlStr(createdAt), sqlStr(updatedAt), sqlNullStr(deletedAt),
 			sqlNullStr(hash), sqlNullInt(canonicalVersion),
-		)
+		})
+		if err != nil {
+			return n, err
+		}
 		wrote, err := sink.appendLine("ticket_history", ym, line)
 		if err != nil {
 			return n, err
