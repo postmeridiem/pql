@@ -1,69 +1,68 @@
 ---
 name: pql-testing
 description: >
-  Test the quality of the embedded pql skill (internal/skill/SKILL.md) the way
-  a consuming agent experiences it — as documentation it must act on without
-  reading pql's source. Use before shipping a release that changes the skill,
-  after adding or changing a CLI surface, or whenever someone asks whether the
-  skill is accurate, complete, or usable. Produces a findings report, not a
-  pass/fail.
+  Audit the embedded pql skill (internal/skill/SKILL.md) for accuracy,
+  completeness and usability, by acting on it as a consuming agent would —
+  without reading pql's source. Use before shipping a release that changes the
+  skill, after adding or changing any CLI command or flag, when the skill and
+  the CLI may have drifted, or when asked whether the skill is correct or
+  usable. Produces a findings report; does not fix anything.
 ---
 
-# Testing the pql skill
+# Audit the pql skill
 
-The embedded skill is a product surface. It is `//go:embed`'d into the binary,
-installed into consumers by `pql init`, and sits permanently in the context of
-every agent that uses pql. Nothing verifies it: the tests assert only that the
-file exists and has frontmatter, so a skill can describe commands that do not
-exist, omit commands that do, and still ship green.
+The skill is embedded in the binary and sits permanently in the context of
+every agent using pql. Nothing verifies it — the tests assert only that the
+file exists and has frontmatter, so it can document removed commands and omit
+shipped ones while passing.
 
-This procedure exists because that has happened. Three ranked commands
-(`search`, `related`, `context`) were absent from the skill for months while
-its anti-patterns section actively directed agents to `grep` instead. A
-`decisions coverage` command was documented after being removed. Both were
-found by reading, not by testing.
+## Setup
 
-## What "quality" means here
+Build a disposable vault. Never test against a repo anyone works in.
 
-Judge the skill against four questions, in this order. The first two are
-correctness and are objective; the last two are usability and take judgement.
+```bash
+make scratch-vault
+```
 
-1. **Is it true?** Does every documented command, flag and behaviour exist and
-   behave as described?
-2. **Is it complete?** Does every command a caller would want appear?
-3. **Can it be acted on?** Given only the skill, can an agent do real work
-   without guessing, re-reading, or falling back to source?
-4. **Is it worth its context cost?** It is loaded permanently. Redundancy,
-   duplication and inventory-for-its-own-sake are defects.
+That gives `/tmp/pql-scratch-vault` with both surfaces: markdown and `.base`
+files for the vault surface, real tickets and decisions for the planning
+surface. Every verb is safe there — it is a copy. Re-run to reset.
+
+Target it explicitly on every call:
+
+```bash
+pql --vault /tmp/pql-scratch-vault <command>
+```
+
+Rebuild before auditing, or you test a stale artefact:
+
+```bash
+make build && cp ./bin/pql ~/.local/bin/pql
+```
 
 ## Procedure
 
-Work outside-in. Do not read pql's source until step 4 — the point is to
-experience the skill as a consumer, and knowing the implementation makes gaps
-invisible.
+Run the steps in order. Do not read pql's source before step 4 — knowing the
+implementation makes omissions invisible.
 
-### Step 1 — Read only the skill
-
-```bash
-pql skill show --pretty
-```
-
-That echoes what the *running binary* ships, which is the thing under test.
-Do not read `internal/skill/SKILL.md` from the repo — they can differ, and
-that difference is itself a finding.
-
-Note as you read: what you expect to be able to do, and anything you cannot
-tell from the text alone.
-
-### Step 2 — Verify every claim
-
-For each documented command, check it exists and matches its description:
+### 1. Read the shipped skill
 
 ```bash
-pql <command> --help
+pql skill show | python3 -c 'import json,sys; print(json.load(sys.stdin)["files"]["SKILL.md"])'
 ```
 
-Then diff the other direction — the surface against the skill:
+The raw output is one JSON-escaped string and is not readable as-is; that
+extraction is the only way to read it as prose.
+
+Read what the binary ships, not the repo file. Note what you expect to be able
+to do, and anything the text leaves ambiguous.
+
+### 2. Verify both directions
+
+Skill → CLI: every documented command, flag and flag *value* must exist and
+behave as described.
+
+CLI → skill: every real command must appear.
 
 ```bash
 pql --help
@@ -72,90 +71,97 @@ pql decisions --help
 pql plan --help
 ```
 
-Every command in the CLI that is absent from the skill is a finding. Every
-command in the skill that is absent from the CLI is a worse one. Check flags
-too, not just command names: a documented flag that does not exist wastes a
-round trip and teaches the agent to distrust the document.
+A documented thing that does not exist is the worst defect. A shipped thing
+that is undocumented is the second worst.
 
-### Step 3 — Run real work against a real vault
+### 3. Do real work using only the skill
 
-Verification catches lies; only use catches unusability. Attempt tasks a
-caller would actually bring, using **only** what the skill told you.
+Attempt tasks a caller would actually bring, using only what the skill told
+you. Record for each: did it work first time, and if not, what was missing.
 
-**Test against the scratch vault, never a live repo.** One command builds it:
+Cover, at minimum:
 
-```bash
-make scratch-vault
-```
+- A structural query needing the DSL, written from the skill's syntax notes
+  alone.
+- A ranked query, judged against what the skill led you to expect.
+- A multi-step planning task: find work in a given state, read one item's full
+  context, follow it to a decision record.
+- **A set-level cross-surface question** — for example, which decisions have no
+  tickets implementing them, or the largest cluster of open work under one
+  parent. These expose the most defects, because they need flags and fields the
+  skill tends not to mention.
+- A write path, since half the surface mutates state. Safe in the scratch vault.
+- Something the skill explicitly warns about, to check the warning is findable
+  and correct.
 
-That stands up a disposable vault under `/tmp` carrying both surfaces —
-markdown and `.base` files from `testdata/council-snapshot`, and this repo's
-real tickets and decisions replayed out of the committed `.pql/changelog/`.
-Real data, real shapes, and never stale, because it is rebuilt from the log
-of record rather than copied from a snapshot that drifts. Re-run the target
-to reset it.
+### 4. Read the source
 
-```bash
-pql --vault /tmp/pql-scratch-vault <command>
-```
+Confirm each finding and locate its fix. Also diff the shipped skill against
+`internal/skill/SKILL.md` — see shape G below.
 
-Because it is a copy, **every verb is fair game** — `ticket new`,
-`decisions sync`, `plan rebuild`, `pql init`, anything. That is the point:
-write paths are a large part of the skill's surface, and a procedure that
-can only exercise reads leaves half of it untested. Testing a write is
-legitimate; testing it somewhere someone depends on is not.
+### 5. Report
 
-A consumer repo is not a fallback for this. If you believe one is genuinely
-needed — scale is the usual argument, and it is weaker than it sounds, since
-the projection and filter flags behave the same at seventy tickets as at
-twelve hundred — get the owner's agreement first and stay read-only.
+Group by severity: **Wrong** (says something untrue) → **Missing** (exists,
+undocumented) → **Unusable** (documented, insufficient to act on) → **Bloat**
+(correct, not worth its context). Give the command run and the output seen for
+each, plus a concrete suggested edit. Rank by severity.
 
-Cover both surfaces and escalate in complexity. Suggested shape:
+State what you exercised and found clean. A report that only lists defects is
+indistinguishable from one that stopped looking.
 
-- **Simple retrieval** — list files under a folder; top tags; what links to a
-  given file.
-- **A structural question needing the DSL** — everything with a given
-  frontmatter type, sorted by a frontmatter date. Did the skill teach enough
-  syntax to write this without trial and error?
-- **A ranked question** — what is related to this file; what is this file
-  about. Does the result match what the skill led you to expect?
-- **A multi-step planning task** — find open work in a given state, read one
-  ticket's full context, follow its links to a decision record, and report
-  what implements that decision.
-- **A task with a known trap** — something the skill warns about, to check the
-  warning is both findable and correct.
+## Shapes to probe for
 
-Record for each: what you ran, whether it worked first time, and if not, what
-the skill should have said.
+Test for these deliberately. Each is a class, not an anecdote — expect
+instances the examples below do not name.
 
-### Step 4 — Only now, read the source
+**A. Reads that write.** Any command touching an index, cache or database
+mutates its target, however read-only it looks. Assume every verb writes until
+proven otherwise; isolate with `--vault` and `--db`, or work on a copy.
 
-With findings in hand, check `internal/skill/SKILL.md` and the CLI source to
-confirm each finding is real and to locate the fix. This is also where you
-catch skill-vs-binary drift from step 1.
+**B. Invalid input that returns empty instead of failing.** Probe every
+enum-valued flag with a wrong value. If an invalid filter returns an empty list
+at exit 0, it is indistinguishable from a genuine no-match, and any caller told
+"zero matches is success" will report absence that is not there. Also check
+whether the valid set is documented, or only discoverable by triggering an
+error.
 
-### Step 5 — Report
+**C. Degraded modes that look like answers.** A flag that falls back to a
+broader or emptier result set returns something plausible rather than failing.
+Compare its output against the unflagged call and against the naive baseline —
+if a "raw" mode returns the same count as listing everything, it is not
+answering the question.
 
-Group findings by severity:
+**D. Aborts that poison every command.** One malformed input can fail an entire
+index, making every unrelated command fail too. Feed a bad file and check
+whether the skill names a recovery path.
 
-- **Wrong** — the skill says something untrue. Highest severity: it causes
-  confidently incorrect action.
-- **Missing** — a capability exists and is undocumented. An agent cannot use
-  what it does not know about.
-- **Unusable** — documented but insufficient to act on.
-- **Bloat** — correct but not earning its context.
+**E. Claims derived from one observation.** A single probe yields a mechanism
+that looks right and generalises wrongly. For any claim about *why* something
+behaves as it does — ranking, weighting, matching — read the source rather than
+inferring from one output. Prose that is internally consistent can still be
+wrong, and verification will not catch it; only use will.
 
-For each, give the evidence (the command run, the output seen) and a concrete
-suggested edit. Do not fix the skill as part of this procedure unless asked —
-the report is the deliverable, so the maintainer decides what changes.
+**F. Guidance that inverts the tool's real shape.** Check the skill is not
+steering callers away from a capability that exists, or toward one that does
+not do what its name suggests.
+
+**G. Self-reports blind to their own drift.** A status or health command that
+compares an artefact against a copy embedded in the same binary cannot see that
+the source changed. Never accept such a report as proof. Verify across the
+boundary the tool cannot see — here, diff the shipped skill against the repo
+file directly.
+
+**H. Omissions that block whole task classes.** After step 3, ask which flags
+or fields you needed that the skill never named. Those omissions cost more than
+any inaccuracy, because they make a task look impossible.
 
 ## Rules
 
-- **Never fix and test in the same pass.** Reading the source to fix something
-  contaminates the outside-in perspective for everything after it.
-- **Prefer evidence to opinion.** "The skill does not mention `pql search`" is
-  a finding; "the tone could be friendlier" is not.
-- **Test the installed skill, not the repo file**, and treat a difference
-  between them as a finding in its own right.
-- **A zero-finding report is a valid outcome** — but it should say what was
-  exercised, or it is indistinguishable from not having looked.
+- Do not fix anything. Reading source to fix contaminates the outside-in view
+  for every finding after it. The report is the deliverable.
+- Do not test against a live repo. If one is genuinely unavoidable, get the
+  owner's agreement and stay read-only — but see shape A first, because
+  "read-only" verbs usually are not.
+- Evidence, not opinion. "The skill does not mention `--vault`" is a finding;
+  "the tone could be warmer" is not.
+- Report defects in this procedure alongside defects in the skill.
