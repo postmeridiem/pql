@@ -42,6 +42,69 @@ func TestBacklinks_MatchesByBasename(t *testing.T) {
 	}
 }
 
+// The form Obsidian writes for a wikilink outside the current folder: the full
+// vault path with no extension. Querying by the path every other command uses
+// and returns must find it (T-72). Before the fix this returned nothing, so a
+// caller obeying "zero matches means nothing matched" reported that a linked
+// file had no backlinks.
+func TestBacklinks_MatchesExtensionlessFullPath(t *testing.T) {
+	st := seedTestStore(t, "members/koskela/persona.md", "members/vaasa/persona.md")
+	st.DB().Exec(
+		`INSERT INTO links (source_path, target_path, alias, link_type, line)
+		 VALUES (?, ?, 'Vaasa', 'wiki', 12)`,
+		"members/koskela/persona.md", "members/vaasa/persona", // [[members/vaasa/persona|Vaasa]]
+	)
+
+	// Every spelling of the same file must give the same answer.
+	for _, query := range []string{
+		"members/vaasa/persona.md",
+		"members/vaasa/persona",
+	} {
+		got, err := Backlinks(context.Background(), st.DB(), BacklinksOpts{Path: query})
+		if err != nil {
+			t.Fatalf("Backlinks(%q): %v", query, err)
+		}
+		if len(got) != 1 || got[0].Path != "members/koskela/persona.md" {
+			t.Errorf("Backlinks(%q) = %#v, want the one wiki backlink", query, got)
+		}
+	}
+}
+
+func TestBacklinks_MatchesExtensionlessFullPathWithAnchor(t *testing.T) {
+	st := seedTestStore(t, "src.md", "docs/guide.md")
+	st.DB().Exec(
+		`INSERT INTO links (source_path, target_path, alias, link_type, line)
+		 VALUES (?, ?, NULL, 'wiki', 7)`,
+		"src.md", "docs/guide#installation",
+	)
+	got, err := Backlinks(context.Background(), st.DB(), BacklinksOpts{Path: "docs/guide.md"})
+	if err != nil {
+		t.Fatalf("Backlinks: %v", err)
+	}
+	if len(got) != 1 || got[0].Line != 7 {
+		t.Errorf("got %#v, want the anchored wiki backlink", got)
+	}
+}
+
+// A file at the vault root collapses all three spellings into one; the query
+// must not emit duplicate rows for it.
+func TestBacklinks_TopLevelFileDoesNotDuplicate(t *testing.T) {
+	st := seedTestStore(t, "src.md", "readme.md")
+	st.DB().Exec(
+		`INSERT INTO links (source_path, target_path, alias, link_type, line)
+		 VALUES (?, ?, NULL, 'wiki', 2)`,
+		"src.md", "readme",
+	)
+	got, err := Backlinks(context.Background(), st.DB(), BacklinksOpts{Path: "readme.md"})
+	if err != nil {
+		t.Fatalf("Backlinks: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("got %d rows, want exactly 1 — overlapping spellings must not double-count: %#v",
+			len(got), got)
+	}
+}
+
 func TestBacklinks_MatchesBasenameWithAnchor(t *testing.T) {
 	st := seedTestStore(t, "src.md", "members/vaasa/persona.md")
 	st.DB().Exec(

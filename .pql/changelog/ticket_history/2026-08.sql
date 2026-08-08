@@ -679,3 +679,81 @@ INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, chang
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JNM7W2X4857T6JQ5SSA4G', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.209', '2026-08-08 12:14:28.209', NULL, '2fb766b720f79dc7dbe68de845dd6abf', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JPSWKSACAV6AGKWDWQ5W0', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.209', '2026-08-08 12:14:28.209', NULL, '936926fabf72b3af21459514b9311228', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JXB8E7DNMENY6ZNWD09P0', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.210', '2026-08-08 12:14:28.210', NULL, '7ad5f66ba411cc230d7ecc69a214f894', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HQMM5Z82QGWFTSFGH0NM0', 'description', '`pql backlinks <vault-path>` returns `[]` for files that are genuinely linked,
+because it matches the link *as written* rather than resolving it to a file.
+
+Reproduced against `testdata/council-snapshot` (via `make scratch-vault`):
+
+```
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona.md
+[]
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona
+[{"path":"members/vaasa/persona.md","name":"persona","line":12,"via":"wiki"}]
+```
+
+`internal/query/primitives/backlinks.go:40` takes `nameFromPath(opts.Path)`,
+yielding the bare basename, which matches a wikilink written `[[persona]]` but
+never a path-shaped one. The natural query — the vault-relative path every other
+command accepts and every other command returns — is the one that fails.
+
+Why this ranks high despite being one function: the output contract says zero
+matches is success and should be reported as "nothing matched". A caller
+following that rule reports "nothing links to this file" about a file that is
+linked. A confident wrong answer is worse than an error, and it is reached by
+doing exactly what the documentation says.
+
+Note for whoever picks this up: the skill''s worked example used
+`members/vaasa/persona.md`, and nothing in the fixture links to vaasa at all, so
+the example returned `[]` correctly while appearing to demonstrate the command.
+A broken example that looks like it works is how this survived two audits. The
+example now shows both forms and the skill carries a caveat, but that caveat is
+a workaround; this ticket is the fix.
+
+Scope: resolve the query path to the set of link forms that can address it — at
+minimum vault-relative path, extensionless path, and bare basename — then match
+any of them. Anchors and relative prefixes are the same underlying problem and
+belong to Q-6; this is the narrower "the documented form must work" fix.
+
+Acceptance: `backlinks` returns the same rows for a file whether queried by
+vault-relative path, extensionless path, or basename. Regression test over a
+fixture holding both a wikilink and a markdown-link reference to one file.', '`pql backlinks <vault-path>` returns `[]` for files that are genuinely linked,
+because it matches the link *as written* rather than resolving it to a file.
+
+Reproduced against `testdata/council-snapshot` (via `make scratch-vault`):
+
+```
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona.md
+[]
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona
+[{"path":"members/vaasa/persona.md","name":"persona","line":12,"via":"wiki"}]
+```
+
+`internal/query/primitives/backlinks.go:40` takes `nameFromPath(opts.Path)`,
+yielding the bare basename, which matches a wikilink written `[[persona]]` but
+never a path-shaped one. The natural query — the vault-relative path every other
+command accepts and every other command returns — is the one that fails.
+
+Why this ranks high despite being one function: the output contract says zero
+matches is success and should be reported as "nothing matched". A caller
+following that rule reports "nothing links to this file" about a file that is
+linked. A confident wrong answer is worse than an error, and it is reached by
+doing exactly what the documentation says.
+
+Note for whoever picks this up: the skill''s worked example used
+`members/vaasa/persona.md`, and nothing in the fixture links to vaasa at all, so
+the example returned `[]` correctly while appearing to demonstrate the command.
+A broken example that looks like it works is how this survived two audits. The
+example now shows both forms and the skill carries a caveat, but that caveat is
+a workaround; this ticket is the fix.
+
+Scope: resolve the query path to the set of link forms that can address it — at
+minimum vault-relative path, extensionless path, and bare basename — then match
+any of them. Anchors and relative prefixes are the same underlying problem and
+belong to Q-6; this is the narrower "the documented form must work" fix.
+
+Acceptance: `backlinks` returns the same rows for a file whether queried by
+vault-relative path, extensionless path, or basename. Regression test over a
+fixture holding both a wikilink and a markdown-link reference to one file.
+
+Fixed 2026-08-08. The diagnosis in this ticket was close but not exact, and the correction is worth recording: backlinks already matched three forms — the path as given, the bare basename, and basename+anchor — and nameFromPath was doing its job. The missing form was the extensionless FULL path, which is what Obsidian writes for a wikilink outside the current folder. Confirmed with pql outlinks: the stored target was members/koskela/persona, matching none of the three. The fix builds the set of spellings that address a file (path, path minus extension, basename), dedupes it so a top-level file does not double-count, and matches each with and without an anchor. Regression tests cover the extensionless full path from both query spellings, the anchored variant, and the no-duplicate case. Still out of scope and still Q-6: a link that reaches the file by a relative prefix is a different string and will not match. The skill''s caveat was narrowed to say exactly that rather than deleted.', NULL, '2026-08-08 12:58:25', '2026-08-08 12:58:25.215', '2026-08-08 12:58:25.215', NULL, '9a425213a19a5546aa51eb76216a308e', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HQMM5Z82QGWFTSFGH0NM0', 'status', 'ready', 'done', NULL, '2026-08-08 12:58:32', '2026-08-08 12:58:32.388', '2026-08-08 12:58:32.388', NULL, '6463f9ef3c4e6686b235822a04712b6b', 2) ON CONFLICT(hash) DO NOTHING;

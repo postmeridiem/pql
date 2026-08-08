@@ -64,13 +64,25 @@ install: build ## Install ./bin/pql into $(INSTALL_DIR) and refresh its skill.
 install-dev: build ## Symlink ./bin/pql as $(INSTALL_DIR)/pql-dev (tracks rebuilds).
 	ln -sf $(abspath $(BIN_DIR)/pql) $(INSTALL_DIR)/pql-dev
 
+# Quiet by default: a per-package "ok" wall says nothing a count doesn't, and
+# buries the one line that matters when something breaks. On failure the failing
+# blocks are printed and the exit status propagates, so the pre-push gate is
+# unaffected.
+define run_tests
+@out=$$($(GO) test $(1) $(GO_PACKAGES) 2>&1); st=$$?; \
+if [ $$st -ne 0 ]; then echo "$$out" | grep -E -A 25 '^--- FAIL|^panic:|^# |^FAIL' || echo "$$out"; fi; \
+echo "$$out" | awk '/^--- PASS/{p++} /^--- FAIL/{f++} /^--- SKIP/{s++} \
+	END{printf "%d passed, %d failed, %d skipped\n", p+0, f+0, s+0}'; \
+exit $$st
+endef
+
 .PHONY: test
-test: ## Unit tests, fast.
-	$(GO) test $(GO_PACKAGES)
+test: ## Unit tests, fast. Failures and a count only.
+	$(call run_tests,-v)
 
 .PHONY: test-race
-test-race: ## Unit tests with the race detector.
-	$(GO) test -race $(GO_PACKAGES)
+test-race: ## Unit tests with the race detector. Failures and a count only.
+	$(call run_tests,-race -v)
 
 .PHONY: test-integration
 test-integration: build ## Integration tests (binary + fixture vaults). Tag: integration.

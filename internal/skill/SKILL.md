@@ -147,7 +147,7 @@ It is often the most useful part: it tells you *how* a result relates.
 |---|---|
 | `pql files [glob]` | Indexed files, optionally glob-filtered |
 | `pql tags [--sort count]` | Distinct tags with counts |
-| `pql backlinks <target>` | Files linking **to** a target. Matches the link *as written*, so a wikilink `[[persona]]` is found by `backlinks members/x/persona` but **not** by the full path with `.md`. Try both forms before concluding nothing links to a file |
+| `pql backlinks <path>` | Files linking **to** a path. Accepts any spelling of the file — full path, extensionless, or bare basename — and matches links written in any of them, with or without a `#anchor` |
 | `pql outlinks <path>` | Links **from** a file, in document order |
 | `pql meta <path>` | One file's frontmatter, tags, outlinks and headings |
 | `pql schema` | Inferred frontmatter schema across the vault |
@@ -157,12 +157,14 @@ It is often the most useful part: it tells you *how* a result relates.
 pql files 'sessions/*'          # note: * crosses /, so this is recursive
 pql tags --sort count --limit 20
 pql meta members/vaasa/persona.md --pretty
-pql backlinks members/vaasa/persona      # extensionless: matches [[persona]]
-pql backlinks members/vaasa/persona.md   # path form: matches path-shaped links
+pql backlinks members/koskela/persona.md
 ```
 
-A `[]` from `backlinks` means "no link written in that form", which is not the
-same as "nothing links here" — see the caveat in the table above.
+`backlinks` compares link *spellings*, it does not resolve them. The three ways
+a file is normally addressed all work, but a link that reaches it by a relative
+prefix (`../members/koskela/persona`) is a different string and will not match.
+So `[]` means "no link written in a spelling I recognise" — strong evidence, not
+proof.
 
 ## The DSL
 

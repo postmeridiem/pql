@@ -1494,3 +1494,83 @@ INSERT INTO tickets (record_id, type, parent_record_id, title, description, stat
 INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JNM7W2X4857T6JQ5SSA4G', 'task', '06FY2HM1XJV12S25YK3EHRV32C', 'decisions show should batch ids like ticket show', 'ticket show takes comma-batched ids and returns an array; decisions show does not, and fails with exit 66 ''decision D-1,D-2 not found''. That asymmetry is invisible in the docs and turns one question into N calls: answering ''which decisions have nothing implementing them'' via the documented route is 41 sequential decisions show --with-tickets calls, one per record. The two-call workaround exists but needs ticket list --decision plus the field name decision_ref, both of which were undocumented until this audit. Making decisions show accept comma-batched ids mirrors an existing pattern, needs no new concepts, and collapses the common cross-surface question to one call. Acceptance: decisions show D-1,D-2 returns a two-element array, and --with-tickets composes with the batch form.', 'ready', 'medium', NULL, NULL, NULL, '2026-08-08 12:13:17.247', '2026-08-08 12:14:28.209', NULL, 'a292bc03401f92f8e736ef90568039bc', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
 INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JXB8E7DNMENY6ZNWD09P0', 'bug', '06FY2HM1XJV12S25YK3EHRV32C', 'pqlignore is documented as a vault convention but is not read by default', 'CLAUDE.md calls .pqlignore one of the three vault-level conventions, alongside .pql/config.yaml and .pql/. In practice a .pqlignore at the vault root does nothing: ignore_files defaults to [.gitignore] (internal/config/config.go, and docs/pqlignore.md states the default plainly), so the file is inert until it is listed there. Verified on a clean vault with no config: a .pqlignore naming the offending file left indexing still aborting at exit 70; exclude: in config fixed it immediately. The docs are internally consistent — pqlignore.md does say the default is [.gitignore] — but the convention framing everywhere else implies the file works on its own, and pql init ships the prerequisite only as a commented-out example. Either make .pqlignore read by default when present, which matches the name and the framing, or stop calling it a convention and document it as opt-in. The first is the smaller surprise for a user who creates the file the docs are named after.', 'ready', 'medium', NULL, NULL, NULL, '2026-08-08 12:14:20.483', '2026-08-08 12:14:28.209', NULL, 'd696b3cd05578b693f9f7338ad2f448d', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
 INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JPSWKSACAV6AGKWDWQ5W0', 'task', '06FY2HM1XJV12S25YK3EHRV32C', 'ticket board needs a status filter', 'ticket board takes only --team. On this repo 59 of 72 tickets are done, so roughly 82 percent of a 10 KB payload is a column nobody asked for, and there is no way to exclude it. The row shape is otherwise the best in the tool — id, type, title, status, priority, no descriptions. Two additions would fix it: a status filter to drop terminal columns, and honouring --fields the way the list verbs do. Also worth folding in: board columns carry the status name but not the display label from ticket statuslist, so a UI rendering columns has to join the two commands to get a human-readable header.', 'ready', 'low', NULL, NULL, NULL, '2026-08-08 12:13:26.885', '2026-08-08 12:14:28.209', NULL, 'ff559d39ebffe4a3edbf1ffb1a56c8b0', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HQMM5Z82QGWFTSFGH0NM0', 'bug', '06FY2HM1XJV12S25YK3EHRV32C', 'backlinks misses path-shaped queries for wikilink targets', '`pql backlinks <vault-path>` returns `[]` for files that are genuinely linked,
+because it matches the link *as written* rather than resolving it to a file.
+
+Reproduced against `testdata/council-snapshot` (via `make scratch-vault`):
+
+```
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona.md
+[]
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona
+[{"path":"members/vaasa/persona.md","name":"persona","line":12,"via":"wiki"}]
+```
+
+`internal/query/primitives/backlinks.go:40` takes `nameFromPath(opts.Path)`,
+yielding the bare basename, which matches a wikilink written `[[persona]]` but
+never a path-shaped one. The natural query — the vault-relative path every other
+command accepts and every other command returns — is the one that fails.
+
+Why this ranks high despite being one function: the output contract says zero
+matches is success and should be reported as "nothing matched". A caller
+following that rule reports "nothing links to this file" about a file that is
+linked. A confident wrong answer is worse than an error, and it is reached by
+doing exactly what the documentation says.
+
+Note for whoever picks this up: the skill''s worked example used
+`members/vaasa/persona.md`, and nothing in the fixture links to vaasa at all, so
+the example returned `[]` correctly while appearing to demonstrate the command.
+A broken example that looks like it works is how this survived two audits. The
+example now shows both forms and the skill carries a caveat, but that caveat is
+a workaround; this ticket is the fix.
+
+Scope: resolve the query path to the set of link forms that can address it — at
+minimum vault-relative path, extensionless path, and bare basename — then match
+any of them. Anchors and relative prefixes are the same underlying problem and
+belong to Q-6; this is the narrower "the documented form must work" fix.
+
+Acceptance: `backlinks` returns the same rows for a file whether queried by
+vault-relative path, extensionless path, or basename. Regression test over a
+fixture holding both a wikilink and a markdown-link reference to one file.
+
+Fixed 2026-08-08. The diagnosis in this ticket was close but not exact, and the correction is worth recording: backlinks already matched three forms — the path as given, the bare basename, and basename+anchor — and nameFromPath was doing its job. The missing form was the extensionless FULL path, which is what Obsidian writes for a wikilink outside the current folder. Confirmed with pql outlinks: the stored target was members/koskela/persona, matching none of the three. The fix builds the set of spellings that address a file (path, path minus extension, basename), dedupes it so a top-level file does not double-count, and matches each with and without an anchor. Regression tests cover the extensionless full path from both query spellings, the anchored variant, and the no-duplicate case. Still out of scope and still Q-6: a link that reaches the file by a relative prefix is a different string and will not match. The skill''s caveat was narrowed to say exactly that rather than deleted.', 'ready', 'high', NULL, NULL, NULL, '2026-08-08 12:09:11.585', '2026-08-08 12:58:25.214', NULL, '3238932466b2247cbd89a1e812b13dc7', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HQMM5Z82QGWFTSFGH0NM0', 'bug', '06FY2HM1XJV12S25YK3EHRV32C', 'backlinks misses path-shaped queries for wikilink targets', '`pql backlinks <vault-path>` returns `[]` for files that are genuinely linked,
+because it matches the link *as written* rather than resolving it to a file.
+
+Reproduced against `testdata/council-snapshot` (via `make scratch-vault`):
+
+```
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona.md
+[]
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona
+[{"path":"members/vaasa/persona.md","name":"persona","line":12,"via":"wiki"}]
+```
+
+`internal/query/primitives/backlinks.go:40` takes `nameFromPath(opts.Path)`,
+yielding the bare basename, which matches a wikilink written `[[persona]]` but
+never a path-shaped one. The natural query — the vault-relative path every other
+command accepts and every other command returns — is the one that fails.
+
+Why this ranks high despite being one function: the output contract says zero
+matches is success and should be reported as "nothing matched". A caller
+following that rule reports "nothing links to this file" about a file that is
+linked. A confident wrong answer is worse than an error, and it is reached by
+doing exactly what the documentation says.
+
+Note for whoever picks this up: the skill''s worked example used
+`members/vaasa/persona.md`, and nothing in the fixture links to vaasa at all, so
+the example returned `[]` correctly while appearing to demonstrate the command.
+A broken example that looks like it works is how this survived two audits. The
+example now shows both forms and the skill carries a caveat, but that caveat is
+a workaround; this ticket is the fix.
+
+Scope: resolve the query path to the set of link forms that can address it — at
+minimum vault-relative path, extensionless path, and bare basename — then match
+any of them. Anchors and relative prefixes are the same underlying problem and
+belong to Q-6; this is the narrower "the documented form must work" fix.
+
+Acceptance: `backlinks` returns the same rows for a file whether queried by
+vault-relative path, extensionless path, or basename. Regression test over a
+fixture holding both a wikilink and a markdown-link reference to one file.
+
+Fixed 2026-08-08. The diagnosis in this ticket was close but not exact, and the correction is worth recording: backlinks already matched three forms — the path as given, the bare basename, and basename+anchor — and nameFromPath was doing its job. The missing form was the extensionless FULL path, which is what Obsidian writes for a wikilink outside the current folder. Confirmed with pql outlinks: the stored target was members/koskela/persona, matching none of the three. The fix builds the set of spellings that address a file (path, path minus extension, basename), dedupes it so a top-level file does not double-count, and matches each with and without an anchor. Regression tests cover the extensionless full path from both query spellings, the anchored variant, and the no-duplicate case. Still out of scope and still Q-6: a link that reaches the file by a relative prefix is a different string and will not match. The skill''s caveat was narrowed to say exactly that rather than deleted.', 'done', 'high', NULL, NULL, NULL, '2026-08-08 12:09:11.585', '2026-08-08 12:58:32.388', NULL, '384afc2419b8671b76160f1463ac8958', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
