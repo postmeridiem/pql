@@ -98,9 +98,9 @@ pql completion bash > ~/.bashrc.d/pql     # shell completions
 
 - **stdout:** JSON array (default), `--jsonl` for streaming, `--pretty` for humans, `--limit N` to cap.
 - **stderr:** JSON diagnostics.
-- **Exit codes:** `0` = success, `2` = zero matches (not an error), `64` = bad usage, `65` = parse error, `66` = vault not found, `69` = unavailable, `70` = internal error.
+- **Exit codes:** `0` = success, `64` = bad usage, `65` = parse error, `66` = vault not found, `69` = unavailable, `70` = internal error.
 
-Agent-friendly by design: exit code 2 means "ran cleanly, nothing matched" — not a failure.
+Agent-friendly by design: zero matches is success — exit `0` with an empty `[]`, never a distinct code, because callers treat any non-zero exit as failure.
 
 ## Claude Code integration
 
@@ -122,7 +122,7 @@ Add to your project's `.claude/settings.json`:
 
 pql indexes your vault's frontmatter, wikilinks, tags, and headings into a local SQLite database at `<vault>/.pql/index.db`. This index is a pure cache — delete it anytime, it rebuilds from the vault on next run.
 
-Planning state (decisions, tickets) lives in a separate `<vault>/.pql/pql.db` with real migrations, because that data can't be regenerated.
+Planning state (decisions, tickets) lives in a separate `<vault>/.pql/pql.db`, which is user-authored rather than derived. It carries forward migrations, and if one can't reach it, it is regenerated from `.pql/changelog/` — the git-tracked log of record, and the artefact that genuinely can't be rebuilt from anything else.
 
 The ranking layer combines five signals (link overlap, tag overlap, path proximity, recency, centrality) with intent-specific weight profiles to produce ranked results with full provenance.
 
