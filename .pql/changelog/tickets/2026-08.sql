@@ -1750,3 +1750,61 @@ Open questions for the implementer:
   left describing a list-only flag.
 
 Delivered 2026-08-08 in 2.1.0. Answers to the three open questions the ticket left the implementer. (1) --fields projects the top level only. The join-trees from --with-context, --with-blockers, --with-children and --tree are all-or-nothing: naming a key inside a nested tree needs a path syntax --fields does not have, and inventing one would be a second projection language for the rarer case. Stated in both verbs'' help text as the ticket asked. (2) Batched show projects per element via render.Project over the tree slice; a single id keeps its object shape, several render an array. Shared helper renderShowRecords in internal/cli/projection.go, used by both verbs. (3) D-27 amended, not left describing a list-only flag. The amendment separates what the record got right from what it got wrong: the default is still whole records, which is what D-27 was actually reasoning about; making the flag list-only was the error, because the boundary is not guessable. --oneline and --full stay list-only and remain unknown flags on show, exit 64 — --oneline would turn a record-level verb into an index, and --full has nothing to restore where nothing is dropped. Found a real bug doing this, filed nowhere because it is fixed in the same change: ticket show --with-children returned nothing, ever, and so did the children half of --with-context. repo.ChildrenOf is keyed on parent_record_id but the CLI passed it the friendly T-NNN, so the query matched no row from the moment D-26 split the two identifiers. Silent, because an epic with no children is a legitimate answer. It surfaced only because projecting children on T-71, which has seven, came back empty. Guarded by TestIntegration_TicketShow_ChildrenJoinResolves, which checks both flags populate and that a genuine leaf still reports none, so the fix cannot pass by always populating.', 'done', 'medium', NULL, NULL, 'D-27', '2026-08-07 13:35:08.477', '2026-08-08 15:25:58.655', NULL, '0b4d360df4c4c6bc1e8269cdf2419be3', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HM1XJV12S25YK3EHRV32C', 'epic', NULL, 'close the surface defects found by the skill audit', 'Raised 2026-08-08 by the first two runs of the `pql-skill-auditor` agent
+against 2.0.1. The audit exercises the embedded skill the way a consuming agent
+does — twelve standardised retrievals plus exploration — and reports where the
+documentation leaves that agent stuck or wrong.
+
+Most of what it found was documentation, and is fixed. These are the residue:
+defects in pql''s own surface that no amount of skill rewriting can paper over,
+because the command genuinely does not do what a caller needs.
+
+Three shapes recur across the children, worth naming because they suggest
+where the next defects will be:
+
+1. **Output that is correct but not workable.** The command succeeds and the
+   data is right, yet the caller cannot act on it — a field missing from the
+   default projection, a payload dominated by provenance, an answer that takes
+   one call per record.
+2. **Values that cannot be fed back in.** Several commands return link targets,
+   paths or anchors in a form no other command accepts, so following a result
+   to its source requires the caller to guess a transformation.
+3. **Silent wrong answers.** A query that returns `[]` for a reason unrelated to
+   the data, against a documented contract that says zero matches means nothing
+   matched.
+
+Related records rather than duplicates: the link-shape family is the user-facing
+face of Q-6 (outlink target normalisation); the DSL grammar gap is T-45; and the
+absence of any keyword or ranked surface over planning data is what T-62 exists
+to design.
+
+Epic closed 2026-08-08, all seven children delivered in 2.1.0. What the audit bought, in order of severity. Two silent wrong answers: backlinks missed the extensionless full path Obsidian writes for cross-folder wikilinks, so querying a file by the spelling every other command returns reported no backlinks (T-72); and context emitted raw link text as result paths, so its output could not be fed to any other command and one governance file returned six same-document heading anchors ranked against each other (T-73). Two contract breaches: doctor emitted index: null against the omitted-not-null rule, in the one command you run when something is already wrong (T-75), and .pqlignore was documented as a vault convention while being inert without a config edit (T-78). Three ergonomics defects that each cost round trips: ranked results carried five signal objects per row with no way to trim, 16x payload for the answer (T-74); decisions show would not batch, making a cross-surface question 41 calls (T-76); ticket board had no way to drop terminal columns, 82 percent of a mature board (T-77). Plus T-67 from the same class, filed a day earlier from live sessions. Two things worth carrying forward. First, an eighth defect fell out of fixing the seventh: ticket show --with-children had returned nothing since D-26 split record_id from ticket_id, silent because an empty children list is a legitimate answer, and it surfaced only because --fields let me ask for a key I knew had seven entries. Second, the pattern across all of these is that none were reachable from inside. Every one needed a consumer with no repo knowledge using the documented surface and reporting what actually happened. That is the argument for keeping the audit on the release-mint hook rather than running it ad hoc. Also corrected in this cycle: I refuted the first audit''s finding on context heading anchors and was wrong; the second audit proved it. The skill no longer claims anchors are a feature.', 'in_progress', 'high', NULL, NULL, NULL, '2026-08-08 12:08:42.220', '2026-08-08 15:26:37.418', NULL, '4b6fe9d4faf8434685995fb23a136f58', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HM1XJV12S25YK3EHRV32C', 'epic', NULL, 'close the surface defects found by the skill audit', 'Raised 2026-08-08 by the first two runs of the `pql-skill-auditor` agent
+against 2.0.1. The audit exercises the embedded skill the way a consuming agent
+does — twelve standardised retrievals plus exploration — and reports where the
+documentation leaves that agent stuck or wrong.
+
+Most of what it found was documentation, and is fixed. These are the residue:
+defects in pql''s own surface that no amount of skill rewriting can paper over,
+because the command genuinely does not do what a caller needs.
+
+Three shapes recur across the children, worth naming because they suggest
+where the next defects will be:
+
+1. **Output that is correct but not workable.** The command succeeds and the
+   data is right, yet the caller cannot act on it — a field missing from the
+   default projection, a payload dominated by provenance, an answer that takes
+   one call per record.
+2. **Values that cannot be fed back in.** Several commands return link targets,
+   paths or anchors in a form no other command accepts, so following a result
+   to its source requires the caller to guess a transformation.
+3. **Silent wrong answers.** A query that returns `[]` for a reason unrelated to
+   the data, against a documented contract that says zero matches means nothing
+   matched.
+
+Related records rather than duplicates: the link-shape family is the user-facing
+face of Q-6 (outlink target normalisation); the DSL grammar gap is T-45; and the
+absence of any keyword or ranked surface over planning data is what T-62 exists
+to design.
+
+Epic closed 2026-08-08, all seven children delivered in 2.1.0. What the audit bought, in order of severity. Two silent wrong answers: backlinks missed the extensionless full path Obsidian writes for cross-folder wikilinks, so querying a file by the spelling every other command returns reported no backlinks (T-72); and context emitted raw link text as result paths, so its output could not be fed to any other command and one governance file returned six same-document heading anchors ranked against each other (T-73). Two contract breaches: doctor emitted index: null against the omitted-not-null rule, in the one command you run when something is already wrong (T-75), and .pqlignore was documented as a vault convention while being inert without a config edit (T-78). Three ergonomics defects that each cost round trips: ranked results carried five signal objects per row with no way to trim, 16x payload for the answer (T-74); decisions show would not batch, making a cross-surface question 41 calls (T-76); ticket board had no way to drop terminal columns, 82 percent of a mature board (T-77). Plus T-67 from the same class, filed a day earlier from live sessions. Two things worth carrying forward. First, an eighth defect fell out of fixing the seventh: ticket show --with-children had returned nothing since D-26 split record_id from ticket_id, silent because an empty children list is a legitimate answer, and it surfaced only because --fields let me ask for a key I knew had seven entries. Second, the pattern across all of these is that none were reachable from inside. Every one needed a consumer with no repo knowledge using the documented surface and reporting what actually happened. That is the argument for keeping the audit on the release-mint hook rather than running it ad hoc. Also corrected in this cycle: I refuted the first audit''s finding on context heading anchors and was wrong; the second audit proved it. The skill no longer claims anchors are a feature.', 'done', 'high', NULL, NULL, NULL, '2026-08-08 12:08:42.220', '2026-08-08 15:26:37.435', NULL, 'a7bc0169735a19608d42a6f71aad8ff8', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
