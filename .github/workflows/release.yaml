@@ -42,8 +42,13 @@ jobs:
           check-latest: true
           cache: true
       - name: install tools
+        # Both tools, pinned to the same versions ci.yaml uses: ci/lint.sh runs
+        # golangci-lint, `goreleaser check` and govulncheck, so installing only
+        # the first fails the job on a missing binary rather than on a real
+        # finding.
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+          go install github.com/goreleaser/goreleaser/v2@v2.16.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: ./ci/lint.sh
 
