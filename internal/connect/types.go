@@ -27,10 +27,16 @@ type Connection struct {
 
 // Enriched wraps a query result path with its ranking signals and
 // neighborhood connections.
+//
+// Rank always fills Signals — one Contribution per configured signal, zeros
+// included — so an empty Signals here means a caller trimmed it, not that the
+// ranker produced nothing. That is why it is omitempty: the CLI clears it for
+// the default projection (T-74), and a `"signals": null` key would read as an
+// absent ranking rather than an omitted explanation.
 type Enriched struct {
 	Path        string         `json:"path"`
 	Score       float64        `json:"score"`
-	Signals     []Contribution `json:"signals"`
+	Signals     []Contribution `json:"signals,omitempty"`
 	Connections []Connection   `json:"connections,omitempty"`
 }
 

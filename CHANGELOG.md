@@ -11,9 +11,30 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
-## [2.0.1]
+## [2.1.0]
+
+Everything here came out of one exercise: an agent was pointed at the skill and
+told to use pql as a consumer would, with no repo knowledge. It found the skill
+had never documented the ranked surface at all — and then, using it, walked into
+four defects nobody had hit from the inside.
 
 ### Changed
+
+- **`search`, `related` and `context` no longer return `signals[]` and
+  `connections[]` by default** (D-27 amended, T-74). Measured on one file,
+  `pql related` spent 1438 bytes to deliver 88 bytes of paths — a 16× overhead,
+  most of it five signal objects per result carrying zeros. At `--limit 20` that
+  is most of an agent's tool-output budget spent on provenance nobody asked for.
+
+  The provenance is what makes a ranking accountable and it has not gone
+  anywhere; it is now one flag away rather than mandatory. The same
+  `--fields`/`--oneline`/`--full` trio the list verbs got in 1.11.0 now works
+  here: `--full` (or `--fields '*'`) restores everything, `--fields path,signals`
+  picks an exact key set, and `--oneline` emits a plain `path<TAB>score` index.
+
+  **Compatibility:** a caller that reads `signals` or `connections` from
+  `search`/`related`/`context` output must pass `--full` or name the key in
+  `--fields`.
 
 - **The embedded skill is rewritten as a manual rather than an inventory.**
   It had grown by accretion — each feature appended a table row and a cookbook
@@ -39,6 +60,30 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
   Fixed alongside: examples no longer use `&&` chaining or `$(…)` command
   substitution, both of which fail under the prefix allowlists consuming
   projects use.
+
+### Fixed
+
+- **`pql backlinks <path>` missed wikilink targets written as an extensionless
+  path** (T-72). Obsidian writes `[[members/x/persona]]` for a link outside the
+  current folder, but `backlinks` only tried the path as given, the bare
+  basename, and their anchored forms — not the extensionless *full* path. So
+  querying a file by the exact spelling every other pql command returns matched
+  nothing, and a caller obeying "zero matches means nothing matched" concluded a
+  well-linked file had no backlinks. Silent and wrong, which is the worst shape
+  for a bug in a tool agents trust.
+
+- **`pql context <path>` returned paths no other command accepts** (T-73). It
+  selected `links.target_path` straight into its results, and that column holds
+  link text as written — so results came back extensionless, anchored, or as
+  bare `#heading` anchors that name no file at all. Feeding one to `pql meta`
+  got "file not indexed"; on one governance document it returned six
+  same-document `#d-NN` headings ranked against each other as if they were
+  related files. Outbound targets now resolve against the `files` table, so
+  every result is a real indexed path, and bare anchors are dropped.
+
+  Not fixed, and worth knowing: a target written with a relative prefix
+  (`../questions/architecture.md`) still fails to resolve. It is dropped rather
+  than emitted broken. Proper link normalisation at index time is Q-6.
 
 ## [2.0.0] - 2026-08-08
 

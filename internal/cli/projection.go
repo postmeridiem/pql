@@ -10,34 +10,56 @@ import (
 	"github.com/postmeridiem/pql/internal/diag"
 )
 
-// listProjection carries the projection flags shared by the planning
-// list verbs (D-27): --fields for an exact column set, --oneline for a
-// plain-text index, and --full on verbs whose default projection drops
-// a heavy column.
-type listProjection struct {
+// projection carries the flags that let a caller trim what a multi-row verb
+// emits (D-27): --fields for an exact key set, --oneline for a plain-text
+// index, and --full on verbs whose default projection drops a heavy key.
+//
+// Two families use it. The planning list verbs drop `description`; the ranked
+// verbs (search, related, context) drop `signals` and `connections`. Same
+// principle either way — the default is the answer, and the bulk is the extra.
+type projection struct {
 	fields  string
 	oneline bool
 	full    bool
 }
 
-// addListProjectionFlags registers the shared projection flags.
-// withFull is set only by verbs that trim their default projection
-// (today: ticket list, which drops description) — verbs whose rows are
-// already light get --fields/--oneline without a meaningless --full.
-func addListProjectionFlags(cmd *cobra.Command, withFull bool) *listProjection {
-	p := &listProjection{}
-	cmd.Flags().StringVar(&p.fields, "fields", "", "project rows to these comma-separated fields (e.g. id,status,title); '*' selects all")
-	cmd.Flags().BoolVar(&p.oneline, "oneline", false, "plain-text mode: one id<TAB>status<TAB>title line per row, no JSON")
-	if withFull {
-		cmd.Flags().BoolVar(&p.full, "full", false, "emit whole rows, including the description the default projection omits")
+// projectionFlags is the per-verb wording of the shared flags. Only the help
+// text varies; the behaviour is identical everywhere.
+type projectionFlags struct {
+	// Example is a plausible --fields value for this verb, e.g. "id,status,title".
+	Example string
+	// Oneline is the row shape --oneline emits, e.g. "id<TAB>status<TAB>title".
+	Oneline string
+	// Full is the help for --full. Empty omits the flag: a verb whose default
+	// projection drops nothing has nothing to opt back into, and a --full that
+	// means "same as without it" is a flag that lies.
+	Full string
+}
+
+// addProjectionFlags registers the shared projection flags on cmd.
+func addProjectionFlags(cmd *cobra.Command, f projectionFlags) *projection {
+	p := &projection{}
+	cmd.Flags().StringVar(&p.fields, "fields", "",
+		"project rows to these comma-separated fields (e.g. "+f.Example+"); '*' selects all")
+	cmd.Flags().BoolVar(&p.oneline, "oneline", false,
+		"plain-text mode: one "+f.Oneline+" line per row, no JSON")
+	if f.Full != "" {
+		cmd.Flags().BoolVar(&p.full, "full", false, f.Full)
 	}
 	return p
 }
 
 // wantsFullRows reports whether the caller opted back into whole rows
 // (--full, or its --fields '*' spelling).
-func (p *listProjection) wantsFullRows() bool {
+func (p *projection) wantsFullRows() bool {
 	return p.full || p.fields == "*"
+}
+
+// wantsDefaultProjection reports whether the verb should apply its default
+// trim. Naming a dropped key in --fields projects from whole rows, so an
+// explicit --fields always overrides the default.
+func (p *projection) wantsDefaultProjection() bool {
+	return !p.wantsFullRows() && p.fields == ""
 }
 
 // renderProjectedList renders list rows honouring the projection flags.
@@ -45,7 +67,7 @@ func (p *listProjection) wantsFullRows() bool {
 // mode, like `git log --oneline` — and composes only with --limit.
 // --fields narrows the JSON rows through render.Project, preserving the
 // requested key order. Contradictory flag mixes exit Usage.
-func renderProjectedList[T any](cmd *cobra.Command, rows []T, p *listProjection, line func(T) string) error {
+func renderProjectedList[T any](cmd *cobra.Command, rows []T, p *projection, line func(T) string) error {
 	rOpts, err := renderOptsFromFlags(cmd)
 	if err != nil {
 		return &exitError{code: diag.Usage, msg: err.Error()}

@@ -96,9 +96,10 @@ These work on every command:
 ## Ranked answers
 
 Three commands return **ranked** results rather than exact matches. All
-three share one output shape — `path`, `score`, and a `signals[]` array
-showing each signal's raw value, weight and contribution — so a result is
-always accountable: you can see *why* it ranked where it did.
+three share one output shape: `path` and `score` by default, and — behind
+`--full` — a `signals[]` array showing each signal's raw value, weight and
+contribution, plus a `connections[]` array. So a result is always
+accountable: you can see *why* it ranked where it did, when you ask.
 
 | Command | Answers |
 |---|---|
@@ -113,8 +114,8 @@ They differ in how they weight the same signals: `related` on link overlap
 Those weights only bite where the signal exists. In a link-sparse vault
 centrality is 0 on every candidate, so **recency decides** and a vague query
 returns the most recently modified files rather than the most central ones. If
-results look arbitrary, check `signals[]` — a score exactly equal to the recency
-weight means nothing else contributed.
+results look arbitrary, run the same command with `--full` and read `signals[]`
+— a score exactly equal to the recency weight means nothing else contributed.
 
 **`pql search` is a substring filter, not a search engine.** Read this
 before using it. The query is matched as **one literal lowercase substring**
@@ -137,9 +138,23 @@ topic is absent** — never report it as such.
 unranked" — it drops candidate selection too, degrading to a plain file
 list. Use it to confirm the index is populated, not to get unranked results.
 
-Enriched output also carries a `connections[]` array — `{path, relation}`
-with `relation` of `inlink` or `outlink` — alongside the score and signals.
-It is often the most useful part: it tells you *how* a result relates.
+### Asking for the provenance
+
+The default is the answer, not its derivation — five signal objects per result
+is most of the payload and usually not what you asked for. Widen it when you
+need to:
+
+```bash
+pql related notes/topic.md                       # path + score
+pql related notes/topic.md --full                # + signals[] and connections[]
+pql related notes/topic.md --fields path,signals # exactly these keys
+pql related notes/topic.md --oneline             # path<TAB>score, plain text
+```
+
+`connections[]` (under `--full`) is `{path, relation}` with `relation` of
+`inlink` or `outlink`. It is often the most useful part: it tells you *how* a
+result relates. Naming a key in `--fields` always returns it, so
+`--fields path,connections` gets that alone.
 
 ## Exact structure
 
@@ -321,8 +336,8 @@ The changelog carries a format version. An older one replays with a loud
   --build-info`, `watch status`, `ticket new`). Do not write one parser assuming
   an array. `--jsonl` for one object per line, `--pretty` for humans, `--limit N`
   to cap. Two surfaces opt out of JSON deliberately: `ticket new --id-only`
-  prints a bare id, and `--oneline` on the list verbs prints
-  `id<TAB>status<TAB>title`.
+  prints a bare id, and `--oneline` prints `id<TAB>status<TAB>title` on the list
+  verbs, `path<TAB>score` on the ranked ones.
 - **stderr:** JSON diagnostics, one per line. Codes come in two shapes:
   `pql.<phase>.<kind>` for index, parse, eval and plan problems
   (`pql.parse.unexpected_token`), and `cli.error` / `cli.exit` for flag and
@@ -348,12 +363,18 @@ with no parent has no `parent_id` key, and a decision with no tickets has no
 
 ## Projection
 
-The list verbs (`ticket list`, `decisions list`) take `--fields id,status,title`
-to return only those keys in that order, `--fields '*'` for all of them, and
-`--oneline` for a plain-text index. `ticket list` omits `description` by default
-because it dominates the payload; `--full` opts back in. Record-level commands
-like `ticket show` always return whole records — projection flags do not apply
-there, and exit `64` if you pass one.
+`--fields a,b,c` returns only those keys in that order, `--fields '*'` returns
+all of them, and `--oneline` gives a plain-text index. They work on the list
+verbs (`ticket list`, `decisions list`) and on the ranked verbs (`search`,
+`related`, `context`).
+
+Two verbs trim their default output because one key dominates the payload:
+`ticket list` omits `description`, and the ranked verbs omit `signals[]` and
+`connections[]`. `--full` opts back in on both, and naming the key in
+`--fields` always returns it.
+
+Record-level commands like `ticket show` always return whole records —
+projection flags do not apply there, and exit `64` if you pass one.
 
 Valid field names, since guessing them costs a round trip:
 
@@ -362,6 +383,8 @@ Valid field names, since guessing them costs a round trip:
   `updated_at`. Note `decision_ref`, not `decision_id`.
 - **decisions** — `id`, `type`, `domain`, `title`, `status`, `date`,
   `file_path`, `synced_at`.
+- **ranked results** — `path`, `score`, `signals`, `connections`. Under
+  `--flat-search` there is no ranking, so `path` is the only valid name.
 
 An unknown name exits `64` and prints the valid set, so the error is a usable
 lookup if you forget.

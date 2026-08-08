@@ -325,7 +325,7 @@ func newTicketNewCmd() *cobra.Command {
 func newTicketListCmd() *cobra.Command {
 	var statusFlag, teamFlag, assignedFlag, decisionFlag, labelFlag, underFlag string
 	var leafFlag, unblockedFlag bool
-	var proj *listProjection
+	var proj *projection
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tickets from pql.db",
@@ -376,7 +376,7 @@ whole records.`,
 			// Default projection: drop description (D-27). Explicit
 			// --fields projects from whole rows, so a caller asking for
 			// description by name still gets it.
-			if !proj.wantsFullRows() && proj.fields == "" {
+			if proj.wantsDefaultProjection() {
 				for i := range tks {
 					tks[i].Description = nil
 				}
@@ -394,7 +394,11 @@ whole records.`,
 	cmd.Flags().StringVar(&underFlag, "under", "", "restrict to recursive descendants of this ticket")
 	cmd.Flags().BoolVar(&leafFlag, "leaf", false, "restrict to tickets with no children")
 	cmd.Flags().BoolVar(&unblockedFlag, "unblocked", false, "restrict to tickets whose blockers have all reached a terminal status")
-	proj = addListProjectionFlags(cmd, true)
+	proj = addProjectionFlags(cmd, projectionFlags{
+		Example: "id,status,title",
+		Oneline: "id<TAB>status<TAB>title",
+		Full:    "emit whole rows, including the description the default projection omits",
+	})
 	return cmd
 }
 

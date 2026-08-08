@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1398,6 +1399,123 @@ func TestIntegration_TicketList_Oneline(t *testing.T) {
 		if code != 64 {
 			t.Errorf("--oneline %s should exit 64, got %d", extra, code)
 		}
+	}
+}
+
+// --- ranked projection: search / related / context (T-74) -----------------
+
+// rankedRowsIT runs a ranked verb and decodes its rows, failing on a non-zero
+// exit or an empty result — a projection assertion over zero rows passes
+// vacuously and would hide the very regression these tests exist to catch.
+func rankedRowsIT(t *testing.T, vault string, args ...string) []map[string]any {
+	t.Helper()
+	stdout, stderr, code := run(t, vault, args...)
+	if code != 0 {
+		t.Fatalf("%v: exit=%d\nstderr: %s", args, code, stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(stdout, &rows); err != nil {
+		t.Fatalf("%v: invalid JSON: %v\n%s", args, err, stdout)
+	}
+	if len(rows) == 0 {
+		t.Fatalf("%v returned no rows; the assertion would pass vacuously", args)
+	}
+	return rows
+}
+
+func TestIntegration_Ranked_DefaultOmitsProvenance(t *testing.T) {
+	vault := councilVault(t)
+
+	for _, verb := range [][]string{
+		{"related", "members/vaasa/persona.md"},
+		{"context", "members/vaasa/persona.md"},
+		{"search", "persona"},
+	} {
+		rows := rankedRowsIT(t, vault, verb...)
+		for i, r := range rows {
+			if _, ok := r["signals"]; ok {
+				t.Errorf("%v row %d should omit signals by default: %v", verb, i, r)
+			}
+			if _, ok := r["connections"]; ok {
+				t.Errorf("%v row %d should omit connections by default: %v", verb, i, r)
+			}
+			if _, ok := r["path"]; !ok {
+				t.Errorf("%v row %d lost path: %v", verb, i, r)
+			}
+			if _, ok := r["score"]; !ok {
+				t.Errorf("%v row %d lost score: %v", verb, i, r)
+			}
+		}
+	}
+}
+
+// The provenance is what makes a ranking accountable, so it must stay exactly
+// one flag away — and an omitted key must never be mistakable for a null one.
+func TestIntegration_Ranked_FullRestoresProvenance(t *testing.T) {
+	vault := councilVault(t)
+	target := "members/vaasa/persona.md"
+
+	for _, args := range [][]string{
+		{"related", target, "--full"},
+		{"related", target, "--fields", "*"},
+		{"related", target, "--fields", "path,signals"},
+	} {
+		rows := rankedRowsIT(t, vault, args...)
+		sigs, ok := rows[0]["signals"].([]any)
+		if !ok || len(sigs) == 0 {
+			t.Fatalf("%v: want a populated signals array, got %v", args, rows[0]["signals"])
+		}
+		first, ok := sigs[0].(map[string]any)
+		if !ok || first["name"] == "" || first["weight"] == nil {
+			t.Errorf("%v: signal entry missing name/weight: %v", args, sigs[0])
+		}
+	}
+}
+
+func TestIntegration_Ranked_Oneline(t *testing.T) {
+	vault := councilVault(t)
+
+	stdout, stderr, code := run(t, vault, "related", "members/vaasa/persona.md", "--oneline")
+	if code != 0 {
+		t.Fatalf("exit=%d\nstderr: %s", code, stderr)
+	}
+	lines := strings.Split(strings.TrimRight(string(stdout), "\n"), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		t.Fatalf("--oneline produced nothing:\n%s", stdout)
+	}
+	for i, ln := range lines {
+		parts := strings.Split(ln, "\t")
+		if len(parts) != 2 {
+			t.Fatalf("line %d = %q, want path<TAB>score", i, ln)
+		}
+		if !strings.HasSuffix(parts[0], ".md") {
+			t.Errorf("line %d path = %q, want an indexed file path", i, parts[0])
+		}
+		if _, err := strconv.ParseFloat(parts[1], 64); err != nil {
+			t.Errorf("line %d score = %q, not a number", i, parts[1])
+		}
+	}
+
+	// Plain-text mode refuses the JSON shaping flags here too.
+	for _, extra := range []string{"--pretty", "--jsonl", "--full"} {
+		_, _, code := run(t, vault, "related", "members/vaasa/persona.md", "--oneline", extra)
+		if code != 64 {
+			t.Errorf("--oneline %s should exit 64, got %d", extra, code)
+		}
+	}
+}
+
+// --flat-search bypasses ranking, so there is no score to project. The error
+// must say so rather than silently returning nothing.
+func TestIntegration_Ranked_FlatSearchRejectsScoreField(t *testing.T) {
+	vault := councilVault(t)
+
+	_, stderr, code := run(t, vault, "related", "members/vaasa/persona.md", "--flat-search", "--fields", "score")
+	if code != 64 {
+		t.Fatalf("unknown field under --flat-search should exit 64, got %d", code)
+	}
+	if !strings.Contains(string(stderr), "score") || !strings.Contains(string(stderr), "path") {
+		t.Errorf("error should name the bad field and the valid set:\n%s", stderr)
 	}
 }
 

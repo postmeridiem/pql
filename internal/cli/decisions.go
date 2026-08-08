@@ -230,7 +230,7 @@ func newDecisionsClaimCmd() *cobra.Command {
 
 func newDecisionsListCmd() *cobra.Command {
 	var typeFlag, domainFlag, statusFlag string
-	var proj *listProjection
+	var proj *projection
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List decisions from pql.db",
@@ -271,7 +271,10 @@ same projection surface as ` + "`pql ticket list`" + ` (D-27).`,
 	cmd.Flags().StringVar(&typeFlag, "type", "", "filter by type (confirmed|question|rejected)")
 	cmd.Flags().StringVar(&domainFlag, "domain", "", "filter by domain")
 	cmd.Flags().StringVar(&statusFlag, "status", "", "filter by status (active|superseded|resolved|open)")
-	proj = addListProjectionFlags(cmd, false)
+	proj = addProjectionFlags(cmd, projectionFlags{
+		Example: "id,status,title",
+		Oneline: "id<TAB>status<TAB>title",
+	})
 	return cmd
 }
 

@@ -3,10 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
-	"github.com/postmeridiem/pql/internal/cli/render"
 	"github.com/postmeridiem/pql/internal/config"
 	"github.com/postmeridiem/pql/internal/connect"
 	"github.com/postmeridiem/pql/internal/diag"
@@ -17,12 +17,18 @@ import (
 )
 
 func newRelatedCmd() *cobra.Command {
-	return &cobra.Command{
+	var proj *projection
+	cmd := &cobra.Command{
 		Use:   "related <path>",
 		Short: "Find files structurally related to a file",
-		Args:  cobra.ExactArgs(1),
+		Long: `Ranks the files that sit closest to this one in the vault graph —
+what it links to, what links to it, what shares its tags — weighted mostly on
+link overlap.
+
+` + rankedProjectionHelp,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runIntent(cmd, args[0], func(ctx context.Context, db *store.Store, cfg *config.Config) ([]connect.Enriched, error) {
+			return runIntent(cmd, args[0], proj, func(ctx context.Context, db *store.Store, cfg *config.Config) ([]connect.Enriched, error) {
 				limit, _ := cmd.Flags().GetInt("limit")
 				if limit == 0 {
 					limit = 10
@@ -31,11 +37,31 @@ func newRelatedCmd() *cobra.Command {
 			})
 		},
 	}
+	proj = addRankedProjectionFlags(cmd)
+	return cmd
+}
+
+// rankedProjectionHelp is the projection paragraph shared by search, related
+// and context — one wording for one behaviour, rather than three that drift.
+const rankedProjectionHelp = `The default projection returns path and score only. The per-signal
+provenance in signals[] and the neighborhood in connections[] are the bulk of
+the payload and most callers want the ranking, not its derivation (T-74). Opt
+back in with --full (or --fields '*'), pick an exact key set with
+--fields path,score,signals, or use --oneline for a plain path<TAB>score index.`
+
+// addRankedProjectionFlags registers the projection flags on a ranked verb.
+func addRankedProjectionFlags(cmd *cobra.Command) *projection {
+	return addProjectionFlags(cmd, projectionFlags{
+		Example: "path,score",
+		Oneline: "path<TAB>score",
+		Full:    "emit whole results, including the signals[] and connections[] the default projection omits",
+	})
 }
 
 func runIntent(
 	cmd *cobra.Command,
 	targetPath string,
+	proj *projection,
 	fn func(ctx context.Context, st *store.Store, cfg *config.Config) ([]connect.Enriched, error),
 ) error {
 	ctx := cmd.Context()
@@ -66,7 +92,7 @@ func runIntent(
 
 	flatSearch, _ := cmd.Flags().GetBool("flat-search")
 	if flatSearch {
-		return runFlatFallback(cmd, st, cfg, targetPath)
+		return runFlatFallback(cmd, st, cfg, targetPath, proj)
 	}
 
 	stopEnrich := tm.Start("enrich")
@@ -76,18 +102,22 @@ func runIntent(
 		return &exitError{code: diag.Software, msg: err.Error()}
 	}
 
-	rOpts, err := renderOptsFromFlags(cmd)
-	if err != nil {
-		return &exitError{code: diag.Usage, msg: err.Error()}
+	// Default projection: drop the provenance (T-74). Measured on one file,
+	// `related` spent 1438 bytes to deliver 88 bytes of paths — five signal
+	// objects per result, most of them zeros. The provenance is why a result
+	// is accountable and stays one flag away, but the answer is the default.
+	if proj.wantsDefaultProjection() {
+		for i := range results {
+			results[i].Signals = nil
+			results[i].Connections = nil
+		}
 	}
-	rOpts.Out = cmd.OutOrStdout()
-	if _, err := render.Render(results, rOpts); err != nil {
-		return &exitError{code: diag.Software, msg: err.Error()}
-	}
-	return nil
+	return renderProjectedList(cmd, results, proj, func(e connect.Enriched) string {
+		return e.Path + "\t" + strconv.FormatFloat(e.Score, 'f', 4, 64)
+	})
 }
 
-func runFlatFallback(cmd *cobra.Command, st *store.Store, cfg *config.Config, path string) error {
+func runFlatFallback(cmd *cobra.Command, st *store.Store, cfg *config.Config, path string, proj *projection) error {
 	ctx := cmd.Context()
 	rows, err := st.DB().QueryContext(ctx,
 		`SELECT path FROM files WHERE path != ? ORDER BY path`, path)
@@ -108,13 +138,10 @@ func runFlatFallback(cmd *cobra.Command, st *store.Store, cfg *config.Config, pa
 		results = append(results, r)
 	}
 
-	rOpts, err := renderOptsFromFlags(cmd)
-	if err != nil {
-		return &exitError{code: diag.Usage, msg: err.Error()}
-	}
-	rOpts.Out = cmd.OutOrStdout()
-	if _, err := render.Render(results, rOpts); err != nil {
-		return &exitError{code: diag.Software, msg: err.Error()}
-	}
-	return nil
+	// Flat rows are already the minimum, so the projection flags have little
+	// left to trim — but they still apply, so --oneline and --fields behave
+	// the same either side of --flat-search. There is no score to print:
+	// nothing ranked these. `--fields score` fails here naming path as the
+	// only valid key, which is the honest answer.
+	return renderProjectedList(cmd, results, proj, func(r row) string { return r.Path })
 }
