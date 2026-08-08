@@ -2715,3 +2715,86 @@ What the audit was worth, stated plainly so the cost is arguable next time. Thre
 The procedure improved as much as the skill. Its version check could not detect a stale binary, its poison test had no recovery test, and its read-the-source step contradicted the rule the whole audit rests on. All three were invisible until someone followed it end to end.
 
 One residue: finding #23, whether pql drops path from base output or the .base file declares those columns, is unresolved — the auditor was denied reads inside the scratch vault. Documented in a way that is true either way, and worth a ticket if it turns out to be pql''s.', 'done', 'high', NULL, NULL, NULL, '2026-08-08 18:08:49.665', '2026-08-08 18:45:26.210', NULL, '2ac83673cc311c4e0035a2b8d8a1e868', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5H3J0H3JC5ZQZ9QCPT3P9R', 'bug', NULL, 'DSL projects bool frontmatter as 1/0 while meta returns true/false', 'Resolves the open half of audit finding #23, and it is a real defect rather than the .base file''s doing.
+
+Same key, same file, two answers:
+
+  pql meta members/holt/persona.md   ->  "voting": true
+  pql query "SELECT fm.voting ..."   ->  {"fm.voting": 1}
+
+pql base inherits it, since base compiles to the DSL — which is where the auditor met it.
+
+Cause, in internal/query/dsl/eval/compile.go around line 345. The fm.<key> reference compiles to a type-dispatching subquery: CASE type WHEN ''string'' THEN value_text WHEN ''number'' THEN value_num WHEN ''bool'' THEN value_num ELSE value_json END. For a bool that yields SQLite''s 1/0. The comment says the shape is chosen so SQLite can compare directly against literals, which is true and is why WHERE fm.voting = true works — the parser lowers true to 1. The problem is that the same expression is used for projection, where the comparison-friendly shape is the wrong one and the schema already stores the right one in value_json.
+
+So the fix is not to change the CASE. Comparison genuinely wants value_num; projection wants value_json, or a type-aware decode on the way out. Changing it in one place breaks the other — verified that both = true and = 1 currently match, and both should keep matching.
+
+Scope check before fixing: bool is the visible case, but the same CASE returns value_num for ''number'' too, so check whether an integer frontmatter value round-trips as an integer or as a REAL — value_num is REAL, so a year like 2026 may well be emitting 2026.0. And ''list''/''object'' fall to value_json, which is a JSON string in a JSON field, so confirm whether those come back as nested structures or as escaped strings. Worth settling all three at once rather than patching bool alone.
+
+Not filed against the base surface: pql base returns exactly the columns the .base declares, which the same investigation confirmed — see the note on T-87.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-08 19:05:52.900', '2026-08-08 19:05:52.900', NULL, 'e088aac7c7ba396a924f8b103e54f983', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5H3J0H3JC5ZQZ9QCPT3P9R', 'bug', NULL, 'DSL projects bool frontmatter as 1/0 while meta returns true/false', 'Resolves the open half of audit finding #23, and it is a real defect rather than the .base file''s doing.
+
+Same key, same file, two answers:
+
+  pql meta members/holt/persona.md   ->  "voting": true
+  pql query "SELECT fm.voting ..."   ->  {"fm.voting": 1}
+
+pql base inherits it, since base compiles to the DSL — which is where the auditor met it.
+
+Cause, in internal/query/dsl/eval/compile.go around line 345. The fm.<key> reference compiles to a type-dispatching subquery: CASE type WHEN ''string'' THEN value_text WHEN ''number'' THEN value_num WHEN ''bool'' THEN value_num ELSE value_json END. For a bool that yields SQLite''s 1/0. The comment says the shape is chosen so SQLite can compare directly against literals, which is true and is why WHERE fm.voting = true works — the parser lowers true to 1. The problem is that the same expression is used for projection, where the comparison-friendly shape is the wrong one and the schema already stores the right one in value_json.
+
+So the fix is not to change the CASE. Comparison genuinely wants value_num; projection wants value_json, or a type-aware decode on the way out. Changing it in one place breaks the other — verified that both = true and = 1 currently match, and both should keep matching.
+
+Scope check before fixing: bool is the visible case, but the same CASE returns value_num for ''number'' too, so check whether an integer frontmatter value round-trips as an integer or as a REAL — value_num is REAL, so a year like 2026 may well be emitting 2026.0. And ''list''/''object'' fall to value_json, which is a JSON string in a JSON field, so confirm whether those come back as nested structures or as escaped strings. Worth settling all three at once rather than patching bool alone.
+
+Not filed against the base surface: pql base returns exactly the columns the .base declares, which the same investigation confirmed — see the note on T-87.
+
+Scope settled by probe, and narrower than the ticket first guessed. Planted a file carrying one of each frontmatter type and read it through both paths:
+
+  DSL   {"fm.abool":0,  "fm.alist":["a","b"], "fm.anobj":{"k":"v"}, "fm.num_float":1.5, "fm.num_int":2026}
+  meta  {"abool":false, "alist":["a","b"],    "anobj":{"k":"v"},    "num_float":1.5,    "num_int":2026}
+
+So bool is the only divergence. The speculation in the description above was wrong on both counts and is retracted: integers do not come back as REAL — 2026 stays 2026, not 2026.0 — and list/object values decode into real nested JSON rather than escaped strings, so the ELSE value_json branch is already doing the right thing.
+
+That makes the fix small and local: the CASE needs one more arm so a bool projects as its JSON form while still comparing numerically. Everything else in the expression is correct as written. Both spellings — WHERE fm.abool = false and = 0 — must keep matching after the change; they both match today.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-08 19:05:52.900', '2026-08-08 19:09:55.213', NULL, 'a853b7314b8d9ba6fe6eda2dcf31b9b5', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53BSK27Y4K571GPGD3JA2R', 'epic', '06FY541P00NKK9Q7PD5CP02PTM', '2.2.0: the skill-audit findings not blocking 2.1.0', 'The Missing and Unusable findings from the 2.1.0 skill audit that were deliberately deferred. Full report: /var/mnt/data/projects/claude/scratch/pql-audit-2.1.0.md
+
+Deferred because each needs a surface decision rather than a text fix, and rushing those into a patch release is how the audit''s Wrong findings got there in the first place.
+
+Missing, output shapes — the audit''s second conclusion is that output shapes are documented for the planning surface and undocumented for the vault surface: backlinks, outlinks, meta, refs, base and the DSL each get a one-line description of what they mean and nothing about what they return. That asymmetry breaks the second hop of any link-following task.
+- #10 outlinks: shape {target,alias,line,via} undocumented, and target is the raw spelling — meta rejects it. outlinks --help says resolution is not applied; the skill does not. Since the skill also advertises backlinks as spelling-tolerant, the natural generalisation is exactly wrong.
+- #11 backlinks rows are per-link-occurrence, not per-file. 28 rows for one linking file. Counting linking files needs a client-side dedupe the skill never mentions.
+- #12 plan whatsnext and plan review can return {message: ...} instead of a record. A caller reaching for .id gets nothing and no error.
+- #13 ticket mutation verbs return undocumented and mutually inconsistent shapes — assign returns a whole record with a 2 KB description, label returns a summary object, and neither accepts --fields.
+
+Missing, surface facts:
+- #14 .gitignore is read by default alongside .pqlignore; the skill mentions only the latter. An agent debugging ''why is this file not indexed'' will not think to look.
+- #15 the documented PQL_VAULT/PQL_DB/PQL_CONFIG env routes cannot be invoked under the permission model the same skill describes — an env-var assignment is a prefix, so it breaks the allowlist match, and the anti-patterns list names only && || ; |  and >.
+- #16 pql init''s target directory is unstated and the skill''s claims about what it writes are contradicted by its own --help. The auditor would not run it, correctly.
+- #17 ticket board omits empty columns, so a named column cannot be distinguished from an empty one.
+- #18 base --view names are discoverable only by triggering exit 65.
+- #19 skill status lines/words and the second bundled skill (clean-house) are undocumented.
+- #20 pql completion absent from the skill. Low value, noted for completeness.
+- #21 pql base absent from the Choosing a command routing table, as are schema and shell.
+
+Unusable:
+- #22 ''which decisions have nothing implementing them'' forces a client-side join. No --unimplemented filter; ticket list --decision none returns empty silently rather than erroring.
+- #23 base output carries no path or name, so rows cannot be fed onward. Also fm.voting: 1 where meta returns voting: true — an undocumented bool coercion. The auditor could not determine whether the column set comes from the .base file or from pql, because reading the scratch vault was denied.
+- #24 ranked verbs accept a nonexistent path and return [] at exit 0, where meta exits 66. A typo reads as ''nothing is related to this file'' — the shape-B trap the skill devotes a Contracts paragraph to for filter values.
+- #25 mutation verbs return whole records with no way to trim: a ten-ticket status change returns ten descriptions.
+- #26 backlinks duplicate rows, see #11.
+
+Closed 2026-08-08. Resolved three ways, not one — the ticket bundled findings that turned out to need different treatment.
+
+Folded into 2.1.0, because each was the same defect the T-79 work was already correcting, seen from another angle: #10 and #11 (outlinks row shape, backlinks per-occurrence rows) into the link-matching section, #12 (whatsnext/review message shape) into the output-shape rule, #13 and #25 (mutation verbs return whole records and reject --fields) into the projection section. Deferring those would have left sections corrected in 2.1.0 still wrong on the exact question a caller was asking.
+
+Closed here as documentation, no decision needed: #14 .gitignore is read by default alongside .pqlignore and doctor reports the active list, #17 board omits empty columns so [] means no tickets rather than a bad name, #18 base --view names are discoverable only off the exit-65 error and base rows carry only the columns the .base declares, #19 skill status lists every bundled skill with lines and words and clean-house is the second one, #21 base is in the routing table. #20 (completion absent) stays unwritten deliberately — cobra boilerplate an agent has no use for, and the skill is better without the line.
+
+Decided, with records: D-29 for #24, D-30 for #13/#25''s behavioural half, D-31 for #22. Implementation filed as T-90, T-91, T-92, each linked to its record.
+
+Only #23 is unresolved, and honestly so. Whether pql drops path from base output or the .base file simply declares those columns could not be determined — the auditor was denied reads inside the scratch vault, and I have not gone looking since. It is noted on the base row in the skill as ''rows carry the columns the .base declares and nothing else — often no path'', which is true either way and warns the caller. If it turns out pql is dropping a path it has, that is a bug and gets its own ticket.
+
+Follow-up 2026-08-08: finding #23 is resolved, both halves, and it splits into one non-bug and one real bug.
+
+Not a bug — pql base dropping path. Read the .base file the auditor was using: council-members.base declares only note.name, note.prior_job, note.lens, note.voting, note.model. No file.path, so pql returning no path is faithful to the file. Confirmed pql does support it by writing a probe base declaring file.path and file.name: both come back, and path is a real vault-relative path (members/holt/persona.md) that other commands accept. Bare names in a view''s order: prefer a declared note property over the file column of the same name, which is why ''name'' resolved to fm.name; file.name gets the file column explicitly. So the skill wording added in 2.1.0 — rows carry the columns the .base declares, often no path — is correct, and the actionable advice is to declare file.path in the base.
+
+Real bug — the fm.voting: 1 versus voting: true discrepancy the auditor noticed alongside it. Same key, same file, meta returns true and the DSL returns 1, and base inherits it because base compiles to the DSL. Cause is the type-dispatching subquery in compile.go choosing value_num for bools so SQLite can compare against literals; the same expression is used for projection, where the comparison shape is wrong and value_json already holds the right one. Probed every frontmatter type: bool is the only one affected — integers stay integers, lists and objects decode to real nested JSON. Filed as T-93.', 'done', 'medium', NULL, NULL, NULL, '2026-08-08 18:05:50.360', '2026-08-08 19:10:07.192', NULL, '78f2051e52dc9b1d950be3c66cbe467a', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
