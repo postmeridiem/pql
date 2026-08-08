@@ -61,8 +61,8 @@ test-integration: build ## Integration tests (binary + fixture vaults). Tag: int
 	$(GO) test -tags=integration ./internal/cli/...
 
 .PHONY: eval
-eval: ## Ranking-quality eval against the golden set. Tag: eval.
-	$(GO) test -tags=eval ./internal/connect/rank/...
+eval: ## Ranking-quality eval against the golden set (ci/eval.sh). Tag: eval.
+	./ci/eval.sh
 
 .PHONY: eval-baseline
 eval-baseline: ## Record current eval as baseline for diffing future runs.
@@ -73,12 +73,22 @@ fuzz-dsl: ## Fuzz the PQL DSL lexer + parser for 10m.
 	$(GO) test -fuzz=. -fuzztime=10m ./internal/query/dsl/lex/
 	$(GO) test -fuzz=. -fuzztime=10m ./internal/query/dsl/parse/
 
+# Targets that delegate to ci/ rather than restating it. The scripts are the
+# definition of what CI runs; a Makefile target that re-lists their steps drifts
+# the moment one side gains a step, and the local gate then passes on a check
+# CI does not agree with. That is not hypothetical — `make lint` was
+# golangci-lint alone while ci/lint.sh had grown two more stages, so a workflow
+# verified with `make lint` failed on a tool it never installed.
 .PHONY: lint
-lint: ## golangci-lint run.
-	golangci-lint run
+lint: ## Full lint gate: golangci-lint + goreleaser check + govulncheck (ci/lint.sh).
+	./ci/lint.sh
+
+.PHONY: ci-test
+ci-test: ## Exactly what CI runs for tests: unit + race + integration (ci/test.sh).
+	./ci/test.sh
 
 .PHONY: vuln
-vuln: ## govulncheck on all packages. Uses `go run` with a pinned version so devs don't need a local install.
+vuln: ## govulncheck alone. Also covered by `make lint`; kept for running it in isolation.
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@v1.2.0 ./...
 
 .PHONY: fmt
@@ -91,10 +101,8 @@ tidy: ## go mod tidy.
 	$(GO) mod tidy
 
 .PHONY: pre-push
-pre-push: ## Local pre-push gate: lint + vuln + test + test-race. Wired by .githooks/pre-push.
-	@command -v golangci-lint >/dev/null || { echo "pre-push: golangci-lint not on PATH (brew install golangci-lint)"; exit 1; }
+pre-push: ## Local pre-push gate: full lint gate + test + test-race. Wired by .githooks/pre-push.
 	$(MAKE) lint
-	$(MAKE) vuln
 	$(MAKE) test
 	$(MAKE) test-race
 
