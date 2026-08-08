@@ -41,6 +41,31 @@ pql schema
 One row per frontmatter key, with observed types and file counts. Write
 queries against what it reports, not against what you assume is there.
 
+**If that fails with exit `70` naming a file**, indexing aborted on malformed
+frontmatter and *every* command will fail the same way until it is excluded:
+
+```
+{"code":"cli.exit","msg":"indexer: extract \".claude/commands/x.md\": markdown: parse frontmatter: yaml: …"}
+```
+
+Exclude it with a glob — a `.pqlignore` at the vault root (gitignore syntax),
+or `exclude:` in `.pql/config.yaml`. Indexing stops at the *first* bad file,
+so expect to repeat this if there are several. `pql doctor` shows
+`index.files: 0` when this has happened, which is the quickest confirmation.
+
+## Global flags
+
+These work on every command:
+
+| Flag | Does |
+|---|---|
+| `--vault <path>` | Query a vault other than the current directory (env `PQL_VAULT`). **This is how you avoid `cd x && pql …`**, which the permission rules reject |
+| `--db <path>` | Point at a different database (env `PQL_DB`) — use it to keep a probe from touching a vault's own state |
+| `--config <path>` | Config override (env `PQL_CONFIG`) |
+| `--pretty` · `--jsonl` · `-n/--limit N` | Output shaping |
+| `--quiet` · `--verbose` | Suppress stderr warnings · add per-phase timings |
+| `--flat-search` | Force the primitive path (see the caveat under ranked answers) |
+
 ## Choosing a command
 
 | The question | Reach for |
@@ -71,19 +96,35 @@ always accountable: you can see *why* it ranked where it did.
 | `pql related <path>` | Which files sit near this one in the graph |
 | `pql context <path>` | What to read to understand this file (returns heading anchors, not just paths) |
 
-They differ in how they weight the same signals — `related` leans on link
-overlap, `context` on path proximity, `search` on recency.
+They differ in how they weight the same signals: `related` on link overlap
+(0.35), `context` on link overlap and path proximity together (0.30/0.25),
+`search` on centrality (0.40) — which is why a vague query surfaces hub
+files rather than precise ones.
 
-**Know what ranking means here.** These rank on *structural* signals — link
-overlap, tag overlap, path proximity, centrality, recency. There is no
-text-match signal today. So `pql search "some exact phrase"` can return `[]`
-even when the phrase is in the vault, and a broad term can rank on recency
-alone. Use these to explore the neighbourhood of a topic; use `grep`/`rg`
-when you need a literal string. Do not present a ranked result as proof that
-something is or is not written down.
+**`pql search` is a substring filter, not a search engine.** Read this
+before using it. The query is matched as **one literal lowercase substring**
+against file paths, tags, frontmatter values and headings — **never against
+body prose** — and whatever survives that gate is then ranked structurally.
+It does not split on words, so a multi-word query almost always returns
+`[]`:
 
-Add `--flat-search` to any of them to force the primitive path — raw rows,
-no scoring, no enrichment.
+```bash
+pql search "loss"              # matches plasticity-loss-2025.md
+pql search "plasticity-loss"   # matches
+pql search "plasticity loss"   # [] — the space kills it
+```
+
+Pass a single term or a hyphenated filename fragment. For anything in the
+body of a document, use `grep`/`rg`. **An empty result is not evidence the
+topic is absent** — never report it as such.
+
+`--flat-search` on these three does not give you "the same candidates,
+unranked" — it drops candidate selection too, degrading to a plain file
+list. Use it to confirm the index is populated, not to get unranked results.
+
+Enriched output also carries a `connections[]` array — `{path, relation}`
+with `relation` of `inlink` or `outlink` — alongside the score and signals.
+It is often the most useful part: it tells you *how* a result relates.
 
 ## Exact structure
 
@@ -146,16 +187,23 @@ they live in SQLite and travel via the changelog described below.
 |---|---|
 | `pql decisions sync [--no-style]` | Parse the DQR tree into pql.db. Also reports style problems (filename, subdir/type mismatch, domain conflicts) unless suppressed |
 | `pql decisions validate [--no-style]` | Dry run. Structural errors exit non-zero; style issues only warn |
-| `pql decisions list [--type X] [--domain X] [--status X]` | List records |
+| `pql decisions list [--type T] [--domain D] [--status S]` | List records. `--type confirmed\|question\|rejected`, `--status active\|superseded\|resolved\|open` |
 | `pql decisions show <id> [--with-refs] [--with-tickets]` | One record, optionally with cross-references or the tickets implementing it |
 | `pql decisions read <id>` | The record's full markdown body |
 | `pql decisions refs <id>` | Cross-references involving a record |
 | `pql decisions claim <D\|Q\|R> <domain> "title"` | Print the next free id. No side effects |
 
+Record type is `confirmed`, `question` or `rejected` — the D/Q/R of the tree —
+and status is `active`, `superseded`, `resolved` or `open`. Passing `--type Q`
+or `--status OPEN` is not an error; it returns an empty list at exit 0. See
+the filter-value warning under Contracts.
+
 The markdown is the source of truth, so **run `pql decisions sync` before
 querying** whenever the DQR files may have changed — otherwise you are
 reading a stale copy. A record written but not synced simply will not be
-found.
+found. If you cannot write — a read-only or review-only remit — do not run
+`sync`; check the `synced_at` field on each record instead to judge how stale
+the copy is, and say so rather than silently reporting possibly-old data.
 
 `decisions show <id> --with-tickets` is the implementation-status view: it
 answers "is this decision actually built?" and is only as complete as the
@@ -250,14 +298,28 @@ The changelog carries a format version. An older one replays with a loud
   humans, `--limit N` to cap. Two commands opt out of JSON deliberately:
   `ticket new --id-only` prints a bare id, and `--oneline` on the list verbs
   prints `id<TAB>status<TAB>title`.
-- **stderr:** JSON diagnostics, one per line —
-  `{"level":"…","code":"pql.<phase>.<kind>","msg":"…"}`. Pass these back
-  verbatim rather than paraphrasing them.
+- **stderr:** JSON diagnostics, one per line. Codes come in two shapes:
+  `pql.<phase>.<kind>` for index, parse, eval and plan problems
+  (`pql.parse.unexpected_token`), and `cli.error` / `cli.exit` for flag and
+  argument problems. Match on both; pass them back verbatim rather than
+  paraphrasing.
 - **Exit codes:** `0` success · `64` bad flag · `65` parse or data error ·
   `66` vault/config not found · `69` unavailable · `70` internal.
 
 **Zero matches is success**: exit `0` with an empty `[]`. Report "nothing
 matched", never "the command failed".
+
+**But filter values are not validated.** A misspelled or invented value —
+`--type Q`, `--status OPEN`, `--status active` on tickets — returns an empty
+list at exit `0`, indistinguishable from a genuine no-match. Combined with
+the rule above, that is how an agent ends up reporting "there are no open
+questions" when there are twelve. **If a filtered query returns nothing,
+re-run it unfiltered before concluding the data is absent.** Flag names *are*
+validated: an unknown flag exits `64`.
+
+Empty fields are **omitted** from JSON rather than set to `null` — a ticket
+with no parent has no `parent_id` key, and a decision with no tickets has no
+`tickets` key. Check for presence, not for null.
 
 ## Projection
 
