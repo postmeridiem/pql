@@ -16,6 +16,14 @@ every agent using pql. Nothing verifies it — the tests assert only that the
 file exists and has frontmatter, so it can document removed commands and omit
 shipped ones while passing.
 
+**This audit is expensive.** A full run is roughly 100k tokens and 90+ tool
+calls over 25–30 minutes, because step 3 means actually retrieving data rather
+than reading about it. Run it when the skill or the CLI surface has changed and
+something ships as a result — a release gate, a new command or flag, a
+suspected drift. Do not run it after an ordinary edit; for that, `make
+skill-drift` costs nothing and answers the only question a small edit raises.
+When in doubt, ask before starting one.
+
 ## Setup
 
 Build a disposable vault. Never test against a repo anyone works in.

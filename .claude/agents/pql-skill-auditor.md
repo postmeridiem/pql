@@ -4,8 +4,10 @@ description: >
   Audits the embedded pql skill by using it as a consuming agent would, then
   reports findings. Use when the pql skill has changed, before a release that
   ships it, after adding or changing a CLI command or flag, or when asked
-  whether the skill is accurate, complete or usable. Returns a severity-ranked
-  findings report and changes nothing.
+  whether the skill is accurate, complete or usable. Expensive — roughly 100k
+  tokens over half an hour — so not for routine edits, where `make skill-drift`
+  answers the same question for free. Returns a severity-ranked findings report
+  and changes nothing.
 tools: Bash, Read, Grep, Glob
 model: opus
 ---

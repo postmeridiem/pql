@@ -112,6 +112,11 @@ fmt: ## gofmt + goimports.
 	gofmt -w .
 	@command -v goimports >/dev/null && goimports -w . || echo "(goimports not installed; skipping)"
 
+.PHONY: fmt-check
+fmt-check: ## List files gofmt would change, without writing. Read-only.
+	@out=$$(gofmt -l .); \
+	if [ -n "$$out" ]; then echo "$$out"; else echo "all files formatted"; fi
+
 .PHONY: tidy
 tidy: ## go mod tidy.
 	$(GO) mod tidy

@@ -59,6 +59,21 @@ CI substance lives in `ci/{lint,test,release,eval}.sh`. GitHub Actions workflows
 
 **Hook setup ordering.** Only `.githooks/pre-push` is tracked. The replication shims (`pre-commit`, `post-merge`, `post-checkout`, `post-rewrite`) are per-clone and planted by `pql init` into whatever `core.hooksPath` resolves to (T-52). So set `core.hooksPath .githooks` **before** running `pql init` — otherwise init plants them into `.git/hooks/` and they never fire under the redirected path. A contributor who doesn't use pql can skip `pql init` entirely and the repo still works.
 
+**One command per invocation.** `.claude/settings.json` allowlists tools by
+prefix, so a shell construction that merely *contains* an allowed command is not
+an allowed command: `&&` chains, pipes, `$(…)` substitution and redirection all
+prompt even when every part is permitted. Prefixing also breaks it —
+`PATH=… make build` does not match `Bash(make *)`. Consequences worth knowing:
+
+- Reach for a flag before a pipe (`--limit`, `--fields`, `--oneline`, `--pretty`).
+- If something needs shell glue more than once, it belongs in a Makefile target
+  or a script under `.claude/skills/*/scripts/`, not in an ad-hoc invocation.
+  `make skill-drift` and `make scratch-vault` both started as one-liners that
+  tripped this.
+- Never blanket-allow an interpreter (`python3 *`, `sed *`, `gofmt *`) to get
+  around it — that trades a prompt for an unbounded write grant. Write the
+  repeatable thing instead.
+
 ## Test infrastructure
 
 Three tiers (see `docs/structure/project-structure.md` for full details):
