@@ -60,13 +60,16 @@ from PATH.
 make scratch-vault
 ```
 
-That gives `/tmp/pql-scratch-vault` with both surfaces: markdown and `.base`
-files for the vault surface, real tickets and decisions for the planning
-surface. Target it explicitly on every call:
+The target prints the path it built. Take it from there rather than hardcoding
+one — it is a Makefile variable, and a run that assumes the old default audits
+a vault nobody built. Target it explicitly on every call:
 
 ```bash
-pql --vault /tmp/pql-scratch-vault <command>
+pql --vault <the path the target printed> <command>
 ```
+
+It carries both surfaces: markdown and `.base` files for the vault surface,
+real tickets and decisions for the planning surface.
 
 The target depends on `make build`, which writes into the repo tree. If a
 sandbox refuses that, build once outside the audit and replay the target's body

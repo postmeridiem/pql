@@ -159,9 +159,12 @@ clean: ## Remove build artefacts.
 skill-drift: ## Compare the repo, shipped and installed copies of the pql skill.
 	@./.claude/skills/pql-testing/scripts/check-drift.sh
 
-SCRATCH_VAULT ?= /tmp/pql-scratch-vault
+# Disposable audit vault. Not /tmp: this box runs a tmpfs /tmp that is wiped on
+# reboot and shared with every other process, and an audit that plants a
+# malformed file then rebuilds wants somewhere durable and its own.
+SCRATCH_VAULT ?= /var/mnt/data/projects/claude/scratch/pql-scratch-vault
 .PHONY: scratch-vault
-scratch-vault: build ## Build a disposable vault under /tmp with both surfaces, safe to mutate.
+scratch-vault: build ## Build a disposable vault with both surfaces, safe to mutate.
 	@rm -rf "$(SCRATCH_VAULT)"
 	@mkdir -p "$(SCRATCH_VAULT)"
 	@cp -r testdata/council-snapshot/. "$(SCRATCH_VAULT)/"

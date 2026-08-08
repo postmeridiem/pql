@@ -52,9 +52,10 @@ is the finding.
 
 ## Invariants
 
-**Work only in the scratch vault.** `make scratch-vault` builds it at
-`/tmp/pql-scratch-vault`. Pass `--vault /tmp/pql-scratch-vault` on every call.
-Every verb is safe there, including writes, because it is a copy.
+**Work only in the scratch vault.** `make scratch-vault` builds it and prints
+its path; take the path from that output rather than assuming one. Pass
+`--vault <that path>` on every call. Every verb is safe there, including
+writes, because it is a copy.
 
 **Never touch a repository anyone works in.** Not read-only either — most pql
 reads write an index into the target, and the skill under test instructs you to
