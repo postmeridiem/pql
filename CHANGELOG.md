@@ -61,6 +61,27 @@ four defects nobody had hit from the inside.
   substitution, both of which fail under the prefix allowlists consuming
   projects use.
 
+- **`pql decisions show` batches comma-separated ids** (T-76), the way
+  `ticket show` always has. It previously failed with
+  `decision D-1,D-2 not found`, so "which of these decisions has anything
+  implementing it" was one call per record — 41 of them on this repo. One id
+  still returns an object, several return an array, and `--with-tickets`
+  composes with the batch. An unknown id in a batch now names that id rather
+  than the whole comma string.
+
+- **`pql ticket board` gains `--open` and `--status`, and each column now
+  carries its display `label`** (T-77). Every column was emitted with no way
+  to trim, and on a mature board the terminal ones dominate: 10.9 KB down to
+  1.8 KB on this repo's dataset with `--open`. `--status backlog,ready` names
+  an exact set. Unlike `ticket list --status`, an unknown name here exits `64`
+  listing the vocabulary — a mistyped column would otherwise render an empty
+  board that looks exactly like a finished one. The `label` field means
+  rendering a header no longer needs a second call to `ticket statuslist`.
+
+  Deliberately not added: `--fields` on `board`. Rows are nested inside
+  columns, so a field list would be ambiguous about which level it projects,
+  and the row shape is already minimal. Use `ticket list --fields`.
+
 - **`.pqlignore` is now read by default** (T-78). `ignore_files` defaulted to
   `[.gitignore]`, so the file pql is named after did nothing until you added it
   to `.pql/config.yaml` — while the docs listed `.pqlignore` as one of the three

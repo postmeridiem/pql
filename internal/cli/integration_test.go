@@ -1793,6 +1793,132 @@ func TestIntegration_PlanRebuildVerify_LostRowsExit65(t *testing.T) {
 	}
 }
 
+// `ticket board` emitted every column, and on a mature board the terminal
+// ones are most of the payload — 82% on this repo's own dataset, with no way
+// to drop them (T-77). It also carried the status name but not its display
+// label, forcing a second call to `ticket statuslist` to render a header.
+func TestIntegration_TicketBoard_ColumnFilterAndLabels(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "open one", "--id-only")
+	pqlIT(t, vault, "ticket", "new", "task", "shipped", "--id-only")
+	pqlIT(t, vault, "ticket", "status", "T-2", "done")
+
+	type column struct {
+		Status  string `json:"status"`
+		Label   string `json:"label"`
+		Tickets []struct {
+			ID string `json:"id"`
+		} `json:"tickets"`
+	}
+	board := func(args ...string) []column {
+		t.Helper()
+		var cols []column
+		out := pqlIT(t, vault, append([]string{"ticket", "board"}, args...)...)
+		if err := json.Unmarshal([]byte(out), &cols); err != nil {
+			t.Fatalf("invalid JSON: %v\n%s", err, out)
+		}
+		return cols
+	}
+
+	// Unfiltered: both columns, each carrying a human-readable label.
+	all := board()
+	if len(all) != 2 {
+		t.Fatalf("want backlog and done columns, got %d: %v", len(all), all)
+	}
+	for _, c := range all {
+		if c.Label == "" {
+			t.Errorf("column %q has no label; a caller must not need statuslist to render a header", c.Status)
+		}
+	}
+
+	// --open drops terminal columns.
+	open := board("--open")
+	if len(open) != 1 || open[0].Status != "backlog" {
+		t.Fatalf("--open should leave only backlog, got %v", open)
+	}
+
+	// --status names an exact set.
+	only := board("--status", "done")
+	if len(only) != 1 || only[0].Status != "done" || only[0].Label != "Done" {
+		t.Fatalf("--status done wrong: %v", only)
+	}
+
+	// An unknown column fails loudly rather than rendering an empty board
+	// that looks exactly like a finished one.
+	_, stderr, code := run(t, vault, "ticket", "board", "--status", "dnoe")
+	if code != 64 {
+		t.Fatalf("unknown status should exit 64, got %d", code)
+	}
+	if !strings.Contains(string(stderr), "dnoe") || !strings.Contains(string(stderr), "backlog") {
+		t.Errorf("error should name the bad status and the vocabulary:\n%s", stderr)
+	}
+
+	// The two filters mean overlapping things; combining them is a mistake
+	// worth naming rather than silently resolving.
+	if _, _, code := run(t, vault, "ticket", "board", "--status", "backlog", "--open"); code != 64 {
+		t.Errorf("--status with --open should exit 64, got %d", code)
+	}
+}
+
+// `ticket show` has always batched on comma; `decisions show` did not, and
+// failed with "decision D-1,D-2 not found" — so "which of these decisions has
+// anything implementing it" was one call per record, 41 of them on this repo
+// (T-76). Same batching rule now, including the single-id object shape.
+func TestIntegration_DecisionsShow_BatchesIDs(t *testing.T) {
+	vault := initVaultIT(t)
+	writeFileIT(t, filepath.Join(vault, "governance", "decisions", "architecture.md"), `### D-1: First
+- **Date:** 2026-08-08
+- **Decision:** One.
+
+### D-2: Second
+- **Date:** 2026-08-08
+- **Decision:** Two.
+`)
+	pqlIT(t, vault, "decisions", "sync")
+	pqlIT(t, vault, "ticket", "new", "task", "implements D-2", "--decision", "D-2", "--id-only")
+
+	// A batch is an array, in the order given, and --with-tickets composes.
+	var rows []struct {
+		ID      string `json:"id"`
+		Tickets []struct {
+			ID string `json:"id"`
+		} `json:"tickets"`
+	}
+	out := pqlIT(t, vault, "decisions", "show", "D-2,D-1", "--with-tickets")
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("batch should render an array: %v\n%s", err, out)
+	}
+	if len(rows) != 2 || rows[0].ID != "D-2" || rows[1].ID != "D-1" {
+		t.Fatalf("want [D-2 D-1] in the order given, got %s", out)
+	}
+	if len(rows[0].Tickets) != 1 {
+		t.Errorf("--with-tickets did not compose with the batch: %s", out)
+	}
+	if len(rows[1].Tickets) != 0 {
+		t.Errorf("D-1 has no tickets; got %v", rows[1].Tickets)
+	}
+
+	// One id keeps the single-object shape it has always had.
+	single := pqlIT(t, vault, "decisions", "show", "D-1")
+	var one map[string]any
+	if err := json.Unmarshal([]byte(single), &one); err != nil {
+		t.Fatalf("single id should render an object: %v\n%s", err, single)
+	}
+	if one["id"] != "D-1" {
+		t.Errorf("single show = %s, want the D-1 record", single)
+	}
+
+	// An unknown id in a batch fails the call and names the id that is
+	// missing — not the whole comma string, which is what it used to do.
+	_, stderr, code := run(t, vault, "decisions", "show", "D-1,D-99")
+	if code != 66 {
+		t.Fatalf("unknown id in a batch should exit 66, got %d", code)
+	}
+	if !strings.Contains(string(stderr), "D-99") || strings.Contains(string(stderr), "D-1,D-99") {
+		t.Errorf("error should name D-99 alone, got: %s", stderr)
+	}
+}
+
 // Decision linkage used to be settable only at `ticket new`, so a tree created
 // without --decision could never be repaired and the decision's own
 // implementation-status view (D-20) quietly under-reported (T-61).

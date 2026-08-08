@@ -319,11 +319,21 @@ func buildDecisionTree(ctx context.Context, db *sql.DB, d *repo.Decision, withRe
 func newDecisionsShowCmd() *cobra.Command {
 	var withTickets, withRefs bool
 	cmd := &cobra.Command{
-		Use:   "show <id>",
-		Short: "Show a single decision with optional joins",
-		Args:  cobra.ExactArgs(1),
+		Use:   "show <id[,id,...]>",
+		Short: "Show one or more decisions with optional joins",
+		Long: `Show decisions with optional joins. Use commas to batch:
+
+  pql decisions show D-1
+  pql decisions show D-1,D-2,D-3 --with-tickets
+
+A single ID renders a single show-tree object; multiple IDs render an
+array of show-trees in the order given. Any unknown ID fails the call.
+Same batching rule as ` + "`pql ticket show`" + `.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			ids := parseIDs(args[0])
+
 			cfg, err := config.Load(loadOptsFromFlags(cmd))
 			if err != nil {
 				return &exitError{code: diag.NoInput, msg: err.Error()}
@@ -335,17 +345,20 @@ func newDecisionsShowCmd() *cobra.Command {
 			}
 			defer func() { _ = pdb.Close() }()
 
-			d, err := repo.GetDecision(ctx, pdb.SQL(), args[0])
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if d == nil {
-				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("decision %s not found", args[0])}
-			}
-
-			out, err := buildDecisionTree(ctx, pdb.SQL(), d, withRefs, withTickets)
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
+			trees := make([]*decisionShowTree, 0, len(ids))
+			for _, id := range ids {
+				d, err := repo.GetDecision(ctx, pdb.SQL(), id)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				if d == nil {
+					return &exitError{code: diag.NoInput, msg: fmt.Sprintf("decision %s not found", id)}
+				}
+				tree, err := buildDecisionTree(ctx, pdb.SQL(), d, withRefs, withTickets)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				trees = append(trees, tree)
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -353,7 +366,16 @@ func newDecisionsShowCmd() *cobra.Command {
 				return &exitError{code: diag.Usage, msg: err.Error()}
 			}
 			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(out, rOpts); err != nil {
+			// One id keeps the single-object shape it has always had; a
+			// batch renders an array. Same rule as `ticket show`, so a
+			// caller that learned one knows the other.
+			if len(trees) == 1 {
+				if _, err := render.One(trees[0], rOpts); err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				return nil
+			}
+			if _, err := render.Render(trees, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 			return nil

@@ -1191,31 +1191,60 @@ func newTicketLabelCmd() *cobra.Command {
 // --- board ---
 
 func newTicketBoardCmd() *cobra.Command {
-	var teamFlag string
+	var teamFlag, statusFlag string
+	var openOnly bool
 	cmd := &cobra.Command{
 		Use:   "board",
 		Short: "Kanban board view of tickets",
-		Args:  cobra.NoArgs,
+		Long: `One column per status, in vocabulary order, each carrying the
+compact ticket rows (id, type, title, status, priority — never descriptions).
+Empty columns are omitted.
+
+By default every column is emitted, and on a mature board the terminal ones
+dominate: on this repo's own dataset the done column was ~82% of the payload.
+Two ways to cut it — --open drops every terminal column, and --status takes an
+explicit comma-separated column set. Unlike the --status filter on ` +
+			"`ticket list`" + `, an unknown name here exits 64 listing the
+vocabulary rather than silently returning an empty board.
+
+Each column carries both ` + "`status`" + ` (the name to filter on) and
+` + "`label`" + ` (the display string), so rendering headers does not need a
+second call to ` + "`ticket statuslist`" + `.
+
+There is no --fields here: rows are nested inside columns, so a field list
+would be ambiguous about which level it projects. The row shape is already
+minimal; use ` + "`ticket list --fields`" + ` when you want an exact key set.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
 			}
+			ss := statusSetFromConfig(cfg)
+
+			wanted, err := boardColumns(ss, statusFlag, openOnly)
+			if err != nil {
+				return err
+			}
+
 			pdb, err := openPlanningDB(ctx, cfg)
 			if err != nil {
 				return &exitError{code: diag.Unavail, msg: err.Error()}
 			}
 			defer func() { _ = pdb.Close() }()
 
-			ss := statusSetFromConfig(cfg)
 			tks, err := repo.ListTickets(ctx, pdb.SQL(), repo.TicketFilter{Team: teamFlag, Statuses: ss})
 			if err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 
 			type column struct {
-				Status  string               `json:"status"`
+				Status string `json:"status"`
+				// Label is the display string for this column. Without it a
+				// caller rendering headers had to join against
+				// `ticket statuslist` to turn in_progress into "In Progress".
+				Label   string               `json:"label"`
 				Tickets []repo.TicketSummary `json:"tickets"`
 			}
 			byStatus := make(map[string][]repo.TicketSummary)
@@ -1226,11 +1255,16 @@ func newTicketBoardCmd() *cobra.Command {
 				})
 			}
 
-			var board []column
-			for _, s := range ss.Names() {
-				if len(byStatus[s]) > 0 {
-					board = append(board, column{Status: s, Tickets: byStatus[s]})
+			board := []column{}
+			for _, def := range ss.All() {
+				if !wanted[def.Name] || len(byStatus[def.Name]) == 0 {
+					continue
 				}
+				board = append(board, column{
+					Status:  def.Name,
+					Label:   def.Label,
+					Tickets: byStatus[def.Name],
+				})
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
@@ -1245,7 +1279,46 @@ func newTicketBoardCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&teamFlag, "team", "", "filter by team")
+	cmd.Flags().StringVar(&statusFlag, "status", "", "restrict to these comma-separated status columns (unknown names exit 64)")
+	cmd.Flags().BoolVar(&openOnly, "open", false, "drop every terminal column (done, cancelled — whatever this vault classes as terminal)")
 	return cmd
+}
+
+// boardColumns resolves which status columns the board should emit.
+//
+// Validating --status against the vocabulary is a deliberate departure from
+// `ticket list --status`, which passes any value through to SQL and returns an
+// empty list at exit 0. That is tolerable for a row filter and actively bad
+// here: a mistyped column name would render an empty board that looks exactly
+// like a finished one. The vocabulary is a known finite set pql itself
+// defines, so there is no reason to guess (T-77).
+func boardColumns(ss planning.StatusSet, statusFlag string, openOnly bool) (map[string]bool, error) {
+	if statusFlag != "" && openOnly {
+		return nil, &exitError{code: diag.Usage, msg: "--status and --open are mutually exclusive: --open is the shorthand for every non-terminal column"}
+	}
+
+	wanted := make(map[string]bool, len(ss.Names()))
+	switch {
+	case statusFlag != "":
+		for _, name := range splitFieldList(statusFlag) {
+			if !ss.IsValid(name) {
+				return nil, &exitError{code: diag.Usage, msg: fmt.Sprintf(
+					"unknown status %q (valid: %s)", name, strings.Join(ss.Names(), ", "))}
+			}
+			wanted[name] = true
+		}
+	case openOnly:
+		for _, name := range ss.Names() {
+			if !ss.IsTerminal(name) {
+				wanted[name] = true
+			}
+		}
+	default:
+		for _, name := range ss.Names() {
+			wanted[name] = true
+		}
+	}
+	return wanted, nil
 }
 
 func renderTicketResults(cmd *cobra.Command, results []repo.Ticket) error {

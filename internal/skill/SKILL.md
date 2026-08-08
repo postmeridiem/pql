@@ -223,7 +223,7 @@ they live in SQLite and travel via the changelog described below.
 | `pql decisions sync [--no-style]` | Parse the DQR tree into pql.db. Also reports style problems (filename, subdir/type mismatch, domain conflicts) unless suppressed |
 | `pql decisions validate [--no-style]` | Dry run. Structural errors exit non-zero; style issues only warn |
 | `pql decisions list [--type T] [--domain D] [--status S]` | List records. `--type confirmed\|question\|rejected`, `--status active\|superseded\|resolved\|open` |
-| `pql decisions show <id> [--with-refs] [--with-tickets]` | One record, optionally with cross-references or the tickets implementing it |
+| `pql decisions show <id[,id,…]> [--with-refs] [--with-tickets]` | One or more records, optionally with cross-references or the tickets implementing them |
 | `pql decisions read <id>` | The record's full markdown body |
 | `pql decisions refs <id>` | Cross-references involving a record |
 | `pql decisions claim <D\|Q\|R> <domain> "title"` | Print the next free id. No side effects |
@@ -242,7 +242,10 @@ the copy is, and say so rather than silently reporting possibly-old data.
 
 `decisions show <id> --with-tickets` is the implementation-status view: it
 answers "is this decision actually built?" and is only as complete as the
-ticket links happen to be.
+ticket links happen to be. Batch it — `decisions show D-1,D-2,D-3
+--with-tickets` — to ask that across a whole set in one call rather than one
+call per record. Like `ticket show`, one id returns an object and several
+return an array.
 
 ## Tickets
 
@@ -273,7 +276,7 @@ create-time-only.
 |---|---|
 | `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--decision D-N] [--under T-N] [--leaf] [--unblocked]` | Filtered list, uncapped unless you pass `--limit`. `--decision` is the one that makes decision→ticket questions a single call; `--under` = all descendants (not the parent itself); `--leaf` = no children; `--unblocked` = every blocker reached a terminal status. No `--type` filter exists |
 | `pql ticket show <id[,id,…]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | One or more full records. `--tree` = nested descendants plus the direct parent |
-| `pql ticket board [--team T]` | Kanban view |
+| `pql ticket board [--team T] [--open] [--status S,S]` | Kanban view: one column per status, each with compact rows and a display `label`. `--open` drops the terminal columns — usually most of the payload on a mature board. `--status` names an exact column set; an unknown name exits `64` here rather than returning empty |
 | `pql ticket statuslist` | The configured status vocabulary — what a UI reads to build columns |
 
 Identity: the `T-NNN` you see is a friendly *label* over a stable underlying
@@ -355,6 +358,11 @@ the rule above, that is how an agent ends up reporting "there are no open
 questions" when there are twelve. **If a filtered query returns nothing,
 re-run it unfiltered before concluding the data is absent.** Flag names *are*
 validated: an unknown flag exits `64`.
+
+Two exceptions, both checked against a known finite set: `--fields` (unknown
+key exits `64` listing the valid ones) and `ticket board --status` (unknown
+status exits `64` listing the vocabulary). Everywhere else, assume a filter
+value is passed straight through.
 
 Empty fields are **omitted** from JSON rather than set to `null` — a ticket
 with no parent has no `parent_id` key, and a decision with no tickets has no
