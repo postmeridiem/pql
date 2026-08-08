@@ -59,11 +59,15 @@ CI substance lives in `ci/{lint,test,release,eval}.sh`. GitHub Actions workflows
 
 **Hook setup ordering.** Only `.githooks/pre-push` is tracked. The replication shims (`pre-commit`, `post-merge`, `post-checkout`, `post-rewrite`) are per-clone and planted by `pql init` into whatever `core.hooksPath` resolves to (T-52). So set `core.hooksPath .githooks` **before** running `pql init` — otherwise init plants them into `.git/hooks/` and they never fire under the redirected path. A contributor who doesn't use pql can skip `pql init` entirely and the repo still works.
 
-**One command per invocation.** `.claude/settings.json` allowlists tools by
-prefix, so a shell construction that merely *contains* an allowed command is not
-an allowed command: `&&` chains, pipes, `$(…)` substitution and redirection all
-prompt even when every part is permitted. Prefixing also breaks it —
-`PATH=… make build` does not match `Bash(make *)`. Consequences worth knowing:
+**One command per invocation.** Claude Code is documented to split compound
+commands on `&&`, `||`, `;`, `|` and newlines and match each segment against
+`.claude/settings.json` independently — so a pipeline whose every part is
+allowlisted *should* run unprompted. In practice piped commands still prompt
+([claude-code#39438](https://github.com/anthropics/claude-code/issues/39438)),
+so treat one-command-per-invocation as a workaround for that bug rather than a
+property of the design, and revisit when it closes. Prefixing genuinely does
+break matching, and always will: `PATH=… make build` starts with `PATH=`, so it
+matches no `Bash(make *)` rule. Consequences worth knowing:
 
 - Reach for a flag before a pipe (`--limit`, `--fields`, `--oneline`, `--pretty`).
 - If something needs shell glue more than once, it belongs in a Makefile target

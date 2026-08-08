@@ -42,16 +42,26 @@ One row per frontmatter key, with observed types and file counts. Write
 queries against what it reports, not against what you assume is there.
 
 **If that fails with exit `70` naming a file**, indexing aborted on malformed
-frontmatter and *every* command will fail the same way until it is excluded:
+frontmatter:
 
 ```
-{"code":"cli.exit","msg":"indexer: extract \".claude/commands/x.md\": markdown: parse frontmatter: yaml: …"}
+{"code":"cli.exit","msg":"indexer: extract \"notes/x.md\": markdown: parse frontmatter: yaml: …"}
 ```
 
-Exclude it with a glob — a `.pqlignore` at the vault root (gitignore syntax),
-or `exclude:` in `.pql/config.yaml`. Indexing stops at the *first* bad file,
-so expect to repeat this if there are several. `pql doctor` shows
-`index.files: 0` when this has happened, which is the quickest confirmation.
+Every *vault* command then fails the same way until the file is excluded. The
+planning surface is unaffected — `ticket` and `decisions` read `pql.db` and
+keep working, so a broken index does not block planning work.
+
+Exclude it via `exclude:` in `.pql/config.yaml`, a flat list of doublestar
+patterns. A `.pqlignore` file is **not** read by default: `ignore_files`
+defaults to `[".gitignore"]`, so a `.pqlignore` does nothing until it is listed
+there too. `exclude:` is the shorter path. Indexing stops at the *first* bad
+file, so expect to repeat this if there are several.
+
+Do not use `pql doctor` to confirm the fix. It reports whatever the last
+successful index left behind — a healthy-looking `index.files: 44` while every
+command is still failing — because it never triggers indexing itself. Re-run
+the command that failed; its diagnostic names the offending file.
 
 ## Global flags
 
@@ -98,8 +108,13 @@ always accountable: you can see *why* it ranked where it did.
 
 They differ in how they weight the same signals: `related` on link overlap
 (0.35), `context` on link overlap and path proximity together (0.30/0.25),
-`search` on centrality (0.40) — which is why a vague query surfaces hub
-files rather than precise ones.
+`search` on centrality (0.40) with recency second (0.25).
+
+Those weights only bite where the signal exists. In a link-sparse vault
+centrality is 0 on every candidate, so **recency decides** and a vague query
+returns the most recently modified files rather than the most central ones. If
+results look arbitrary, check `signals[]` — a score exactly equal to the recency
+weight means nothing else contributed.
 
 **`pql search` is a substring filter, not a search engine.** Read this
 before using it. The query is matched as **one literal lowercase substring**
@@ -132,18 +147,22 @@ It is often the most useful part: it tells you *how* a result relates.
 |---|---|
 | `pql files [glob]` | Indexed files, optionally glob-filtered |
 | `pql tags [--sort count]` | Distinct tags with counts |
-| `pql backlinks <path>` | Files linking **to** a path |
+| `pql backlinks <target>` | Files linking **to** a target. Matches the link *as written*, so a wikilink `[[persona]]` is found by `backlinks members/x/persona` but **not** by the full path with `.md`. Try both forms before concluding nothing links to a file |
 | `pql outlinks <path>` | Links **from** a file, in document order |
 | `pql meta <path>` | One file's frontmatter, tags, outlinks and headings |
 | `pql schema` | Inferred frontmatter schema across the vault |
-| `pql base <name>` | Execute an Obsidian `.base` file |
+| `pql base [name] [--view V]` | Execute an Obsidian `.base` file. **Bare `pql base` lists the bases it found** with their names — the only discovery route, since `files '*.base'` returns `[]`. `--view` picks among a base's named views |
 
 ```bash
-pql files 'sessions/*'
+pql files 'sessions/*'          # note: * crosses /, so this is recursive
 pql tags --sort count --limit 20
-pql backlinks members/vaasa/persona.md
 pql meta members/vaasa/persona.md --pretty
+pql backlinks members/vaasa/persona      # extensionless: matches [[persona]]
+pql backlinks members/vaasa/persona.md   # path form: matches path-shaped links
 ```
+
+A `[]` from `backlinks` means "no link written in that form", which is not the
+same as "nothing links here" — see the caveat in the table above.
 
 ## The DSL
 
@@ -215,7 +234,7 @@ ticket links happen to be.
 
 | Command | Does |
 |---|---|
-| `pql ticket new <type> "title" [--parent T-N] [--decision D-N] [--priority P] [--description ...] [--id-only]` | Create. Types: initiative, epic, story, task, bug. `--id-only` prints just the id, for scripts |
+| `pql ticket new <type> "title" [--parent T-N] [--decision D-N] [--priority P] [--assign A] [--team T] [--description ...] [--id-only]` | Create. Types: initiative, epic, story, task, bug. Returns `{"id":"T-N"}` and nothing else — confirming the other fields landed needs a follow-up `show`. `--id-only` drops the JSON wrapper and prints the bare id |
 | `pql ticket refine write <id> <json\|--file\|--stdin>` | Patch title, description, priority or type from a JSON payload |
 | `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description, blank-line separated. Never rewrites existing text |
 | `pql ticket refine list` / `refine next [--skip N]` | The queue of tickets with empty descriptions |
@@ -236,7 +255,7 @@ create-time-only.
 
 | Command | Does |
 |---|---|
-| `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-N] [--leaf] [--unblocked]` | Filtered list. `--under` = all descendants; `--leaf` = no children; `--unblocked` = every blocker reached a terminal status |
+| `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--decision D-N] [--under T-N] [--leaf] [--unblocked]` | Filtered list, uncapped unless you pass `--limit`. `--decision` is the one that makes decision→ticket questions a single call; `--under` = all descendants (not the parent itself); `--leaf` = no children; `--unblocked` = every blocker reached a terminal status. No `--type` filter exists |
 | `pql ticket show <id[,id,…]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | One or more full records. `--tree` = nested descendants plus the direct parent |
 | `pql ticket board [--team T]` | Kanban view |
 | `pql ticket statuslist` | The configured status vocabulary — what a UI reads to build columns |
@@ -294,10 +313,14 @@ The changelog carries a format version. An older one replays with a loud
 
 ## Output
 
-- **stdout:** a JSON array. `--jsonl` for one object per line, `--pretty` for
-  humans, `--limit N` to cap. Two commands opt out of JSON deliberately:
-  `ticket new --id-only` prints a bare id, and `--oneline` on the list verbs
-  prints `id<TAB>status<TAB>title`.
+- **stdout:** JSON — an **array** from the list and query verbs, a single
+  **object** from record-level and dashboard verbs (`ticket show <one-id>`,
+  `decisions show`, `plan status`, `plan whatsnext`, `doctor`, `version
+  --build-info`, `watch status`, `ticket new`). Do not write one parser assuming
+  an array. `--jsonl` for one object per line, `--pretty` for humans, `--limit N`
+  to cap. Two surfaces opt out of JSON deliberately: `ticket new --id-only`
+  prints a bare id, and `--oneline` on the list verbs prints
+  `id<TAB>status<TAB>title`.
 - **stderr:** JSON diagnostics, one per line. Codes come in two shapes:
   `pql.<phase>.<kind>` for index, parse, eval and plan problems
   (`pql.parse.unexpected_token`), and `cli.error` / `cli.exit` for flag and
@@ -324,10 +347,25 @@ with no parent has no `parent_id` key, and a decision with no tickets has no
 ## Projection
 
 The list verbs (`ticket list`, `decisions list`) take `--fields id,status,title`
-to return only those keys in that order, and `--oneline` for a plain-text
-index. `ticket list` omits `description` by default because it dominates the
-payload; `--full` opts back in. Record-level commands like `ticket show`
-always return whole records — projection flags do not apply there.
+to return only those keys in that order, `--fields '*'` for all of them, and
+`--oneline` for a plain-text index. `ticket list` omits `description` by default
+because it dominates the payload; `--full` opts back in. Record-level commands
+like `ticket show` always return whole records — projection flags do not apply
+there, and exit `64` if you pass one.
+
+Valid field names, since guessing them costs a round trip:
+
+- **tickets** — `id`, `record_id`, `type`, `title`, `description`, `status`,
+  `priority`, `parent_id`, `assigned_to`, `team`, `decision_ref`, `created_at`,
+  `updated_at`. Note `decision_ref`, not `decision_id`.
+- **decisions** — `id`, `type`, `domain`, `title`, `status`, `date`,
+  `file_path`, `synced_at`.
+
+An unknown name exits `64` and prints the valid set, so the error is a usable
+lookup if you forget.
+
+`--oneline` prints **nothing at all** on no match — zero bytes, not `[]`. Do
+not read that as a failed call.
 
 Prefer these over piping to `jq`: they are cheaper and they compose with
 `--limit`.
@@ -374,10 +412,10 @@ it after a pql upgrade is how hooks pick up new behaviour.
 }
 ```
 
-**These rules match by prefix, and that shapes how commands must be
-written.** `Bash(pql *)` matches an invocation that *is* a pql command. It
-does not match a shell construction that merely contains one, so each of
-these prompts even though the pql part is allowed:
+**Write one command per invocation.** A compound command is meant to be split
+on `&&`, `||`, `;` and `|`, with each segment matched separately — but piped
+commands currently prompt anyway even when every segment is allowlisted, so in
+practice each of these interrupts the caller:
 
 ```bash
 pql decisions sync && pql decisions list   # chained
@@ -387,21 +425,16 @@ pql ticket list > out.json                 # redirected
 ```
 
 Run one command per invocation and read its output instead. Use `--limit`,
-`--fields` and `--oneline` where you would have piped, and `--pretty` where
-you would have formatted.
+`--fields` and `--oneline` where you would have piped, and `--pretty` where you
+would have formatted — all three are cheaper than a pipe anyway, since they cut
+the payload at the source rather than after it has been produced.
 
-**Metacharacters inside quoted arguments can also break the match**, which is
-less obvious. A title or description containing `<`, `>`, `|` or backticks
-can cause the whole invocation to be rejected as unparseable even though the
-characters are safely quoted:
-
-```bash
-pql ticket new task "add <id> | none handling"   # may be refused
-```
-
-Pass content like that through a file instead — `--file` and `--stdin` are
-available on `ticket append`, `refine write` and `query`, and they avoid the
-problem entirely while also handling newlines and quotes cleanly.
+A long or punctuation-heavy argument occasionally trips the same machinery — a
+title containing `|` can read as a pipe even when quoted. This is inconsistent
+rather than reliable, so do not pre-empt it. React to it: if an invocation is
+refused as unparseable instead of failing on its own merits, move the content
+into a file. `--file` and `--stdin` work on `ticket append`, `refine write` and
+`query`, and handle newlines and embedded quotes cleanly as a bonus.
 
 If prompts persist after the allow rules are in place, check for a `deny`
 entry that overrides them, and confirm which settings file is actually being
