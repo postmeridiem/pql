@@ -205,19 +205,37 @@ var expectedColumns = map[string][]string{
 // need to embed it (e.g. pql init seeding .pql/changelog/<table>/0000-schema.sql).
 func Schema() string { return planningSchema + planningIndexes }
 
-// Migrate ensures the planning schema exists and matches the current
-// expected shape. Per D-19, there is no migration framework — Migrate
-// either creates the schema fresh or refuses to proceed when an older
-// shape is detected. Recovery for the latter is to delete pql.db and
-// re-import.
+// Migrate ensures the planning schema exists, is carried forward by any
+// applicable migration step, and matches the current expected shape.
+//
+// The order is deliberate. CREATE IF NOT EXISTS brings a fresh database to the
+// current shape and is a no-op on an existing one. Forward steps then run
+// against a database that has a ledger to migrate from. verifySchema is the
+// post-condition — a step that reported success but produced the wrong shape
+// must not pass, and a database that predates every step still gets the
+// detailed recovery hint it always did, which is better than a generic
+// "no step reaches this version". Only then is the baseline stamped: recording
+// a version for a shape nobody verified would be an assertion the next
+// release's migration would trust.
+//
+// D-28 supersedes D-19's no-runner clause; see schema_migrate.go for why.
 func Migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, planningSchema); err != nil {
 		return fmt.Errorf("planning: create schema: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, schemaMigrations); err != nil {
+		return fmt.Errorf("planning: create schema_migrations: %w", err)
+	}
+	if err := migrateSchema(ctx, db); err != nil {
+		return err
 	}
 	// Verify column shape before creating indexes: an out-of-date pql.db
 	// would otherwise fail on an index over a renamed column with a raw
 	// SQLite error instead of the friendly recovery hint.
 	if err := verifySchema(ctx, db); err != nil {
+		return err
+	}
+	if err := stampSchemaBaseline(ctx, db); err != nil {
 		return err
 	}
 	if _, err := db.ExecContext(ctx, planningIndexes); err != nil {

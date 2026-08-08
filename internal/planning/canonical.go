@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+
+	"github.com/postmeridiem/pql/internal/version"
 )
 
 // CanonicalVersion identifies the canonicalisation rules used to compute
@@ -13,7 +15,11 @@ import (
 // row records the version it was hashed under, so re-hashing under a new
 // version can be done lazily without invalidating other rows in the
 // transition window.
-const CanonicalVersion = 2
+//
+// The number itself is declared in internal/version alongside pql's other
+// version axes, where a test pins it to project.yaml; the rules it describes
+// live here.
+const CanonicalVersion = version.CanonicalVersion
 
 // Canonical encoding sentinels. fieldSep separates field values; the
 // leading 0x00 byte in nullSentinel cannot appear in a SQLite TEXT
