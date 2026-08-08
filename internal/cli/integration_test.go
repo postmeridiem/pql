@@ -1793,6 +1793,55 @@ func TestIntegration_PlanRebuildVerify_LostRowsExit65(t *testing.T) {
 	}
 }
 
+// `pql skill show` wrapped the skill in JSON, so reading a shipped skill as
+// prose needed a pipe into an extractor — and the skill itself tells callers
+// never to pipe. The help even claimed --pretty made it readable; it only
+// indents the envelope. --raw is the way out.
+func TestIntegration_SkillShowRaw(t *testing.T) {
+	vault := initVaultIT(t)
+
+	raw := pqlIT(t, vault, "skill", "show", "--raw")
+	if !strings.HasPrefix(raw, "---\nname: pql\n") {
+		t.Errorf("--raw should emit the markdown verbatim, got: %.80q", raw)
+	}
+
+	// The invariant is byte equality with what the JSON mode carries — the
+	// point of --raw is unwrapping, not reformatting. Don't test for the
+	// absence of a `\n` two-character sequence: a skill body may legitimately
+	// contain one in an example, which is how the first version of this test
+	// failed on clean-house's rules.md.
+	var bundle struct {
+		Files map[string]string `json:"files"`
+	}
+	if err := json.Unmarshal([]byte(pqlIT(t, vault, "skill", "show")), &bundle); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if bundle.Files["SKILL.md"] != raw {
+		t.Errorf("--raw and the JSON bundle disagree about SKILL.md")
+	}
+
+	// --file reaches other files in a multi-file bundle.
+	rules := pqlIT(t, vault, "skill", "show", "clean-house", "--raw", "--file", "references/rules.md")
+	if !strings.HasPrefix(rules, "# clean-house rule catalog") {
+		t.Errorf("--file did not produce that file's raw text: %.80q", rules)
+	}
+
+	// Naming a file that isn't in the bundle lists what is.
+	_, stderr, code := run(t, vault, "skill", "show", "--raw", "--file", "nope.md")
+	if code != 66 {
+		t.Fatalf("unknown bundle file should exit 66, got %d", code)
+	}
+	if !strings.Contains(string(stderr), "SKILL.md") {
+		t.Errorf("error should list the files the bundle has:\n%s", stderr)
+	}
+
+	// --file without --raw selects nothing, so it is a usage error rather
+	// than a silently ignored flag.
+	if _, _, code := run(t, vault, "skill", "show", "--file", "SKILL.md"); code != 64 {
+		t.Errorf("--file without --raw should exit 64, got %d", code)
+	}
+}
+
 // `--fields` was scoped to the list verbs, so two agents in live sessions ran
 // `ticket show <id> --fields id,status,title` and got exit 64 — the surface is
 // not guessable from having learned it on `list` (T-67). It projects the top

@@ -492,3 +492,8 @@ reaching into `index` and hoping.
 writes or updates it (`--force` overrides hand edits), and `pql skill show
 [name]` echoes what the running binary actually ships — useful for confirming
 which version of this document an installed binary carries.
+
+`pql skill show` returns a JSON bundle, so **add `--raw` to read a skill as
+text**: it writes one file's bytes and nothing else. Without it you would have
+to pipe the JSON through an extractor, and piping is what this document tells
+you to avoid. `--raw --file <path>` reaches other files in a multi-file bundle.

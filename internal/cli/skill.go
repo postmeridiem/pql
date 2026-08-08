@@ -3,8 +3,10 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -79,6 +81,8 @@ type skillContent struct {
 }
 
 func newSkillShowCmd() *cobra.Command {
+	var raw bool
+	var file string
 	cmd := &cobra.Command{
 		Use:   "show [name]",
 		Short: "Print the skill content embedded in this binary",
@@ -87,7 +91,16 @@ copy installed on disk, so it works from anywhere without a vault.
 Defaults to the "pql" skill; pass a name for another bundled skill.
 
 Output is a JSON object mapping each file in the bundle to its embedded
-content; pass --pretty to read it as text.`,
+content. --pretty indents that object, but the file bodies stay
+JSON-escaped strings inside it — use --raw to read a skill as text.
+
+  pql skill show --raw                  # SKILL.md, as markdown
+  pql skill show --raw --file rules.md  # another file in the bundle
+
+--raw writes the file's bytes and nothing else, so it is the one way to
+read a shipped skill without piping through an extractor. That matters:
+this skill's own guidance tells callers to avoid pipes, and a command
+whose output its own documentation cannot reach is a defect.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := skill.PrimarySkill
@@ -100,6 +113,13 @@ content; pass --pretty to read it as text.`,
 					code: diag.NoInput,
 					msg:  fmt.Sprintf("no bundled skill %q (have: %s)", name, strings.Join(bundledSkillNames(), ", ")),
 				}
+			}
+
+			if raw {
+				return writeRawSkillFile(cmd, s, file)
+			}
+			if file != "" {
+				return &exitError{code: diag.Usage, msg: "--file selects which file --raw prints; it has no meaning without --raw"}
 			}
 
 			files := make(map[string]string, len(s.Files()))
@@ -118,7 +138,27 @@ content; pass --pretty to read it as text.`,
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&raw, "raw", false, "print one file's content as text instead of the JSON bundle")
+	cmd.Flags().StringVar(&file, "file", "", "which file --raw prints (default SKILL.md)")
 	return cmd
+}
+
+// writeRawSkillFile prints one bundled file verbatim. This is a sanctioned
+// non-JSON stdout mode, alongside `ticket new --id-only` and `--oneline`:
+// the payload is a markdown document, and wrapping it in JSON is what made
+// it unreadable without an extractor.
+func writeRawSkillFile(cmd *cobra.Command, s *skill.Skill, rel string) error {
+	if rel == "" {
+		rel = skill.SkillFile
+	}
+	if !slices.Contains(s.Files(), rel) {
+		return &exitError{code: diag.NoInput, msg: fmt.Sprintf(
+			"skill %q has no file %q (have: %s)", s.Name, rel, strings.Join(s.Files(), ", "))}
+	}
+	if _, err := io.WriteString(cmd.OutOrStdout(), s.FileContent(rel)); err != nil {
+		return &exitError{code: diag.Software, msg: err.Error()}
+	}
+	return nil
 }
 
 // bundledSkillNames lists the names of every skill embedded in the

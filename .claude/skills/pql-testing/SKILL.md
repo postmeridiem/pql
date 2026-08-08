@@ -91,19 +91,17 @@ implementation makes omissions invisible.
 ### 1. Read the shipped skill
 
 ```bash
-pql skill show | python3 -c 'import json,sys; print(json.load(sys.stdin)["files"]["SKILL.md"])'
+pql skill show --raw
 ```
 
 Read what the binary ships, not the repo file. Note what you expect to be able
 to do, and anything the text leaves ambiguous.
 
-Two things about that command are themselves evidence, so record them rather
-than working around them silently. The output is one JSON-escaped string, so
-reading it as prose needs an extraction step — and that step is a pipe, which
-the skill under audit tells callers never to use. A command whose output its own
-documentation cannot reach is a finding. So is the undeclared `python3`
-dependency: if it is absent, use any equivalent, and note that the procedure
-assumed it.
+`--raw` exists because of this step. It used to be `pql skill show` piped
+through a JSON extractor — the default output is one escaped string, so reading
+it as prose needed a pipe, which the skill under audit tells callers never to
+use, plus an undeclared `python3`. A command whose output its own documentation
+cannot reach is a defect, and it was one.
 
 ### 2. Verify both directions
 
@@ -229,13 +227,17 @@ if a "raw" mode returns the same count as listing everything, it is not
 answering the question.
 
 **D. Aborts that poison every command.** One malformed input can fail an entire
-index, making every unrelated command fail too. Plant a bad file in the scratch
-vault and check whether the skill names a recovery path that actually works —
-follow it literally rather than reading it charitably. Then rebuild the vault,
-since the poisoned index affects everything after it.
+index, making every unrelated command fail too. Plant a bad file and check
+whether the skill names a recovery path that actually works — follow it
+literally rather than reading it charitably:
 
-Writing that file is sanctioned and not a breach of "change nothing": that rule
-is about the repository and about fixing defects, not about the disposable vault
+```bash
+make scratch-poison    # plants a file with malformed frontmatter
+make scratch-vault     # resets, afterwards — the poisoned index affects everything after it
+```
+
+Planting it is sanctioned and not a breach of "change nothing": that rule is
+about the repository and about fixing defects, not about the disposable vault
 you were given to exercise. Writes to the scratch vault are testing. Writes to
 the repo are fixing, and fixing is not this job.
 

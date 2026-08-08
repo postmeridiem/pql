@@ -61,6 +61,14 @@ four defects nobody had hit from the inside.
   substitution, both of which fail under the prefix allowlists consuming
   projects use.
 
+- **`pql skill show --raw` prints a skill as text.** The command returned a
+  JSON object whose values were the file bodies as escaped strings, so reading
+  your own shipped skill as prose meant piping it through an extractor — and
+  the skill itself tells callers not to pipe. The help compounded it by
+  claiming `--pretty` made it readable; `--pretty` only indents the envelope.
+  `--raw` writes one file's bytes and nothing else, `--raw --file <path>`
+  reaches the other files in a multi-file bundle.
+
 - **`--fields` works on `ticket show` and `decisions show`** (D-27 amended,
   T-67). It was scoped to the list verbs on purpose, but the boundary is not
   guessable: two agents in live sessions learned `--fields` on `list`, ran

@@ -179,6 +179,13 @@ scratch-vault: build ## Build a disposable vault with both surfaces, safe to mut
 	@echo "  Safe to mutate — it is a copy. Re-run this target to reset it."
 	@echo "  Use with: pql --vault $(SCRATCH_VAULT) <command>"
 
+.PHONY: scratch-poison
+scratch-poison: ## Plant a file with malformed frontmatter in the scratch vault (audit shape D).
+	@test -d "$(SCRATCH_VAULT)" || { echo "no scratch vault at $(SCRATCH_VAULT) — run: make scratch-vault"; exit 1; }
+	@printf -- '---\ntitle: [unclosed\n  bad: : :\n---\n\n# Poisoned\n' > "$(SCRATCH_VAULT)/poisoned.md"
+	@echo "Planted $(SCRATCH_VAULT)/poisoned.md — every vault command should now fail at exit 70."
+	@echo "Reset with: make scratch-vault"
+
 COUNCIL_SRC ?= /var/mnt/data/projects/council
 .PHONY: refresh-fixtures
 refresh-fixtures: ## Re-copy the Council vault snapshot into testdata/. Manual; never runs in CI.
