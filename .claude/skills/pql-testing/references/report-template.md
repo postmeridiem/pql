@@ -85,4 +85,21 @@ template, found while following them. Write "none" if none.>
   driven non-interactively), and `self-update` (the skill forbids it). State the
   exclusions so the denominator is comparable between runs — otherwise a careful
   auditor scores worse than one who counted boilerplate.
-- Get skill size from the shipped copy, not the repo file.
+- **Skill size** comes from `pql skill status`, which reports `lines` and
+  `words` on the `embedded` snapshot — the copy this binary ships, which is what
+  the number should describe. Do not measure the repo file (it can differ from
+  the binary) and do not pipe `skill show --raw` into `wc` (piping is what the
+  procedure and the skill both tell callers to avoid).
+
+## Aborting
+
+A run that could not execute is a legitimate outcome and has its own shape.
+Fill the template as normal, with the statistics zeroed, the denial or failure
+log complete, and the verdict stated as **no verdict possible** plus the
+smallest thing that would make one possible.
+
+Do not substitute a source-versus-skill code review for the behavioural audit.
+It is not the job, and a review written from the implementation reads as
+authoritative while resting on zero observations — which is worse than an
+honest abort. Unverified leads from a static read are welcome, but label them
+as leads and keep them out of the findings count.

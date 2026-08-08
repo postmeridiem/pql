@@ -61,6 +61,12 @@ four defects nobody had hit from the inside.
   substitution, both of which fail under the prefix allowlists consuming
   projects use.
 
+- **`pql skill status` reports `lines` and `words` per snapshot.** The audit
+  report asks for the size of the *shipped* skill, and the only route to that
+  was `pql skill show --raw | wc -l` — a pipe, which the procedure, the skill
+  and the repo's own conventions all tell callers to avoid. The number now
+  comes from the binary that embeds it.
+
 - **`pql skill show --raw` prints a skill as text.** The command returned a
   JSON object whose values were the file bodies as escaped strings, so reading
   your own shipped skill as prose meant piping it through an extractor — and

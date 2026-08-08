@@ -142,9 +142,19 @@ const (
 )
 
 // Snapshot captures a skill at a point in time. Hash is "sha256:<hex>".
+//
+// Lines and Words size the bundle. They are here because the only other way
+// to measure the *shipped* skill — as opposed to the repo file, which may
+// differ — was `pql skill show --raw | wc -l`, and that is a pipe. The audit
+// procedure, the skill itself and the repo's CLAUDE.md all tell callers not
+// to pipe, so a report asking for skill size was asking for a number that
+// could only be got by breaking the rule. Counted across every file in the
+// bundle.
 type Snapshot struct {
 	Version     string `json:"version"`
 	Hash        string `json:"hash"`
+	Lines       int    `json:"lines"`
+	Words       int    `json:"words"`
 	InstalledAt string `json:"installed_at,omitempty"`
 }
 
@@ -162,10 +172,27 @@ type Status struct {
 // Embedded returns the snapshot for this skill as bundled in the
 // running binary.
 func (s *Skill) Embedded() Snapshot {
+	lines, words := sizeOf(s.files)
 	return Snapshot{
 		Version: version.Version,
 		Hash:    s.Hash(),
+		Lines:   lines,
+		Words:   words,
 	}
+}
+
+// sizeOf counts lines and whitespace-separated words across a bundle.
+// A trailing newline does not open a further line, matching `wc -l`'s
+// count of newline characters closely enough to be comparable.
+func sizeOf(files map[string]string) (lines, words int) {
+	for _, content := range files {
+		lines += strings.Count(content, "\n")
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			lines++
+		}
+		words += len(strings.Fields(content))
+	}
+	return lines, words
 }
 
 // installDir returns the directory this skill installs into beneath
@@ -197,7 +224,8 @@ func (s *Skill) Inspect(root string) (*Status, error) {
 	if err != nil {
 		return nil, err
 	}
-	st.OnDisk = &Snapshot{Hash: hashBundle(onDisk)}
+	onDiskLines, onDiskWords := sizeOf(onDisk)
+	st.OnDisk = &Snapshot{Hash: hashBundle(onDisk), Lines: onDiskLines, Words: onDiskWords}
 
 	lockData, err := os.ReadFile(filepath.Join(dir, LockFile)) //nolint:gosec // G304: lock path is derived from caller-controlled root
 	switch {
@@ -275,9 +303,12 @@ func (s *Skill) Install(root string, force bool) (*Status, error) {
 		}
 	}
 
+	lockLines, lockWords := sizeOf(s.files)
 	lock := Snapshot{
 		Version:     version.Version,
 		Hash:        s.Hash(),
+		Lines:       lockLines,
+		Words:       lockWords,
 		InstalledAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	lockData, _ := json.MarshalIndent(lock, "", "  ")

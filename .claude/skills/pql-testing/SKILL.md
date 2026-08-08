@@ -71,10 +71,12 @@ pql --vault <the path the target printed> <command>
 It carries both surfaces: markdown and `.base` files for the vault surface,
 real tickets and decisions for the planning surface.
 
-The target depends on `make build`, which writes into the repo tree. If a
-sandbox refuses that, build once outside the audit and replay the target's body
-by hand — it copies `testdata/council-snapshot` and `governance/` into the
-vault, copies `.pql/changelog`, then runs `plan import` and `decisions sync`.
+The target depends on `make build`, which writes into the repo tree. If that
+specific write is refused but shell commands otherwise work, ask the operator to
+run `make scratch-vault` once outside the audit and carry on. Do not hand-replay
+the target's body — that is a longer sequence of shell commands, so it fails for
+the same reason and takes more calls to discover it. If shell commands are
+refused wholesale, that is step 0's abort case, not this one.
 
 **Every verb is safe in that vault, including writes** — it is a disposable
 copy, and exercising write paths is part of the audit. Re-run
@@ -87,6 +89,31 @@ taken late will not match one taken early.
 
 Run the steps in order. Do not read pql's source before step 4 — knowing the
 implementation makes omissions invisible.
+
+### 0. Smoke test: can you run anything at all?
+
+```bash
+pql --version
+```
+
+Every step below is a shell command, so if that one is denied or fails, the
+audit cannot happen. **Stop immediately** — do not attempt the remaining steps,
+and do not spend fifteen retrievals discovering the same thing fifteen times.
+
+File an abort report instead: statistics zeroed, the denial or failure log
+complete, and the verdict stated as **no verdict possible** with the smallest
+thing that would fix it. An audit that says plainly "none of this ran" is worth
+more than a partial one, because the release gate can then be honestly recorded
+as unmet.
+
+Do **not** fall back to reading pql's source and reviewing the skill against it.
+That is not this job, and a review resting on zero observations reads as
+authoritative while being nothing of the kind. Unverified leads from a static
+read of the skill text are welcome as leads — label them, and keep them out of
+the findings count.
+
+A single denial mid-run is different: note it, move on, and report it as a
+procedure defect. This step is about total unavailability.
 
 ### 1. Read the shipped skill
 
