@@ -606,3 +606,76 @@ local tool (say so in the script header and in CLAUDE.md).
 
 Deliberately not done during the 2.0.0 release — editing the release workflow
 while a release is in flight re-triggers it.', NULL, '2026-08-08 10:04:50', '2026-08-08 10:04:50.755', '2026-08-08 10:04:50.755', NULL, '6ca43640e931bc66b0b41fe7bf10f9f3', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HM1XJV12S25YK3EHRV32C', 'description', NULL, 'Raised 2026-08-08 by the first two runs of the `pql-skill-auditor` agent
+against 2.0.1. The audit exercises the embedded skill the way a consuming agent
+does — twelve standardised retrievals plus exploration — and reports where the
+documentation leaves that agent stuck or wrong.
+
+Most of what it found was documentation, and is fixed. These are the residue:
+defects in pql''s own surface that no amount of skill rewriting can paper over,
+because the command genuinely does not do what a caller needs.
+
+Three shapes recur across the children, worth naming because they suggest
+where the next defects will be:
+
+1. **Output that is correct but not workable.** The command succeeds and the
+   data is right, yet the caller cannot act on it — a field missing from the
+   default projection, a payload dominated by provenance, an answer that takes
+   one call per record.
+2. **Values that cannot be fed back in.** Several commands return link targets,
+   paths or anchors in a form no other command accepts, so following a result
+   to its source requires the caller to guess a transformation.
+3. **Silent wrong answers.** A query that returns `[]` for a reason unrelated to
+   the data, against a documented contract that says zero matches means nothing
+   matched.
+
+Related records rather than duplicates: the link-shape family is the user-facing
+face of Q-6 (outlink target normalisation); the DSL grammar gap is T-45; and the
+absence of any keyword or ranked surface over planning data is what T-62 exists
+to design.', NULL, '2026-08-08 12:09:04', '2026-08-08 12:09:04.431', '2026-08-08 12:09:04.431', NULL, '5fd0ef981858d48de576c60c7f13ed0e', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HQMM5Z82QGWFTSFGH0NM0', 'description', NULL, '`pql backlinks <vault-path>` returns `[]` for files that are genuinely linked,
+because it matches the link *as written* rather than resolving it to a file.
+
+Reproduced against `testdata/council-snapshot` (via `make scratch-vault`):
+
+```
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona.md
+[]
+$ pql --vault /tmp/pql-scratch-vault backlinks members/koskela/persona
+[{"path":"members/vaasa/persona.md","name":"persona","line":12,"via":"wiki"}]
+```
+
+`internal/query/primitives/backlinks.go:40` takes `nameFromPath(opts.Path)`,
+yielding the bare basename, which matches a wikilink written `[[persona]]` but
+never a path-shaped one. The natural query — the vault-relative path every other
+command accepts and every other command returns — is the one that fails.
+
+Why this ranks high despite being one function: the output contract says zero
+matches is success and should be reported as "nothing matched". A caller
+following that rule reports "nothing links to this file" about a file that is
+linked. A confident wrong answer is worse than an error, and it is reached by
+doing exactly what the documentation says.
+
+Note for whoever picks this up: the skill''s worked example used
+`members/vaasa/persona.md`, and nothing in the fixture links to vaasa at all, so
+the example returned `[]` correctly while appearing to demonstrate the command.
+A broken example that looks like it works is how this survived two audits. The
+example now shows both forms and the skill carries a caveat, but that caveat is
+a workaround; this ticket is the fix.
+
+Scope: resolve the query path to the set of link forms that can address it — at
+minimum vault-relative path, extensionless path, and bare basename — then match
+any of them. Anchors and relative prefixes are the same underlying problem and
+belong to Q-6; this is the narrower "the documented form must work" fix.
+
+Acceptance: `backlinks` returns the same rows for a file whether queried by
+vault-relative path, extensionless path, or basename. Regression test over a
+fixture holding both a wikilink and a markdown-link reference to one file.', NULL, '2026-08-08 12:11:56', '2026-08-08 12:11:56.513', '2026-08-08 12:11:56.513', NULL, 'b8f1fe545f8a125dc5cb805bd4c778ec', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HM1XJV12S25YK3EHRV32C', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.200', '2026-08-08 12:14:28.200', NULL, '58e9a7fd4b14116199b49bb44252f4d1', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HQMM5Z82QGWFTSFGH0NM0', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.207', '2026-08-08 12:14:28.207', NULL, '50ac202a78fe2930b54b300f4b20174e', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JD37A2R9QN6C49Z4YJZ04', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.207', '2026-08-08 12:14:28.207', NULL, '65406c4af0fbb02c356ea71d9e777741', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JEC9GPY21V4ESRKM453WR', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.208', '2026-08-08 12:14:28.208', NULL, '49181b0fd599bd1e2b4f2ef7af3b00d1', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JMD9401E6GTTN1C31EEGG', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.208', '2026-08-08 12:14:28.208', NULL, 'b6a7f325067bc0e5e27bbae622beee1b', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JNM7W2X4857T6JQ5SSA4G', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.209', '2026-08-08 12:14:28.209', NULL, '2fb766b720f79dc7dbe68de845dd6abf', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JPSWKSACAV6AGKWDWQ5W0', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.209', '2026-08-08 12:14:28.209', NULL, '936926fabf72b3af21459514b9311228', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JXB8E7DNMENY6ZNWD09P0', 'status', 'backlog', 'ready', NULL, '2026-08-08 12:14:28', '2026-08-08 12:14:28.210', '2026-08-08 12:14:28.210', NULL, '7ad5f66ba411cc230d7ecc69a214f894', 2) ON CONFLICT(hash) DO NOTHING;
