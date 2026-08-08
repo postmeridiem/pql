@@ -11,7 +11,52 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
-## [2.1.1]
+## [2.2.0]
+
+### Changed
+
+- **`search`, `related` and `context` reject a path that is not indexed**
+  (D-29, T-90), exiting `66` and naming it instead of returning `[]` at exit
+  `0`. A typo used to read as "nothing is related to this file" when the truth
+  was "there is no such file" — while `pql meta` on the same typo already
+  exited `66`, so the identical mistake was loud on one verb and silent on the
+  ranked verb an agent reaches for first.
+
+  The rule behind it: an argument that **names** a thing is validated, a value
+  that **filters** a set is not. `search`'s argument is a query, so it stays a
+  filter and an unmatched one is still empty at exit `0`.
+
+  **Compatibility:** a caller relying on the empty result for a bad path now
+  gets `66`.
+
+- **`ticket list --decision none` exits `64`** (D-31, T-92). It looked like a
+  supported negative filter, matched nothing and returned empty — a lie the
+  caller could not distinguish from a real answer. `null`, `unset`, `nil`,
+  `empty` and `-` are refused the same way, with the message pointing at the
+  pattern that does work. There are deliberately no negative filters; the
+  supported route is one batched call plus a client-side fold, now documented
+  with a worked example.
+
+### Fixed
+
+- **`SELECT name` truncated any filename ending in `d`, `m` or a period**
+  (T-94). `album.md` came back as `albu`, `second.md` as `secon`,
+  `diagram.md` as `diagra`. The stem was derived with `rtrim(path, '.md')`,
+  and SQLite's two-argument `rtrim` strips trailing characters that are
+  *members of a set* rather than a literal suffix — so it removed the
+  extension and kept eating. `README.md` and `types.md` survived, which is why
+  it went unnoticed through every release since v1.0.0. `pql meta` was always
+  correct, deriving the name in Go.
+
+- **Bool frontmatter projected as `1`/`0` instead of `true`/`false`** (T-93).
+  `pql meta` returned `"voting": true` where `pql query "SELECT fm.voting"`
+  returned `1`, and `pql base` inherited it by compiling to the DSL. A caller
+  deserialising into a typed bool broke; one comparing `=== true` silently got
+  `false`. Bool is the only affected type — integers stay integers, lists and
+  objects were already decoding to nested JSON.
+
+  Comparison is unchanged: `WHERE fm.x = true` and `= 1` both still match, and
+  `ORDER BY` still sorts numerically. Only the `SELECT` list changed.
 
 ## [2.1.0] - 2026-08-08
 

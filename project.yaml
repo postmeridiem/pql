@@ -14,7 +14,7 @@
 
 name: pql
 description: SQL-derived CLI for querying markdown vaults — backs a Claude Code skill.
-version: 2.1.1
+version: 2.2.0
 status: v2.1.0 — the release an outside-in audit shaped. The ranked verbs stop returning `signals[]` and `connections[]` by default and gain the `--fields`/`--oneline`/`--full` trio (T-74); `--fields` reaches `ticket show` and `decisions show` (T-67), which now batches comma-separated ids (T-76); `ticket board` gains `--open`/`--status` and per-column labels (T-77); `.pqlignore` is read by default (T-78). Eight silent defects fixed, three of them found by an agent using the documented surface with no repo knowledge — including `ticket show --with-children`, which had returned nothing since D-26. Three decisions came out of the audit: D-29 (names are validated, filters are not), D-30 (mutations return receipts, not projections), D-31 (no absence filters).
 
 repository: https://github.com/postmeridiem/pql

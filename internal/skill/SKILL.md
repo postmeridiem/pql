@@ -311,6 +311,28 @@ ticket links happen to be. Batch it — `decisions show D-1,D-2,D-3
 call per record. Like `ticket show`, one id returns an object and several
 return an array.
 
+### Asking what is *missing*
+
+There are no negative filters — no `--unimplemented`, no `--decision none`, no
+`--without-<x>`. Every one would be a join predicate in disguise, and a flag
+per predicate does not compose. Spellings that imply one exit `64` rather than
+returning an empty list you might read as an answer.
+
+The pattern is one batched call plus a fold. To find decisions nothing
+implements:
+
+```bash
+pql decisions list --oneline                              # source the ids
+pql decisions show D-1,D-2,D-3 --with-tickets --fields id,tickets
+```
+
+Then keep the rows with no `tickets` key — absent, not empty, per the
+omitted-not-null rule. **Name the join key in `--fields`**: `--fields id`
+alone drops `tickets` and every row looks unimplemented.
+
+Same shape for any absence question: batch the positive facts, fold client
+side.
+
 ## Tickets
 
 **Creating and editing**
@@ -501,9 +523,24 @@ Valid field names, since guessing them costs a round trip:
 - **ranked results** — `path`, `score`, `signals`, `connections`. Under
   `--flat-search` there is no ranking, so `path` is the only valid name.
 
-Projection does **not** reach the mutation verbs — `ticket assign`, `status`,
-`label` and friends reject `--fields` at exit `64`, and several return the whole
-record including its description. Budget for that on a batch.
+Projection does **not** reach the mutation verbs, deliberately: their return
+value is a receipt confirming the change landed, and a receipt you trimmed to
+`id` confirms nothing. `ticket assign`, `status`, `label` and friends reject
+`--fields` at exit `64`.
+
+Two receipt shapes, and which you get depends on how many records changed.
+Changing **one** returns that whole record, description included — so a single
+`ticket status` on a well-described ticket is a few KB. Changing **several**
+returns a summary naming what was applied:
+
+```bash
+pql ticket label T-1,T-2 add urgent
+# {"ticket_ids":["T-1","T-2"],"action":"add","label":"urgent"}
+```
+
+Not every batch verb has converged on the summary shape yet, so a multi-id
+call may still return N whole records. Budget for that, and prefer batching to
+looping either way.
 
 An unknown name exits `64` and prints the valid set, so the error is a usable
 lookup if you forget.
