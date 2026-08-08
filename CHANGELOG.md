@@ -11,6 +11,35 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
+## [2.0.1]
+
+### Changed
+
+- **The embedded skill is rewritten as a manual rather than an inventory.**
+  It had grown by accretion — each feature appended a table row and a cookbook
+  line, so every command was documented twice, in two places that drifted, and
+  the shape of the tool was buried under a list of flags. It is now organised
+  by what the caller is trying to do, with examples inline instead of in a
+  parallel cookbook, and opens with a "which command answers this question"
+  table.
+
+  **It also documents an entire surface it had been silently omitting.**
+  `pql search`, `pql related` and `pql context` — the ranked, intent-level
+  commands — appeared nowhere, so an agent reading the skill had no idea they
+  existed. Worse, the old anti-patterns section actively sent it to `grep`
+  instead. Also newly covered: `pql watch`, `pql init`, `decisions read`, the
+  `--flat-search` escape hatch, and the version axes.
+
+  The ranked commands are documented with their real limitation rather than
+  their promise: they rank on structural signals with no text-match signal, so
+  an exact phrase can return `[]` while sitting in the vault. The skill now
+  says so, and says to use `grep` for literal strings — a caveat that matters
+  more than the feature.
+
+  Fixed alongside: examples no longer use `&&` chaining or `$(…)` command
+  substitution, both of which fail under the prefix allowlists consuming
+  projects use.
+
 ## [2.0.0] - 2026-08-08
 
 **Why a major.** The command surface is additive — every existing invocation

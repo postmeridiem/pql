@@ -2,230 +2,302 @@
 name: pql
 description: >
   Query and plan against a markdown vault via the pql CLI. Two surfaces:
-  (1) structural queries — frontmatter, wikilinks, tags, headings, Bases,
-  DSL — use when the user asks about vault contents ("which notes…", "find
-  where…", "what tags", "who links to X", "run a Base", "query the vault");
-  (2) planning — decision records, tickets, project status — use when the
-  user asks about decisions, tickets, work items, or project planning
-  ("sync decisions", "create a ticket", "what's the plan status", "show
-  D-5", "board", "refine tickets", "tickets without descriptions").
-  Requires `pql` on PATH. JSON on stdout; zero matches is success (exit 0,
-  empty `[]`), not an error.
+  (1) the vault — ranked search, structurally related files, frontmatter,
+  wikilinks, tags, headings, Bases, a SQL-derived DSL — use when the user
+  asks what is in the vault ("which notes…", "find where…", "what links to
+  X", "what's related to this", "what tags", "run a Base", "query the
+  vault"); (2) planning — decision records, tickets, project status — use
+  when the user asks about decisions, tickets, work items, or planning
+  ("sync decisions", "create a ticket", "what's next", "show D-5", "board",
+  "refine tickets"). Requires `pql` on PATH. JSON on stdout; zero matches is
+  success (exit 0, empty `[]`), not an error.
 ---
 
 # pql — vault queries + project planning
 
-`pql` indexes a vault into SQLite and exposes structural queries plus a
-planning layer for decision records and tickets. One binary, two surfaces.
+`pql` indexes a markdown vault into SQLite and answers questions about it.
+One binary, two surfaces: **the vault** (what is written down) and
+**planning** (what has been decided and what is being worked on). They share
+an output contract and a config, and are otherwise independent — you can use
+either without the other.
 
-## Precondition
+## Before the first query
 
 ```bash
 command -v pql
 ```
 
-If absent, tell the user to install from
-https://github.com/postmeridiem/pql/releases/latest. Don't install it
-yourself. Don't fall back to grep unless the user explicitly asks.
+If it is missing, tell the user to install from
+https://github.com/postmeridiem/pql/releases/latest. Do not install or
+upgrade it yourself, even though `pql self-update` exists — that is the
+user's call.
 
-## First touch: learn the vault
+Then learn the vault's shape once per session:
 
 ```bash
 pql schema
 ```
 
-Returns one row per frontmatter key with observed types and file counts.
-Run once per session before writing queries.
+One row per frontmatter key, with observed types and file counts. Write
+queries against what it reports, not against what you assume is there.
+
+## Choosing a command
+
+| The question | Reach for |
+|---|---|
+| "What is this file about / what should I read alongside it?" | `pql context`, `pql related` |
+| "Which notes mention this topic?" | `pql search` — but read the caveat below |
+| "Which files match this exact structure?" | `pql query`, `pql files`, `pql tags` |
+| "What links to / from this file?" | `pql backlinks`, `pql outlinks` |
+| "What is in this one file?" | `pql meta` |
+| "What did we decide about X?" | `pql decisions` |
+| "What should I work on?" | `pql plan whatsnext`, `pql ticket` |
+| "Where is this vault resolving from?" | `pql doctor` |
 
 ---
 
-## Surface 1: Vault queries
+# Surface 1: the vault
 
-### Subcommands
+## Ranked answers
 
-| Command | Purpose |
+Three commands return **ranked** results rather than exact matches. All
+three share one output shape — `path`, `score`, and a `signals[]` array
+showing each signal's raw value, weight and contribution — so a result is
+always accountable: you can see *why* it ranked where it did.
+
+| Command | Answers |
 |---|---|
-| `pql files [glob]` | List indexed files; optional glob filter |
-| `pql tags [--sort count]` | Distinct tags with counts |
-| `pql backlinks <path>` | Files linking TO a path |
-| `pql outlinks <path>` | Links FROM a file |
-| `pql meta <path>` | Frontmatter + tags + outlinks + headings for one file |
-| `pql schema` | Typed frontmatter schema |
-| `pql base <name>` | Execute an Obsidian .base file |
-| `pql shell` | Interactive REPL (indexes once, then query per line) |
-| `pql query "<DSL>"` | SQL-derived DSL for complex queries |
-| `pql doctor` | Resolved vault/config/DB/index state |
+| `pql search <query>` | Which files are most relevant to this topic |
+| `pql related <path>` | Which files sit near this one in the graph |
+| `pql context <path>` | What to read to understand this file (returns heading anchors, not just paths) |
 
-### DSL examples
+They differ in how they weight the same signals — `related` leans on link
+overlap, `context` on path proximity, `search` on recency.
+
+**Know what ranking means here.** These rank on *structural* signals — link
+overlap, tag overlap, path proximity, centrality, recency. There is no
+text-match signal today. So `pql search "some exact phrase"` can return `[]`
+even when the phrase is in the vault, and a broad term can rank on recency
+alone. Use these to explore the neighbourhood of a topic; use `grep`/`rg`
+when you need a literal string. Do not present a ranked result as proof that
+something is or is not written down.
+
+Add `--flat-search` to any of them to force the primitive path — raw rows,
+no scoring, no enrichment.
+
+## Exact structure
+
+| Command | Returns |
+|---|---|
+| `pql files [glob]` | Indexed files, optionally glob-filtered |
+| `pql tags [--sort count]` | Distinct tags with counts |
+| `pql backlinks <path>` | Files linking **to** a path |
+| `pql outlinks <path>` | Links **from** a file, in document order |
+| `pql meta <path>` | One file's frontmatter, tags, outlinks and headings |
+| `pql schema` | Inferred frontmatter schema across the vault |
+| `pql base <name>` | Execute an Obsidian `.base` file |
+
+```bash
+pql files 'sessions/*'
+pql tags --sort count --limit 20
+pql backlinks members/vaasa/persona.md
+pql meta members/vaasa/persona.md --pretty
+```
+
+## The DSL
+
+`pql query` takes a SQL-derived language over the index. `pql shell` is the
+same thing as a REPL — it indexes once, then runs a query per line, which is
+worth it for more than a handful of queries.
 
 ```sql
 SELECT name, fm.date WHERE fm.type = 'meeting' ORDER BY fm.date DESC LIMIT 10
 SELECT path WHERE 'project' IN tags ORDER BY path
-SELECT name, fm.prior_job WHERE fm.type = 'council-member' ORDER BY name
+SELECT name, fm.date WHERE fm.date BETWEEN '2024-01-01' AND '2024-12-31'
 ```
 
-Use `--file q.pql` or `--stdin` for long queries. Don't interpolate vault
+`fm.<key>` reads frontmatter; `tags`, `path` and `name` are built in. Use
+`--file q.pql` or `--stdin` for long queries, and never interpolate vault
 content into the command line.
 
-### Query cookbook
+## Keeping the index current
 
-- **Files in folder** → `pql files 'sessions/*'`
-- **Top tags** → `pql tags --sort count --limit 20`
-- **What links to X?** → `pql backlinks members/vaasa/persona.md`
-- **Date range** → `pql query "SELECT name, fm.date WHERE fm.date BETWEEN '2024-01-01' AND '2024-12-31'"`
-- **Run a Base** → `pql base council-sessions`
-- **Inspect one file** → `pql meta members/vaasa/persona.md --pretty`
+The index refreshes on demand, so most sessions need nothing. For live
+editing, `pql watch start` runs a foreground watcher; `pql watch status` and
+`pql watch stop` manage it. One watcher per vault, explicitly started — there
+is no daemon.
 
 ---
 
-## Surface 2: Planning (decisions + tickets)
+# Surface 2: planning
 
-Planning state lives in `<vault>/.pql/pql.db` (user-authored state, not a
-cache). Decision records come from the DQR tree — `governance/{decisions,
-questions,rejected}/<domain>.md` by default (D-21), configurable via
-`dqr_dir` in `.pql/config.yaml` or the `PQL_DQR_DIR` env var (env > file >
-default); a legacy flat `decisions/` is auto-detected as a fallback.
-Tickets are SQLite-native.
+Planning state lives in `<vault>/.pql/pql.db`. Unlike the index it is
+**user-authored data, not a cache** — it is never silently discarded.
 
-### Decision subcommands
+Decision records are parsed from markdown in a DQR tree
+(`governance/{decisions,questions,rejected}/<domain>.md` by default,
+configurable via `dqr_dir` in `.pql/config.yaml` or `PQL_DQR_DIR`; a flat
+`decisions/` is detected as a fallback). Tickets have no markdown source —
+they live in SQLite and travel via the changelog described below.
 
-| Command | Purpose |
+## Decisions
+
+| Command | Does |
 |---|---|
-| `pql decisions sync [--no-style]` | Parse the DQR tree → upsert into pql.db; surfaces style warnings (filename, subdir-type, domain pairing/conflicts) unless `--no-style` |
-| `pql decisions validate [--no-style]` | Dry-run parse; structural errors exit non-zero, style issues warn (suppress with `--no-style`) |
-| `pql decisions claim <D\|Q\|R> <domain> "title"` | Print next available ID |
-| `pql decisions list [--type X] [--domain X] [--status X] [--fields F] [--oneline]` | List decisions. `--fields id,status,title` = only those keys, in order; `--oneline` = plain `id<TAB>status<TAB>title` lines |
-| `pql decisions show <id> [--with-refs] [--with-tickets]` | Show with joins (`--with-tickets` = implementation status, per D-20) |
-| `pql decisions refs <id>` | Cross-references involving a decision |
+| `pql decisions sync [--no-style]` | Parse the DQR tree into pql.db. Also reports style problems (filename, subdir/type mismatch, domain conflicts) unless suppressed |
+| `pql decisions validate [--no-style]` | Dry run. Structural errors exit non-zero; style issues only warn |
+| `pql decisions list [--type X] [--domain X] [--status X]` | List records |
+| `pql decisions show <id> [--with-refs] [--with-tickets]` | One record, optionally with cross-references or the tickets implementing it |
+| `pql decisions read <id>` | The record's full markdown body |
+| `pql decisions refs <id>` | Cross-references involving a record |
+| `pql decisions claim <D\|Q\|R> <domain> "title"` | Print the next free id. No side effects |
 
-Always `pql decisions sync` before querying if decisions/*.md may have changed.
+The markdown is the source of truth, so **run `pql decisions sync` before
+querying** whenever the DQR files may have changed — otherwise you are
+reading a stale copy. A record written but not synced simply will not be
+found.
 
-### Ticket subcommands
+`decisions show <id> --with-tickets` is the implementation-status view: it
+answers "is this decision actually built?" and is only as complete as the
+ticket links happen to be.
 
-| Command | Purpose |
+## Tickets
+
+**Creating and editing**
+
+| Command | Does |
 |---|---|
-| `pql ticket new <type> "title" [--parent T-NNN] [--decision D-NNN] [--priority P] [--id-only]` | Create (emits T-NNN; `--parent` files it under an epic/story in one step; `--id-only` prints the bare id for tree-creation scripts) |
-| `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-NNN] [--leaf] [--unblocked] [--fields F] [--full] [--oneline]` | List with filters. Default rows omit `description` (D-27) — `--full` = whole rows; `--fields id,status,title` = only those keys, in order; `--oneline` = plain `id<TAB>status<TAB>title` lines. `--under` = recursive descendants of a ticket; `--leaf` = no children; `--unblocked` = blockers all reached a terminal status |
-| `pql ticket show <id[,id,...]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | Show one or more (comma-batch → array of show-trees). `--with-children` = direct children; `--tree` = nested descendant subtree + direct parent (cap with `--depth N`) |
-| `pql ticket status <id> <new-status> [--force]` | Change status. Closing (terminal status) is blocked while the ticket has open children; `--force` cascades that status to all not-yet-closed descendants and lists them |
-| `pql ticket statuslist` | List the configured status vocabulary (name, label, class, order, is_default, is_terminal) — what a UI reads to render columns |
-| `pql ticket relabel <id\|record_id> [--new-label T-NNN] [--fix-prose]` | Reassign a ticket's friendly T-NNN label (reconcile a duplicate-label collision). Identity (record_id) and the structural graph are untouched; only the label moves. `--fix-prose` rewrites stale T-NNN mentions in DQR markdown |
-| `pql ticket assign <id> <agent>` | Set assignee |
-| `pql ticket setparent <id[,id,...]> <parent-id \| none>` | Set (or clear with `none`) a ticket's **parent** — the hierarchy link (epic→story→task). Positional, not a flag. This is the parent/child relationship, distinct from blockers |
-| `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description (blank-line separated); never round-trips existing text |
-| `pql ticket decision <id[,id,...]> <D-NNN \| none>` | Link tickets to the decision they implement (clear with `none`). Repairs a link omitted at `ticket new --decision`; an unknown decision id is rejected. This is what `decisions show --with-tickets` reports |
-| `pql ticket block <id> --by <other>` | Add a **blocker** (a dependency: <id> can't start until <other> is done) — NOT a parent/child link; use `setparent` or `new --parent` for hierarchy |
-| `pql ticket unblock <id> --from <other>` | Remove blocker |
-| `pql ticket team <id> <team>` | Set team |
-| `pql ticket label <id> add\|rm <label>` | Manage labels |
-| `pql ticket board [--team T]` | Kanban board view |
-| `pql ticket refine list` | Tickets with empty descriptions, status-priority-sorted |
-| `pql ticket refine next [--skip N]` | Head of the unrefined queue with full show-tree + remaining count |
-| `pql ticket refine write <id> <json\|--file\|--stdin>` | Patch writable fields (title, description, priority, type) |
+| `pql ticket new <type> "title" [--parent T-N] [--decision D-N] [--priority P] [--description ...] [--id-only]` | Create. Types: initiative, epic, story, task, bug. `--id-only` prints just the id, for scripts |
+| `pql ticket refine write <id> <json\|--file\|--stdin>` | Patch title, description, priority or type from a JSON payload |
+| `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description, blank-line separated. Never rewrites existing text |
+| `pql ticket refine list` / `refine next [--skip N]` | The queue of tickets with empty descriptions |
 
-Ticket types: initiative, epic, story, task, bug.
-The `id` you type and see (T-NNN) is a friendly label backed by a stable
-underwater `record_id` (also in output); two clones never collide on identity,
-and a duplicate label is fixed with `pql ticket relabel` (D-26).
-Statuses are a per-vault vocabulary (`ticket_statuses` in `.pql/config.yaml`),
-defaulting to: backlog, ready, in_progress, review, done, cancelled. Each status
-has a class — initial, active, review, terminal — that the engine reasons about.
-Run `pql ticket statuslist` to discover the live set. Any status can transition
-to any other — pql does not enforce a state machine — except that a ticket
-cannot reach a terminal status while it has open children (use `--force` to
-cascade the close down the subtree).
+**Structure** — each of these is repairable after the fact; none is
+create-time-only.
 
-### Plan subcommands
-
-| Command | Purpose |
+| Command | Does |
 |---|---|
-| `pql plan status` | Dashboard: decision counts, open Qs, ticket summary |
-| `pql plan whatsnext` | Next ticket to work on (active work, then the "ready" lane) with full context bundle |
-| `pql plan review` | Next ticket awaiting review with full context bundle |
-| `pql plan export [--stage]` | Append changed planning rows to `.pql/changelog/<table>/<YYYY-MM>.sql` (the git-tracked log of record); `--stage` also `git add`s them. Normally a no-op — mutations already write through |
-| `pql plan import [--legacy FILE]` | Replay `.pql/changelog/` into `pql.db` (or one-time `--legacy pql-plan.json` migration from the pre-D-15 snapshot) |
-| `pql plan upgrade [--dry-run]` | Migrate `.pql/changelog/` forward to the format this pql writes. Runs automatically from the `post-merge` hook; rewrites tracked files, so the result belongs in a commit. `--dry-run` lists what would change |
-| `pql plan rebuild [--verify]` | Drop replicated tables and replay `.pql/changelog/` from scratch. Warns on stderr (`changelog.ticket_id_collision`) + lists `collisions` in the result if one ticket id was filed twice across clones. `--verify` compares every row's hash before and after the replay and reports rows that came back changed or not at all — exit `65` only if rows were lost |
+| `pql ticket setparent <id[,id,…]> <parent \| none>` | Set or clear the **hierarchy** link (epic → story → task) |
+| `pql ticket block <id> --by <other>` / `unblock <id> --from <other>` | Add or remove a **blocker** — a dependency, *not* hierarchy |
+| `pql ticket decision <id[,id,…]> <D-N \| none>` | Link tickets to the decision they implement. An unknown id is rejected |
+| `pql ticket assign <id> <agent>` · `team <id> <team>` · `label <id> add\|rm <label>` | Assignee, team, labels |
+| `pql ticket status <id[,id,…]> <status> [--force]` | Change status. Blocked while open children exist; `--force` cascades to descendants and lists them |
+| `pql ticket relabel <id> [--new-label T-N] [--fix-prose]` | Move a friendly label after a collision. Identity and the graph are untouched; `--fix-prose` updates stale mentions in DQR markdown |
 
-### Versioning planning state
+**Reading**
 
-`pql.db` is gitignored — the durable, git-tracked artifact is
-`.pql/changelog/` (D-15/D-16). Ticket mutations **write through** to the
-changelog synchronously, so it is always current; you never have to
-remember to "export". The hooks installed by `pql init` do the rest:
+| Command | Does |
+|---|---|
+| `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--under T-N] [--leaf] [--unblocked]` | Filtered list. `--under` = all descendants; `--leaf` = no children; `--unblocked` = every blocker reached a terminal status |
+| `pql ticket show <id[,id,…]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | One or more full records. `--tree` = nested descendants plus the direct parent |
+| `pql ticket board [--team T]` | Kanban view |
+| `pql ticket statuslist` | The configured status vocabulary — what a UI reads to build columns |
 
-- `pre-commit` stages `.pql/changelog/` so it lands in the same commit as
-  the change that produced it.
-- `post-merge` replays incoming changelog edits (`pql plan import`) and
-  re-syncs decisions from their markdown.
-- `post-checkout` / `post-rewrite` rebuild `pql.db` from the changelog.
+Identity: the `T-NNN` you see is a friendly *label* over a stable underlying
+`record_id` (also in the output). Two clones can mint the same label without
+corrupting anything; `relabel` reconciles it.
 
-On a fresh clone, `pql plan import` (run automatically on first open)
-replays the changelog into a new `pql.db`. There is **no** `pql-plan.json`
-snapshot — that artifact is retired; `pql plan export` is now only a
-manual catch-up/reconcile.
+Statuses are per-vault (`ticket_statuses` in `.pql/config.yaml`), defaulting
+to backlog, ready, in_progress, review, done, cancelled. Each carries a class
+— initial, active, review, terminal — which is what the engine reasons about,
+so a renamed status still works. Any status may follow any other; the one
+rule is that a ticket cannot reach a terminal status while it has open
+children.
 
-A ticket mutation (create / status transition / any write) leaves
-`.pql/changelog/` dirty by design — the `pre-commit` hook stages it onto
-the next `git commit`. This is expected, not a problem to flag. Don't
-narrate "the ticket won't persist until committed" on every edit; either
-fold the bookkeeping into a commit or trust the normal commit flow.
+## Plan-level views
 
-### Planning cookbook
+| Command | Does |
+|---|---|
+| `pql plan status` | Dashboard: decision counts, open questions, ticket totals by status |
+| `pql plan whatsnext` | The next ticket to pick up, with its full context bundle |
+| `pql plan review` | The next ticket awaiting review, with context |
 
-- **Sync and list confirmed** → `pql decisions sync && pql decisions list --type confirmed`
-- **Show with refs** → `pql decisions show D-5 --with-refs --pretty`
-- **Read full body** → `pql decisions read D-5`
-- **Create ticket** → `pql ticket new task "implement X" --decision D-5`
-- **Create ticket, capture id for a script** → `id=$(pql ticket new task "implement X" --id-only)` — prints just `T-NNN`
-- **File a ticket under an epic** → `pql ticket new bug "fix X" --parent T-276` (one step), or reparent an existing one → `pql ticket setparent T-9 T-276` (clear with `none`). Parent = hierarchy; use `block` only for blocking dependencies
-- **Link a ticket tree to its decision after the fact** → `pql ticket decision T-9,T-10,T-12 D-5` (clear with `none`) — the repair path when `ticket new --decision` was omitted; without it `decisions show D-5 --with-tickets` under-reports what implements the decision
-- **Batch close** → `pql ticket status T-1,T-2,T-3 done`
-- **Full context** → `pql ticket show T-5 --with-context --pretty`
-- **Batch show** → `pql ticket show T-1,T-2,T-3 --pretty`
-- **Refine next ticket** → `pql ticket refine next --pretty`, then `pql ticket refine write T-N '{"description":"..."}'`
-- **Append a note** → `pql ticket append T-5 "benchmarked; TTL now 5m"` — blank-line separated, never overwrites; use `--file note.md` or `--stdin` for longer content
-- **Subtree of an epic** → `pql ticket show T-2 --tree --pretty` — nested `subtree` + direct parent in `ancestors`; add `--depth N` to cap levels
-- **Ready leaf work under an epic** → `pql ticket list --under T-2 --leaf --unblocked` — leaf tickets beneath T-2 whose blockers have all reached a terminal status; the batch complement to `plan whatsnext`
-- **Cheap board index** → `pql ticket list --fields id,status,title` (JSON) or `--oneline` (plain lines) — list already omits `description`; `--full` only when you need the bodies, and `ticket show <id>` to read one
-- **Implementation status of a decision** → `pql decisions show D-5 --with-tickets`
-- **What's next?** → `pql plan whatsnext --pretty`
-- **Review queue** → `pql plan review --pretty`
-- **Dashboard** → `pql plan status --pretty`
-- **Force a changelog catch-up** → `pql plan export` (normally a no-op; mutations already write through to `.pql/changelog/`)
-- **Changelog is a version behind** → `pql plan upgrade` (preview with `--dry-run`) — migrates `.pql/changelog/` forward in place. `plan import`/`plan rebuild` warn about a stale format but never rewrite; a format *newer* than the binary is refused, and the fix is to upgrade pql
-- **Check a rebuild didn't quietly change anything** → `pql plan rebuild --verify` — per-row hash comparison either side of the replay; use it when a ticket looks like it reverted, or after recovering a vault
+## How planning state persists
+
+`pql.db` is gitignored. The durable, git-tracked artefact is
+`.pql/changelog/` — per-table monthly SQL files. Every ticket mutation writes
+through to it synchronously, so it is always current and you never have to
+remember to export.
+
+The hooks `pql init` installs carry the rest: `pre-commit` stages the
+changelog so it lands with the change that produced it, `post-merge` migrates
+and replays what a pull brought in and re-syncs decisions, and
+`post-checkout`/`post-rewrite` rebuild `pql.db` after a branch switch.
+
+**A ticket mutation leaves `.pql/changelog/` dirty by design.** The
+pre-commit hook stages it. This is expected — do not narrate "the ticket
+won't persist until you commit" after every edit.
+
+| Command | When |
+|---|---|
+| `pql plan upgrade [--dry-run]` | Migrate the changelog forward to the format this binary writes. Runs from `post-merge`; rewrites tracked files, so the result belongs in a commit |
+| `pql plan rebuild [--verify]` | Drop the replicated tables and replay from scratch. `--verify` compares every row's hash either side and reports anything that came back changed or missing |
+| `pql plan import` | Replay the changelog into `pql.db`. Runs automatically on a fresh clone |
+| `pql plan export [--stage]` | Manual catch-up. Normally a no-op, since mutations already write through |
+
+The changelog carries a format version. An older one replays with a loud
+`pql.plan.format_stale` warning and is fixed by `pql plan upgrade`; one
+*newer* than the binary is refused outright, and the fix is to upgrade pql.
+`pql version --build-info` reports every version axis the binary speaks.
 
 ---
 
-## Output contract (both surfaces)
+# Contracts
 
-- **stdout:** JSON array (default); `--jsonl` for one object/line; `--pretty`; `--limit N`.
-- **stderr:** JSON diagnostics `{"level":"…","code":"pql.<phase>.<kind>","msg":"…"}`.
-- **Exit codes:**
-  - `0` — success, including zero matches (empty `[]` — say "no matches", not "failed")
-  - `64` — bad flag
-  - `65` — parse/compile error (pass stderr back)
-  - `66` — vault/config not found
-  - `69` — unavailable
-  - `70` — internal error
+## Output
+
+- **stdout:** a JSON array. `--jsonl` for one object per line, `--pretty` for
+  humans, `--limit N` to cap. Two commands opt out of JSON deliberately:
+  `ticket new --id-only` prints a bare id, and `--oneline` on the list verbs
+  prints `id<TAB>status<TAB>title`.
+- **stderr:** JSON diagnostics, one per line —
+  `{"level":"…","code":"pql.<phase>.<kind>","msg":"…"}`. Pass these back
+  verbatim rather than paraphrasing them.
+- **Exit codes:** `0` success · `64` bad flag · `65` parse or data error ·
+  `66` vault/config not found · `69` unavailable · `70` internal.
+
+**Zero matches is success**: exit `0` with an empty `[]`. Report "nothing
+matched", never "the command failed".
+
+## Projection
+
+The list verbs (`ticket list`, `decisions list`) take `--fields id,status,title`
+to return only those keys in that order, and `--oneline` for a plain-text
+index. `ticket list` omits `description` by default because it dominates the
+payload; `--full` opts back in. Record-level commands like `ticket show`
+always return whole records — projection flags do not apply there.
+
+Prefer these over piping to `jq`: they are cheaper and they compose with
+`--limit`.
 
 ## Anti-patterns
 
-- Don't pipe to `jq` for simple projections — use `--fields`, `--oneline`, `--limit`, `--pretty`, `--jsonl`.
-- Don't chain `pql files` + `pql meta` — one `pql query` with WHERE.
-- Don't parse errors — pass stderr diagnostics back directly.
-- Don't forget `pql decisions sync` before querying decisions.
-- Don't try to install or upgrade pql — instruct the user if missing.
+- **Don't chain with `&&`.** Run one command per invocation; many consuming
+  projects allowlist `pql` by prefix and a chain fails the check.
+- **Don't shell-substitute** (`id=$(pql …)`) for the same reason. Run the
+  command, read the id from its output.
+- **Don't chain `files` then `meta`** to filter — one `query` with a `WHERE`
+  does it in a single pass.
+- **Don't parse error text** — pass the stderr diagnostic through.
+- **Don't treat a ranked empty result as absence.** See the caveat under
+  ranked answers.
+- **Don't install or upgrade pql** — tell the user.
 
-## When NOT to use
+## When not to use pql
 
-- **Body text search** → `grep`/`rg`.
-- **Reading file contents** → `Read` tool.
-- **Code structure** → tree-sitter / LSP.
-- **Modifying vault files** → `Write`/`Edit`. pql doesn't write to vault content.
+- **Literal string search** → `grep`/`rg`. pql's ranking is structural.
+- **Reading a file** → the `Read` tool.
+- **Code structure** → tree-sitter or an LSP.
+- **Editing vault content** → `Write`/`Edit`. pql never writes to your
+  markdown; it only reads it and writes its own state under `.pql/`.
 
-## Permissions
+---
+
+# Setup and upkeep
+
+`pql init` brings a directory to a known-good state — config, changelog
+scaffolding, git hooks, gitignore entries — and is idempotent, so re-running
+it after a pql upgrade is how hooks pick up new behaviour.
 
 The consuming project's `.claude/settings.json` should allow:
 
@@ -237,12 +309,11 @@ The consuming project's `.claude/settings.json` should allow:
 }
 ```
 
-## Updating the skill
+`pql doctor` prints what resolved and why: vault root and how it was found,
+config path, database locations, index state, skill status. It is the first
+thing to run when pql seems to be looking at the wrong place.
 
-`pql skill status` reports drift. `pql skill install` writes/updates;
-`--force` overrides hand-edits. `pql doctor` also surfaces skill state.
-`pql skill show [name]` echoes the skill content embedded in *this*
-binary (defaults to the `pql` skill; pass a name like `clean-house` for
-another) — JSON keyed by file path, `--pretty` to read as text. Works
-from any directory, no vault required; handy for confirming exactly
-which skill a given binary ships.
+For this skill itself: `pql skill status` reports drift, `pql skill install`
+writes or updates it (`--force` overrides hand edits), and `pql skill show
+[name]` echoes what the running binary actually ships — useful for confirming
+which version of this document an installed binary carries.
