@@ -71,6 +71,9 @@ You might also want, project-permitting:
 - [D-26: Ticket identity split — record_id (underwater) vs ticket_id (friendly label)](decisions/architecture.md#d-26-ticket-identity-split--record-id-underwater-vs-ticket-id-friendly-label) — _architecture_
 - [D-27: Planning list verbs project — ticket list drops description by default](decisions/architecture.md#d-27-planning-list-verbs-project--ticket-list-drops-description-by-default) — _architecture_
 - [D-28: Forward migration across pql's version axes](decisions/architecture.md#d-28-forward-migration-across-pqls-version-axes) — _architecture_
+- [D-29: An argument that names a thing is validated; a value that filters a set is not](decisions/architecture.md#d-29-an-argument-that-names-a-thing-is-validated-a-value-that-filters-a-set-is-not) — _architecture_
+- [D-30: Mutation verbs return the record they changed; projection stays on the read surface](decisions/architecture.md#d-30-mutation-verbs-return-the-record-they-changed-projection-stays-on-the-read-surface) — _architecture_
+- [D-31: pql answers what is; the caller folds for what is absent](decisions/architecture.md#d-31-pql-answers-what-is-the-caller-folds-for-what-is-absent) — _architecture_
 
 ## Open questions
 

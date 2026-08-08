@@ -1261,3 +1261,101 @@ PD-7: estimate moved to 130-plus calls, from the measured run.
 
 Eighth, unprompted: check-drift.sh was extracting the skill body from JSON with python3 — an undeclared dependency that existed only because there was no way to get a skill as text. pql skill show --raw exists now, so it is a sha256sum of a pipe inside a script, which is where pipes belong.', NULL, '2026-08-08 18:38:07', '2026-08-08 18:38:07.977', '2026-08-08 18:38:07.977', NULL, '41b096af06226a7d4862cf50fc9a0171', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53V23XT3Y1NBT9Y4E0R438', 'status', 'backlog', 'done', NULL, '2026-08-08 18:38:08', '2026-08-08 18:38:08.019', '2026-08-08 18:38:08.019', NULL, '12f81b427d4852167cd474aed6e9d2f4', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53BSK27Y4K571GPGD3JA2R', 'description', 'The Missing and Unusable findings from the 2.1.0 skill audit that were deliberately deferred. Full report: /var/mnt/data/projects/claude/scratch/pql-audit-2.1.0.md
+
+Deferred because each needs a surface decision rather than a text fix, and rushing those into a patch release is how the audit''s Wrong findings got there in the first place.
+
+Missing, output shapes — the audit''s second conclusion is that output shapes are documented for the planning surface and undocumented for the vault surface: backlinks, outlinks, meta, refs, base and the DSL each get a one-line description of what they mean and nothing about what they return. That asymmetry breaks the second hop of any link-following task.
+- #10 outlinks: shape {target,alias,line,via} undocumented, and target is the raw spelling — meta rejects it. outlinks --help says resolution is not applied; the skill does not. Since the skill also advertises backlinks as spelling-tolerant, the natural generalisation is exactly wrong.
+- #11 backlinks rows are per-link-occurrence, not per-file. 28 rows for one linking file. Counting linking files needs a client-side dedupe the skill never mentions.
+- #12 plan whatsnext and plan review can return {message: ...} instead of a record. A caller reaching for .id gets nothing and no error.
+- #13 ticket mutation verbs return undocumented and mutually inconsistent shapes — assign returns a whole record with a 2 KB description, label returns a summary object, and neither accepts --fields.
+
+Missing, surface facts:
+- #14 .gitignore is read by default alongside .pqlignore; the skill mentions only the latter. An agent debugging ''why is this file not indexed'' will not think to look.
+- #15 the documented PQL_VAULT/PQL_DB/PQL_CONFIG env routes cannot be invoked under the permission model the same skill describes — an env-var assignment is a prefix, so it breaks the allowlist match, and the anti-patterns list names only && || ; |  and >.
+- #16 pql init''s target directory is unstated and the skill''s claims about what it writes are contradicted by its own --help. The auditor would not run it, correctly.
+- #17 ticket board omits empty columns, so a named column cannot be distinguished from an empty one.
+- #18 base --view names are discoverable only by triggering exit 65.
+- #19 skill status lines/words and the second bundled skill (clean-house) are undocumented.
+- #20 pql completion absent from the skill. Low value, noted for completeness.
+- #21 pql base absent from the Choosing a command routing table, as are schema and shell.
+
+Unusable:
+- #22 ''which decisions have nothing implementing them'' forces a client-side join. No --unimplemented filter; ticket list --decision none returns empty silently rather than erroring.
+- #23 base output carries no path or name, so rows cannot be fed onward. Also fm.voting: 1 where meta returns voting: true — an undocumented bool coercion. The auditor could not determine whether the column set comes from the .base file or from pql, because reading the scratch vault was denied.
+- #24 ranked verbs accept a nonexistent path and return [] at exit 0, where meta exits 66. A typo reads as ''nothing is related to this file'' — the shape-B trap the skill devotes a Contracts paragraph to for filter values.
+- #25 mutation verbs return whole records with no way to trim: a ten-ticket status change returns ten descriptions.
+- #26 backlinks duplicate rows, see #11.', 'The Missing and Unusable findings from the 2.1.0 skill audit that were deliberately deferred. Full report: /var/mnt/data/projects/claude/scratch/pql-audit-2.1.0.md
+
+Deferred because each needs a surface decision rather than a text fix, and rushing those into a patch release is how the audit''s Wrong findings got there in the first place.
+
+Missing, output shapes — the audit''s second conclusion is that output shapes are documented for the planning surface and undocumented for the vault surface: backlinks, outlinks, meta, refs, base and the DSL each get a one-line description of what they mean and nothing about what they return. That asymmetry breaks the second hop of any link-following task.
+- #10 outlinks: shape {target,alias,line,via} undocumented, and target is the raw spelling — meta rejects it. outlinks --help says resolution is not applied; the skill does not. Since the skill also advertises backlinks as spelling-tolerant, the natural generalisation is exactly wrong.
+- #11 backlinks rows are per-link-occurrence, not per-file. 28 rows for one linking file. Counting linking files needs a client-side dedupe the skill never mentions.
+- #12 plan whatsnext and plan review can return {message: ...} instead of a record. A caller reaching for .id gets nothing and no error.
+- #13 ticket mutation verbs return undocumented and mutually inconsistent shapes — assign returns a whole record with a 2 KB description, label returns a summary object, and neither accepts --fields.
+
+Missing, surface facts:
+- #14 .gitignore is read by default alongside .pqlignore; the skill mentions only the latter. An agent debugging ''why is this file not indexed'' will not think to look.
+- #15 the documented PQL_VAULT/PQL_DB/PQL_CONFIG env routes cannot be invoked under the permission model the same skill describes — an env-var assignment is a prefix, so it breaks the allowlist match, and the anti-patterns list names only && || ; |  and >.
+- #16 pql init''s target directory is unstated and the skill''s claims about what it writes are contradicted by its own --help. The auditor would not run it, correctly.
+- #17 ticket board omits empty columns, so a named column cannot be distinguished from an empty one.
+- #18 base --view names are discoverable only by triggering exit 65.
+- #19 skill status lines/words and the second bundled skill (clean-house) are undocumented.
+- #20 pql completion absent from the skill. Low value, noted for completeness.
+- #21 pql base absent from the Choosing a command routing table, as are schema and shell.
+
+Unusable:
+- #22 ''which decisions have nothing implementing them'' forces a client-side join. No --unimplemented filter; ticket list --decision none returns empty silently rather than erroring.
+- #23 base output carries no path or name, so rows cannot be fed onward. Also fm.voting: 1 where meta returns voting: true — an undocumented bool coercion. The auditor could not determine whether the column set comes from the .base file or from pql, because reading the scratch vault was denied.
+- #24 ranked verbs accept a nonexistent path and return [] at exit 0, where meta exits 66. A typo reads as ''nothing is related to this file'' — the shape-B trap the skill devotes a Contracts paragraph to for filter values.
+- #25 mutation verbs return whole records with no way to trim: a ten-ticket status change returns ten descriptions.
+- #26 backlinks duplicate rows, see #11.
+
+Closed 2026-08-08. Resolved three ways, not one — the ticket bundled findings that turned out to need different treatment.
+
+Folded into 2.1.0, because each was the same defect the T-79 work was already correcting, seen from another angle: #10 and #11 (outlinks row shape, backlinks per-occurrence rows) into the link-matching section, #12 (whatsnext/review message shape) into the output-shape rule, #13 and #25 (mutation verbs return whole records and reject --fields) into the projection section. Deferring those would have left sections corrected in 2.1.0 still wrong on the exact question a caller was asking.
+
+Closed here as documentation, no decision needed: #14 .gitignore is read by default alongside .pqlignore and doctor reports the active list, #17 board omits empty columns so [] means no tickets rather than a bad name, #18 base --view names are discoverable only off the exit-65 error and base rows carry only the columns the .base declares, #19 skill status lists every bundled skill with lines and words and clean-house is the second one, #21 base is in the routing table. #20 (completion absent) stays unwritten deliberately — cobra boilerplate an agent has no use for, and the skill is better without the line.
+
+Decided, with records: D-29 for #24, D-30 for #13/#25''s behavioural half, D-31 for #22. Implementation filed as T-90, T-91, T-92, each linked to its record.
+
+Only #23 is unresolved, and honestly so. Whether pql drops path from base output or the .base file simply declares those columns could not be determined — the auditor was denied reads inside the scratch vault, and I have not gone looking since. It is noted on the base row in the skill as ''rows carry the columns the .base declares and nothing else — often no path'', which is true either way and warns the caller. If it turns out pql is dropping a path it has, that is a bug and gets its own ticket.', NULL, '2026-08-08 18:45:03', '2026-08-08 18:45:03.513', '2026-08-08 18:45:03.513', NULL, 'c320e7270e888ab374e2fe2c0fdac2af', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53BSK27Y4K571GPGD3JA2R', 'status', 'backlog', 'done', NULL, '2026-08-08 18:45:03', '2026-08-08 18:45:03.531', '2026-08-08 18:45:03.531', NULL, 'b95ce6b3322ac63dc6afd8989558db34', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY541P00NKK9Q7PD5CP02PTM', 'description', 'Umbrella for everything the third pql-skill-auditor run produced against 2.1.0 — the first run that executed. The two before it aborted on permission denials, which turned out to be workspace trust never having been accepted for this repo, so the project allowlist was read and not applied.
+
+The run: 15/15 core retrievals, 44 exploratory, 26 warnings checked, ~130 pql invocations. Verdict — not fit to ship as it stands, but close. 26 findings (6 Wrong, 15 Missing, 5 Unusable, 0 Bloat), 7 procedure defects, and all six leads from the aborted run''s static read confirmed.
+
+Three children, split by what each is waiting on rather than by finding type:
+
+  T-79  the fix set the verdict names, plus the DSL gap — blocks 2.1.0
+  T-87  Missing and Unusable findings needing a surface decision — 2.2.0
+  T-88  defects in the audit procedure itself
+
+The pattern the audit exposes, and the reason the gate is worth its cost: three of the six Wrong findings are defects in work shipped the same day, by the author who then documented it. T-72''s backlinks fix, T-67''s --fields on the show verbs and T-75''s omitted-not-null sweep each shipped with a skill claim that live use disproves. None was reachable from the inside — each needed a consumer with no repo knowledge using the documented surface and reporting what happened. The same was true of the previous audit''s seven findings, and of the eighth defect that fell out of fixing the seventh.
+
+Full report: /var/mnt/data/projects/claude/scratch/pql-audit-2.1.0.md', 'Umbrella for everything the third pql-skill-auditor run produced against 2.1.0 — the first run that executed. The two before it aborted on permission denials, which turned out to be workspace trust never having been accepted for this repo, so the project allowlist was read and not applied.
+
+The run: 15/15 core retrievals, 44 exploratory, 26 warnings checked, ~130 pql invocations. Verdict — not fit to ship as it stands, but close. 26 findings (6 Wrong, 15 Missing, 5 Unusable, 0 Bloat), 7 procedure defects, and all six leads from the aborted run''s static read confirmed.
+
+Three children, split by what each is waiting on rather than by finding type:
+
+  T-79  the fix set the verdict names, plus the DSL gap — blocks 2.1.0
+  T-87  Missing and Unusable findings needing a surface decision — 2.2.0
+  T-88  defects in the audit procedure itself
+
+The pattern the audit exposes, and the reason the gate is worth its cost: three of the six Wrong findings are defects in work shipped the same day, by the author who then documented it. T-72''s backlinks fix, T-67''s --fields on the show verbs and T-75''s omitted-not-null sweep each shipped with a skill claim that live use disproves. None was reachable from the inside — each needed a consumer with no repo knowledge using the documented surface and reporting what happened. The same was true of the previous audit''s seven findings, and of the eighth defect that fell out of fixing the seventh.
+
+Full report: /var/mnt/data/projects/claude/scratch/pql-audit-2.1.0.md
+
+Closed 2026-08-08. All three branches resolved: T-79 fixed the six Wrong findings plus the DSL gap and shipped in 2.1.0; T-87 resolved its Missing and Unusable findings three ways — folded into 2.1.0, closed as documentation, or decided with a record; T-88 closed all seven procedure defects plus an eighth found while filing them.
+
+Three decisions came out of it: D-29 (an argument that names a thing is validated, a value that filters a set is not), D-30 (mutation verbs return the record they changed; projection stays on the read surface), D-31 (pql answers what is, the caller folds for what is absent). Implementation is T-90, T-91, T-92 for 2.2.0.
+
+What the audit was worth, stated plainly so the cost is arguable next time. Three of the six Wrong findings were defects in work shipped the same day by the author who then documented it — T-72''s backlinks fix, T-67''s --fields on the show verbs, T-75''s omitted-not-null sweep. Each had passed tests, review and my own explicit check. None was reachable from inside; every one needed a consumer with no repo knowledge using the documented surface and reporting what happened. The T-75 case is the sharpest: I claimed to have audited the whole output surface and named doctor.index as the only violation, having grepped struct tags, which cannot see the DSL''s dynamic maps and which I then read past for plan export. A confident wrong claim, and only use disproved it.
+
+The procedure improved as much as the skill. Its version check could not detect a stale binary, its poison test had no recovery test, and its read-the-source step contradicted the rule the whole audit rests on. All three were invisible until someone followed it end to end.
+
+One residue: finding #23, whether pql drops path from base output or the .base file declares those columns, is unresolved — the auditor was denied reads inside the scratch vault. Documented in a way that is true either way, and worth a ticket if it turns out to be pql''s.', NULL, '2026-08-08 18:45:26', '2026-08-08 18:45:26.191', '2026-08-08 18:45:26.191', NULL, '536789a7989779219cfc75b99c19d1b3', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY541P00NKK9Q7PD5CP02PTM', 'status', 'ready', 'done', NULL, '2026-08-08 18:45:26', '2026-08-08 18:45:26.210', '2026-08-08 18:45:26.210', NULL, 'aedc302d71c9a699cf6057335d08ff4e', 2) ON CONFLICT(hash) DO NOTHING;
