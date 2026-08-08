@@ -52,10 +52,9 @@ Every *vault* command then fails the same way until the file is excluded. The
 planning surface is unaffected — `ticket` and `decisions` read `pql.db` and
 keep working, so a broken index does not block planning work.
 
-Exclude it via `exclude:` in `.pql/config.yaml`, a flat list of doublestar
-patterns. A `.pqlignore` file is **not** read by default: `ignore_files`
-defaults to `[".gitignore"]`, so a `.pqlignore` does nothing until it is listed
-there too. `exclude:` is the shorter path. Indexing stops at the *first* bad
+Exclude it either way: write the path into a `.pqlignore` at the vault root
+(gitignore syntax, read by default, no config file needed), or add a doublestar
+pattern to `exclude:` in `.pql/config.yaml`. Indexing stops at the *first* bad
 file, so expect to repeat this if there are several.
 
 Do not use `pql doctor` to confirm the fix. It reports whatever the last
@@ -471,6 +470,10 @@ user-level one.
 `pql doctor` prints what resolved and why: vault root and how it was found,
 config path, database locations, index state, skill status. It is the first
 thing to run when pql seems to be looking at the wrong place.
+
+It follows the omitted-not-null rule like everything else: when no index
+exists there is no `index` key at all, so branch on `db.exists` rather than
+reaching into `index` and hoping.
 
 ## Keeping this skill current
 

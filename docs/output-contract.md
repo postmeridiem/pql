@@ -68,7 +68,13 @@ Enriched (default-on intent):
 | `--quiet` | suppress stderr warnings |
 | `--verbose` | emit per-phase timing diagnostics on stderr (`internal/telemetry/`) |
 
-Output is JSON only (default array, `--pretty`, or `--jsonl`), with two sanctioned opt-in plain-text exceptions: `ticket new --id-only` (bare `T-NNN`) and the planning list verbs' `--oneline` (`id<TAB>status<TAB>title` lines, per D-27) — both reject the JSON shaping flags with exit `64` rather than mixing modes. The planning list verbs also take `--fields <csv>`, a field projection that returns JSON rows with only the named keys in the requested order (unknown names exit `64`); `pql ticket list` defaults to a projection that omits `description` — `--full` restores whole rows. Non-JSON renderers (`--table`, `--csv`) and JSONPath projection (`--select`) remain **not implemented**; pipe to `jq` for anything beyond field selection.
+Output is JSON only (default array, `--pretty`, or `--jsonl`), with two sanctioned opt-in plain-text exceptions: `ticket new --id-only` (bare `T-NNN`) and `--oneline` — both reject the JSON shaping flags with exit `64` rather than mixing modes.
+
+**Projection** (D-27, extended by T-74) applies to the planning list verbs (`ticket list`, `decisions list`) and the ranked verbs (`search`, `related`, `context`): `--fields <csv>` returns JSON rows with only the named keys in the requested order (unknown names exit `64` listing the valid set), `--fields '*'` returns all of them, and `--oneline` emits a plain-text index — `id<TAB>status<TAB>title` on the list verbs, `path<TAB>score` on the ranked ones. Two defaults are trimmed because one key dominates the payload: `ticket list` omits `description`, and the ranked verbs omit `signals[]` and `connections[]`. `--full` restores whole rows on both, and naming the key in `--fields` always returns it. Record-level verbs (`ticket show`, `decisions show`) return complete records and reject the flags with exit `64`.
+
+Non-JSON renderers (`--table`, `--csv`) and JSONPath projection (`--select`) remain **not implemented**; pipe to `jq` for anything beyond field selection.
+
+**Empty means omitted, never null.** A key with no value is left out of the object rather than emitted as `null`, so a caller checks for presence and never dereferences a null it just presence-checked. This binds every surface, including diagnostics: `pql doctor` omits `index` entirely when there is no database to count rows in (T-75) — branch on `db.exists`.
 
 ## `--flat-search` semantics
 

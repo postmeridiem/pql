@@ -6,9 +6,12 @@ When `pql` operates on a vault it looks for a small set of conventional files an
 |---|---|---|
 | `.pql/` | pql | Per-vault state directory (SQLite index + future caches + the user-edited config.yaml). Analogous to `.git/`. |
 | `.pql/config.yaml` | User | Per-vault settings — overrides binary defaults. Optional. |
-| `.gitignore` | User | Default exclusion source. Honored by pql out of the box; users can swap or extend via `ignore_files` in config (see [`pqlignore.md`](pqlignore.md)). |
+| `.gitignore` | User | Exclusion source, honoured out of the box. |
+| `.pqlignore` | User | Exclusion source for rules that should apply to indexing but not to git — same syntax, read by default, wins on conflicts with `.gitignore`. Optional. |
 
-The convention is the same shape developers already know from git: a tool-managed state dir at the vault root that also hosts the user-edited config (just like `.git/` hosts `.git/config`). Exclusions piggy-back on the project's existing `.gitignore` by default — most projects already keep their "what to skip" list there and the rules apply identically to indexing. Users who want pql-specific deviations add a small `.pqlignore` and update `ignore_files: [.gitignore, .pqlignore]`.
+Both ignore files are entries in the `ignore_files` config default; swap or extend that list to use others (see [`pqlignore.md`](pqlignore.md)).
+
+The convention is the same shape developers already know from git: a tool-managed state dir at the vault root that also hosts the user-edited config (just like `.git/` hosts `.git/config`). Exclusions piggy-back on the project's existing `.gitignore` by default — most projects already keep their "what to skip" list there and the rules apply identically to indexing. Users who want pql-specific deviations drop a small `.pqlignore` beside it; both are in the `ignore_files` default, and a name that isn't on disk is skipped, so neither has to exist and creating one needs no config edit.
 
 ## `.pql/` — per-vault state
 
@@ -65,7 +68,7 @@ No. Add `.pql/` to your repo's `.gitignore`. The index is regenerable from the v
 
 Three layers, fully documented in [`pqlignore.md`](pqlignore.md). Quick summary:
 
-- **`ignore_files` in `.pql/config.yaml`** — defaults to `[.gitignore]`. Walker reads each named file with gitignore syntax. Add `.pqlignore` (or anything else) for pql-specific deviations; order matters.
+- **`ignore_files` in `.pql/config.yaml`** — defaults to `[.gitignore, .pqlignore]`. Walker reads each named file with gitignore syntax; a name that isn't on disk is skipped, so a `.pqlignore` you create takes effect with no config edit. Add further names for other sources; order matters (later wins).
 - **`exclude:` in `.pql/config.yaml`** — flat list of doublestar patterns. **Defaults to `[**/.obsidian/**, **/.git/**, **/node_modules/**]`** when the key is unset, so editor/VCS/dependency noise is skipped out of the box even with no `.gitignore`; set the key explicitly to override.
 - **Built-in non-overridable default** — only `.git/`, matching git's exact behaviour. Pql's own `.pql/` is excluded via the `ignore_files` → `.gitignore` layer (`pql init` appends `.pql/` to the project's gitignore as a one-time setup), keeping the user in control of every other "what to skip" decision.
 
@@ -82,7 +85,7 @@ frontmatter: yaml
 wikilinks: obsidian
 tags:
   sources: [inline, frontmatter]
-ignore_files: [.gitignore]
+ignore_files: [.gitignore, .pqlignore]
 exclude:
   - "**/draft/**"
 git_metadata: false

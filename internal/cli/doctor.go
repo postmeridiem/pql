@@ -24,7 +24,12 @@ type doctorReport struct {
 	Vault   doctorVault       `json:"vault"`
 	Config  doctorConfig      `json:"config"`
 	DB      doctorDB          `json:"db"`
-	Index   *doctorIndex      `json:"index"` // nil when DB doesn't exist
+	// Index is absent, not null, when there is no DB to count rows in —
+	// the omitted-not-null rule the output contract states (T-75). doctor
+	// is what a caller runs when something is already wrong, so it is the
+	// worst place to hand back a key that presence-checks true and then
+	// dereferences to nothing. `db.exists` is the flag to branch on.
+	Index   *doctorIndex      `json:"index,omitempty"`
 	Skills  []doctorSkill     `json:"skills"`
 	Version version.BuildInfo `json:"version"`
 }

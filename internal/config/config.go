@@ -87,13 +87,17 @@ type Config struct {
 	// when walking. Each entry is a filename (gitignore syntax) the walker
 	// looks for at the vault root.
 	//
-	// Default is [".gitignore"] because most projects already keep their
-	// exclusions there. Users add more files when they want pql-specific
-	// rules without polluting .gitignore — typically [.gitignore,
-	// .pqlignore] so a tiny .pqlignore can carry only the pql-only
-	// deviations (e.g. drafts/) instead of duplicating .gitignore's
-	// contents. Order matters: later files win on per-pattern conflicts.
-	// Set to [] to disable file-based exclusions entirely.
+	// Default is [".gitignore", ".pqlignore"]: most projects already keep
+	// their exclusions in the former, and the latter is the file pql names
+	// after itself. A missing file is skipped, so both entries are inert
+	// until the file exists — which is what makes .pqlignore work the way
+	// its name promises, without a config edit first (T-78). It carries only
+	// the pql-only deviations (e.g. drafts/ you want committed but not
+	// indexed) rather than duplicating .gitignore.
+	//
+	// Order matters: later files win on per-pattern conflicts, so .pqlignore
+	// can re-include something .gitignore excluded with the standard `!`
+	// prefix. Set to [] to disable file-based exclusions entirely.
 	IgnoreFiles []string `yaml:"ignore_files"`
 	GitMetadata bool     `yaml:"git_metadata"`
 	FTS         bool     `yaml:"fts"`
@@ -222,7 +226,7 @@ func defaults() *Config {
 			"**/node_modules/**",
 		},
 		Aliases:     map[string]string{},
-		IgnoreFiles: []string{".gitignore"},
+		IgnoreFiles: []string{".gitignore", ".pqlignore"},
 		GitMetadata: false,
 		FTS:         false,
 		DQRDir:      "governance",

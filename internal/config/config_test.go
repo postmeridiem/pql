@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -558,8 +559,14 @@ func TestLoad_IgnoreFilesDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.IgnoreFiles) != 1 || cfg.IgnoreFiles[0] != ".gitignore" {
-		t.Errorf("default IgnoreFiles = %v, want [.gitignore]", cfg.IgnoreFiles)
+	// .pqlignore is in the default set, not just documented as an option to
+	// add: a vault-root .pqlignore has to work without a config edit first,
+	// or the file pql names after itself is inert (T-78). Order is
+	// load-bearing — later files win on per-pattern conflicts, so
+	// .pqlignore must come after .gitignore to be able to re-include.
+	want := []string{".gitignore", ".pqlignore"}
+	if !slices.Equal(cfg.IgnoreFiles, want) {
+		t.Errorf("default IgnoreFiles = %v, want %v", cfg.IgnoreFiles, want)
 	}
 }
 

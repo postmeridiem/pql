@@ -137,15 +137,17 @@ exclude:
   - "**/node_modules/**"
 
 # Per-vault ignore files the indexer consults when walking. Each name is a
-# file at the vault root with gitignore-syntax rules. Default follows
-# .gitignore so pql piggy-backs on what most projects already exclude
-# (build outputs, vendored deps). To carry pql-specific deviations
-# without polluting .gitignore, add a tiny .pqlignore alongside:
-#   ignore_files: [.gitignore, .pqlignore]
-# Order matters — later files win on per-pattern conflicts. Set to [] to
-# disable file-based exclusions entirely (.git/ and .pql/ are still
-# excluded; that's a non-overridable built-in).
-ignore_files: [.gitignore]
+# file at the vault root with gitignore-syntax rules. A name that isn't
+# there is skipped, so both defaults are inert until the file exists:
+# .gitignore lets pql piggy-back on what most projects already exclude
+# (build outputs, vendored deps), and .pqlignore carries pql-specific
+# deviations — drafts/ you want committed to git but not indexed — without
+# polluting .gitignore. Create either one and it takes effect; no edit here.
+# Order matters — later files win on per-pattern conflicts, so .pqlignore
+# can re-include something .gitignore excluded with a leading "!". Set to []
+# to disable file-based exclusions entirely (.git/ is still excluded; that's
+# a non-overridable built-in).
+ignore_files: [.gitignore, .pqlignore]
 
 # Populate file.gitmtime / file.gitauthor from git log.
 git_metadata: false

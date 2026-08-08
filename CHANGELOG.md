@@ -61,7 +61,27 @@ four defects nobody had hit from the inside.
   substitution, both of which fail under the prefix allowlists consuming
   projects use.
 
+- **`.pqlignore` is now read by default** (T-78). `ignore_files` defaulted to
+  `[.gitignore]`, so the file pql is named after did nothing until you added it
+  to `.pql/config.yaml` — while the docs listed `.pqlignore` as one of the three
+  vault conventions. Create one at the vault root and it takes effect on the
+  next index, no config edit. The default is now
+  `[.gitignore, .pqlignore]`; a name that isn't on disk is skipped, so this is
+  inert in vaults that have neither.
+
+  **Note:** the config hash changes, so the first run after upgrading rebuilds
+  `index.db`. It is a pure cache; nothing is lost. A vault that pins
+  `ignore_files:` explicitly keeps whatever it set.
+
 ### Fixed
+
+- **`pql doctor` emitted `"index": null` when there was no database** (T-75),
+  against its own output contract — empty means the key is *omitted*, so a
+  caller that presence-checks the key succeeded and then dereferenced null.
+  Worst possible place for it: doctor is what you run when something is already
+  wrong. The key is now absent; branch on `db.exists`. The test that was meant
+  to guard this checked `!= nil`, which cannot tell absent from null, so it now
+  checks for the key.
 
 - **`pql backlinks <path>` missed wikilink targets written as an extensionless
   path** (T-72). Obsidian writes `[[members/x/persona]]` for a link outside the

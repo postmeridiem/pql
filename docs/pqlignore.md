@@ -3,25 +3,20 @@
 Three layers, in increasing scope of "user can override":
 
 1. **Built-in non-overridable defaults.** Hardcoded in the walker (`internal/index/walker.go`). The list is intentionally narrow — only `.git/`, matching git's own behaviour: git auto-excludes its state dir without anyone listing it, and `.git/objects/*` packs hold what amount to multiple snapshots of the entire repo, so descending into it would re-index every file many times over. Everything else, including pql's own `.pql/`, is the user's call to make via the layers below.
-2. **`ignore_files` from `.pql/config.yaml`.** A list of file names (gitignore syntax) the walker reads at the vault root. Default `[".gitignore"]` — most projects already have one and most of its rules apply identically to indexing (build outputs, vendored deps, scratch dirs). `pql init` auto-appends `.pql/` to the project's `.gitignore`, so pql's own state stays out of the index without any extra config.
+2. **`ignore_files` from `.pql/config.yaml`.** A list of file names (gitignore syntax) the walker reads at the vault root. Default `[".gitignore", ".pqlignore"]`. A name that isn't there is skipped, so both are inert until the file exists: most projects already have a `.gitignore` and most of its rules apply identically to indexing (build outputs, vendored deps, scratch dirs), and `.pqlignore` is there so the file pql names after itself works the moment you create it. `pql init` auto-appends `.pql/` to the project's `.gitignore`, so pql's own state stays out of the index without any extra config.
 3. **`exclude:` patterns in `.pql/config.yaml`.** A flat list of doublestar patterns for one-off in-config rules. Applied on top of the file-based exclusions.
 
 ## Defaults
 
-Out of the box `pql init` seeds `ignore_files: [.gitignore]` because it's the right answer for the overwhelming majority of vaults. Run `pql files` in a typical git repo and pql skips `node_modules/`, `dist/`, `*.log`, etc., without you doing anything.
+Out of the box, both `.gitignore` and `.pqlignore` are consulted — no config file needed, and `pql init` seeds the same pair explicitly. Run `pql files` in a typical git repo and pql skips `node_modules/`, `dist/`, `*.log`, etc., without you doing anything.
 
-If the vault isn't a git repo, the `ignore_files` default silently no-ops — the named file isn't there. Note that the `exclude:` config key carries its own default of `[**/.obsidian/**, **/.git/**, **/node_modules/**]`, so those are skipped even with no `.gitignore` present (override by setting `exclude:` explicitly).
+Neither file has to exist. A name in `ignore_files` that isn't on disk is skipped, so the default silently no-ops in a vault that is not a git repo and has no `.pqlignore`. Note that the `exclude:` config key carries its own default of `[**/.obsidian/**, **/.git/**, **/node_modules/**]`, so those are skipped even with no ignore file present (override by setting `exclude:` explicitly).
 
 ## Deviating: pql-specific rules without polluting `.gitignore`
 
-A common case: you want to commit `drafts/` to git but you don't want pql to index those files. Adding `drafts/` to `.gitignore` would stop git from tracking them. The clean fix is a small `.pqlignore` alongside:
+A common case: you want to commit `drafts/` to git but you don't want pql to index those files. Adding `drafts/` to `.gitignore` would stop git from tracking them. The fix is a `.pqlignore` at the vault root containing just `drafts/`. That is all — it takes effect on the next index, with no config edit, because it is in the default set.
 
-```yaml
-# .pql/config.yaml
-ignore_files: [.gitignore, .pqlignore]
-```
-
-Now pql consults both. `.gitignore` covers what git already knew about; `.pqlignore` is a tiny file containing only your pql-specific deviations (`drafts/`, `experiments/`, whatever). Order matters — later files win on per-pattern conflicts, so `.pqlignore` can re-include something `.gitignore` excluded with the standard `!` prefix.
+`.gitignore` covers what git already knew about; `.pqlignore` is a tiny file containing only your pql-specific deviations (`drafts/`, `experiments/`, whatever). Order matters — later files win on per-pattern conflicts, and `.pqlignore` comes second, so it can re-include something `.gitignore` excluded with the standard `!` prefix.
 
 ## Other deviation patterns
 

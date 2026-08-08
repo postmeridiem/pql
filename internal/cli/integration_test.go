@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -749,13 +750,20 @@ func TestIntegration_Doctor_FreshVaultBeforeIndex(t *testing.T) {
 	if err := json.Unmarshal(out, &rep); err != nil {
 		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
 	}
-	// DB shouldn't exist yet — index field should be nil/absent.
+	// DB shouldn't exist yet, so there are no row counts to report. The key
+	// must be *absent*, not null (T-75): the output contract says empty
+	// fields are omitted, so a caller presence-checks the key — and `!= nil`
+	// alone cannot tell the two apart, which is how `"index": null` survived
+	// this test in the first place. Check the key.
 	db, _ := rep["db"].(map[string]any)
 	if exists, _ := db["exists"].(bool); exists {
 		t.Errorf("db.exists = true on fresh dir, want false")
 	}
-	if rep["index"] != nil {
-		t.Errorf("index should be null when DB doesn't exist, got %v", rep["index"])
+	if v, ok := rep["index"]; ok {
+		t.Errorf("index key should be absent when there is no DB, got %v", v)
+	}
+	if !strings.Contains(string(out), `"db"`) {
+		t.Fatalf("sanity: report does not look like a doctor report:\n%s", out)
 	}
 	// Vault should still be reported.
 	v, _ := rep["vault"].(map[string]any)
@@ -1399,6 +1407,46 @@ func TestIntegration_TicketList_Oneline(t *testing.T) {
 		if code != 64 {
 			t.Errorf("--oneline %s should exit 64, got %d", extra, code)
 		}
+	}
+}
+
+// A bare .pqlignore at the vault root must exclude, with no config file to
+// register it first (T-78). It was documented as one of the three vault
+// conventions while `ignore_files` defaulted to [.gitignore] alone, so the
+// file the tool is named after did nothing until you edited config.yaml.
+func TestIntegration_PqlignoreWorksWithoutConfig(t *testing.T) {
+	vault := t.TempDir()
+	for _, f := range []struct{ path, body string }{
+		{"keep.md", "# Keep\n"},
+		{"drafts/skip.md", "# Skip\n"},
+		{".pqlignore", "drafts/\n"},
+	} {
+		full := filepath.Join(vault, f.path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(full, []byte(f.body), 0o600); err != nil {
+			t.Fatalf("write %s: %v", f.path, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(vault, ".pql", "config.yaml")); err == nil {
+		t.Fatalf("this test is only meaningful with no config file present")
+	}
+
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(pqlIT(t, vault, "files")), &rows); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	paths := make([]string, 0, len(rows))
+	for _, r := range rows {
+		p, _ := r["path"].(string)
+		paths = append(paths, p)
+	}
+	if !slices.Contains(paths, "keep.md") {
+		t.Errorf("keep.md should be indexed, got %v", paths)
+	}
+	if slices.Contains(paths, "drafts/skip.md") {
+		t.Errorf(".pqlignore did not exclude drafts/, got %v", paths)
 	}
 }
 
