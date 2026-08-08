@@ -33,6 +33,11 @@ const markerFormat = "2006-01-02 15:04:05"
 // re-scan never rewrites an already-exported row-version.
 
 // Result summarises an Export run.
+//
+// FilesWritten is never nil — an export that wrote nothing reports `[]`, not
+// `null`. The output contract's rule is that an empty value never serialises
+// as null, and "nothing was written" is the answer to what this verb was
+// asked, so the key stays present and empty rather than disappearing (T-81).
 type Result struct {
 	FilesWritten []string `json:"files_written"`
 	RowsWritten  int      `json:"rows_written"`
@@ -68,7 +73,7 @@ func Export(ctx context.Context, db *sql.DB, vaultPath string) (*Result, error) 
 	}
 	defer sink.close()
 
-	res := &Result{}
+	res := &Result{FilesWritten: []string{}}
 	for _, exp := range tableExporters {
 		n, err := exp(ctx, db, since, sink)
 		if err != nil {

@@ -74,7 +74,9 @@ Output is JSON only (default array, `--pretty`, or `--jsonl`), with two sanction
 
 Non-JSON renderers (`--table`, `--csv`) and JSONPath projection (`--select`) remain **not implemented**; pipe to `jq` for anything beyond field selection.
 
-**Empty means omitted, never null.** A key with no value is left out of the object rather than emitted as `null`, so a caller checks for presence and never dereferences a null it just presence-checked. This binds every surface, including diagnostics: `pql doctor` omits `index` entirely when there is no database to count rows in (T-75) — branch on `db.exists`.
+**Never null.** No surface emits `null` for an empty value. "Empty" then takes one of two forms, and callers must handle both: a scalar with no value is **omitted** (a ticket with no parent has no `parent_id`; `pql doctor` omits `index` entirely when there is no database — branch on `db.exists`, T-75), while an empty **collection** is present and empty (`meta` returns `"tags": []`, `plan export` returns `"files_written": []`, T-81). Test for presence *or* emptiness; never dereference a present key assuming it is populated.
+
+One deliberate exception: the DSL emits `null` for a frontmatter column a file does not carry (`SELECT name, fm.lens` over a file with no `lens`). That is load-bearing — a projection over heterogeneous files has to distinguish absent from empty, and omitting the key would make the rows ragged. Documented as an exception in the embedded skill rather than papered over.
 
 ## `--flat-search` semantics
 

@@ -15,7 +15,8 @@ import (
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
 
-// ImportResult summarises a replay run.
+// ImportResult summarises a replay run. FilesReplayed is never nil — see
+// Result.FilesWritten (T-81).
 type ImportResult struct {
 	FilesReplayed []string `json:"files_replayed"`
 	StatementsRun int      `json:"statements_run"`
@@ -53,7 +54,7 @@ type ImportResult struct {
 func Import(ctx context.Context, db *sql.DB, vaultPath string) (*ImportResult, error) {
 	root := filepath.Join(vaultPath, ChangelogDir)
 	if _, err := os.Stat(root); os.IsNotExist(err) {
-		return &ImportResult{}, nil
+		return &ImportResult{FilesReplayed: []string{}}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("changelog: stat %s: %w", root, err)
 	}
@@ -83,7 +84,7 @@ func Import(ctx context.Context, db *sql.DB, vaultPath string) (*ImportResult, e
 	}
 	sort.Strings(tableNames)
 
-	res := &ImportResult{}
+	res := &ImportResult{FilesReplayed: []string{}}
 	for _, table := range tableNames {
 		dir := filepath.Join(root, table)
 		entries, err := os.ReadDir(dir)

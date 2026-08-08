@@ -8,7 +8,8 @@ import (
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
 
-// RebuildResult summarises a rebuild run.
+// RebuildResult summarises a rebuild run. Neither slice is ever nil — see
+// Result.FilesWritten (T-81).
 type RebuildResult struct {
 	TablesCleared []string `json:"tables_cleared"`
 	FilesReplayed []string `json:"files_replayed"`

@@ -915,3 +915,297 @@ to design.
 
 Epic closed 2026-08-08, all seven children delivered in 2.1.0. What the audit bought, in order of severity. Two silent wrong answers: backlinks missed the extensionless full path Obsidian writes for cross-folder wikilinks, so querying a file by the spelling every other command returns reported no backlinks (T-72); and context emitted raw link text as result paths, so its output could not be fed to any other command and one governance file returned six same-document heading anchors ranked against each other (T-73). Two contract breaches: doctor emitted index: null against the omitted-not-null rule, in the one command you run when something is already wrong (T-75), and .pqlignore was documented as a vault convention while being inert without a config edit (T-78). Three ergonomics defects that each cost round trips: ranked results carried five signal objects per row with no way to trim, 16x payload for the answer (T-74); decisions show would not batch, making a cross-surface question 41 calls (T-76); ticket board had no way to drop terminal columns, 82 percent of a mature board (T-77). Plus T-67 from the same class, filed a day earlier from live sessions. Two things worth carrying forward. First, an eighth defect fell out of fixing the seventh: ticket show --with-children had returned nothing since D-26 split record_id from ticket_id, silent because an empty children list is a legitimate answer, and it surfaced only because --fields let me ask for a key I knew had seven entries. Second, the pattern across all of these is that none were reachable from inside. Every one needed a consumer with no repo knowledge using the documented surface and reporting what actually happened. That is the argument for keeping the audit on the release-mint hook rather than running it ad hoc. Also corrected in this cycle: I refuted the first audit''s finding on context heading anchors and was wrong; the second audit proved it. The skill no longer claims anchors are a feature.', NULL, '2026-08-08 15:26:37', '2026-08-08 15:26:37.418', '2026-08-08 15:26:37.418', NULL, '297054dcf7876e0ee461ed4a5019e6e6', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HM1XJV12S25YK3EHRV32C', 'status', 'in_progress', 'done', NULL, '2026-08-08 15:26:37', '2026-08-08 15:26:37.435', '2026-08-08 15:26:37.435', NULL, '56db78d5358214bd93dd1c6c5e0093ca', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53064TNJBNG3SAW3HJ438G', 'parent_id', NULL, 'T-79', NULL, '2026-08-08 18:05:06', '2026-08-08 18:05:06.580', '2026-08-08 18:05:06.580', NULL, '810e2e08eb2c88d17f1b56657f220d36', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53064TNJBNG3SAW3HJ438G', 'description', NULL, 'Audit findings Wrong #5 and Missing #9.
+
+  ticket show T-63 --with-context --fields id,title
+  -> {"id":"T-63","title":"..."}    exit 0, no ancestors, no warning
+
+  ticket show T-63 --with-context --fields id,ancestors
+  -> {"id":"T-63","ancestors":[...]}
+
+So --fields does select the joins; a join key not named is dropped even though its --with- flag was passed. The skill says --fields ''narrows the top level only: the join-trees are all-or-nothing'', which describes what happens to a join that survives but reads as a promise the join arrives whole, and gives no hint a lever exists.
+
+Compounded by Missing #9: the skill''s --fields valid-name lists give 13 ticket fields and 8 decision fields, while the exit-64 error lists 19. ancestors, blockers, children, decisions, subtree and message are all absent from the skill — and that section opens with ''Valid field names, since guessing them costs a round trip''.
+
+Failure mode: ask for context, ask to trim, get neither, notice nothing. Both halves are from T-67, shipped the same day.
+
+Fix, skill-side: state that --fields also selects joins and that an unnamed join key is dropped, list the join keys, and keep the true part — join contents are never projected. Decide deliberately whether passing --with-X while omitting X from --fields warrants a stderr warning; a silent drop of something explicitly requested is what diagnostics are for, but warning on a legitimate top-level-only call would be noise.
+
+Filing note: this ticket could not be created with its title as a positional argument — a title beginning with -- is parsed as a flag and exits 64. `ticket new bug -- "--fields ..."` works. Worth a line in the skill.', NULL, '2026-08-08 18:05:06', '2026-08-08 18:05:06.597', '2026-08-08 18:05:06.597', NULL, '53dcd437674571e6aca0299119360786', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53064TNJBNG3SAW3HJ438G', 'priority', 'medium', 'high', NULL, '2026-08-08 18:05:06', '2026-08-08 18:05:06.597', '2026-08-08 18:05:06.597', NULL, 'a89ac277edd680da4a136852e0a77f25', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52S461Z9QKWVK0JTJEFKN8', 'status', 'backlog', 'ready', NULL, '2026-08-08 18:05:28', '2026-08-08 18:05:28.115', '2026-08-08 18:05:28.115', NULL, '4af2811777f0adf3147f8e6ae6c591db', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52TK0B80DXVEKGVGBRMNVR', 'status', 'backlog', 'ready', NULL, '2026-08-08 18:05:28', '2026-08-08 18:05:28.122', '2026-08-08 18:05:28.122', NULL, '01d4987673a7bd1e31a3f1bf21cf407a', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52VTK08206BJ7Z21JMZRQM', 'status', 'backlog', 'ready', NULL, '2026-08-08 18:05:28', '2026-08-08 18:05:28.122', '2026-08-08 18:05:28.122', NULL, '512f6f507dd07d5809b75da9cfc0210d', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52X079W1G0SPCBAVPYABXR', 'status', 'backlog', 'ready', NULL, '2026-08-08 18:05:28', '2026-08-08 18:05:28.122', '2026-08-08 18:05:28.122', NULL, 'b049b51efc7c7d79ba313fe96e8d747b', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53064TNJBNG3SAW3HJ438G', 'status', 'backlog', 'ready', NULL, '2026-08-08 18:05:28', '2026-08-08 18:05:28.123', '2026-08-08 18:05:28.123', NULL, '478c4ee28c236af4ff045395ffac81fd', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52Y65C1K85YMW8HAJS831G', 'status', 'backlog', 'ready', NULL, '2026-08-08 18:05:28', '2026-08-08 18:05:28.123', '2026-08-08 18:05:28.123', NULL, 'ea3956b4fb21097ab532a4f03d325a05', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY537DDR64R4DYT04X86JWZW', 'status', 'backlog', 'ready', NULL, '2026-08-08 18:05:28', '2026-08-08 18:05:28.124', '2026-08-08 18:05:28.124', NULL, '184ee69b57227b7556c0e54d4470416f', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY538NZECFSTEWA3831TA410', 'status', 'backlog', 'ready', NULL, '2026-08-08 18:05:28', '2026-08-08 18:05:28.124', '2026-08-08 18:05:28.124', NULL, 'a73ac186b0a6617836be5131039c2ee1', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53V23XT3Y1NBT9Y4E0R438', 'description', 'The pql-testing procedure''s own defects, found by the third audit run while following it. Full report: /var/mnt/data/projects/claude/scratch/pql-audit-2.1.0.md
+
+PD-1 — the setup''s version check cannot detect the thing it exists to detect. It compares pql --version against ./bin/pql --version and says to reinstall if they differ. Both printed 2.1.0 while doctor showed the PATH binary was built at 951e4f9 and ./bin/pql at 1159a8f. Because version strings are deliberately clean with no SHA (D-12), version equality is the wrong comparison — two binaries from different commits agree whenever the release version has not been bumped. Here the intervening commits touched only the audit skill, but the check would have passed just as happily across a functional change. Fix: compare doctor''s version.commit against git rev-parse --short HEAD, or add make binary-drift alongside make skill-drift.
+
+PD-2 — the sanctioned poison test has no sanctioned recovery test. make scratch-poison exists; nothing lets the auditor exercise the .pqlignore recovery the skill documents, because writing a file needs shell redirection. Reading the scratch vault is also denied — it sits outside the session''s read roots — so warning W2 went unchecked and finding #23 could not be resolved to pql''s fault or the .base file''s. Fix: make scratch-ignore PATTERN=..., and add the scratch vault to the audit''s allowed read roots.
+
+PD-3 — no safe way to exercise pql init. Documented command, documented side effects, and neither the skill nor --help says whether it targets cwd or --vault, so running it risks writing into this repo. Fix: make scratch-init, or pin the target directory in the skill.
+
+PD-4 — exit codes are only observable when non-zero, since 127 is a compound and refused. A successful exit 0 is inferred from the absence of an error banner. Fine in practice, but R2 is load-bearing and is verified by inference; say so in the procedure so future auditors do not spend calls rediscovering it.
+
+PD-5 — step 4 says read the source and locate each fix; the tasking said not to read source at all. The auditor honoured the tasking, so no finding carries a source location. The two documents must agree. Worth deciding deliberately: the no-source rule is what keeps the outside-in view honest, and step 4 may simply belong to whoever triages the report rather than to the auditor.
+
+PD-6 — the report cannot be written where it was asked for. The agent has no write tool by design, redirection is denied, and the target path is outside its read roots. It returned the report as a message and the orchestrating session transcribed it. Fix: either drop the write-to-file instruction from the tasking, or add a make audit-report target reading stdin.
+
+PD-7 — the cost estimate is low. The procedure predicts roughly 100k tokens and 90+ tool calls; this run made ~130 pql invocations plus ~14 help and make calls, with 26 warnings checked. State 130+ if the core set, a full warnings pass and real exploration are all expected.', 'The pql-testing procedure''s own defects, found by the third audit run while following it. Full report: /var/mnt/data/projects/claude/scratch/pql-audit-2.1.0.md
+
+PD-1 — the setup''s version check cannot detect the thing it exists to detect. It compares `pql --version` against `./bin/pql --version` and says to reinstall if they differ. Both printed 2.1.0 while `doctor` showed the PATH binary was built at 951e4f9 and ./bin/pql at 1159a8f. Because version strings are deliberately clean with no SHA (D-12), version equality is the wrong comparison — two binaries from different commits agree whenever the release version has not been bumped. Here the intervening commits touched only the audit skill, but the check would have passed just as happily across a functional change. Fix: compare `doctor`''s version.commit against `git rev-parse --short HEAD`, or add `make binary-drift` alongside `make skill-drift`.
+
+PD-2 — the sanctioned poison test has no sanctioned recovery test. `make scratch-poison` exists; nothing lets the auditor exercise the .pqlignore recovery the skill documents, because writing a file needs shell redirection. Reading the scratch vault is also denied — it sits outside the session''s read roots — so warning W2 went unchecked and finding #23 could not be resolved to pql''s fault or the .base file''s. Fix: `make scratch-ignore PATTERN=...`, and add the scratch vault to the audit''s allowed read roots.
+
+PD-3 — no safe way to exercise `pql init`. Documented command, documented side effects, and neither the skill nor --help says whether it targets cwd or --vault, so running it risks writing into this repo. Fix: `make scratch-init`, or pin the target directory in the skill.
+
+PD-4 — exit codes are only observable when non-zero, because appending a semicolon and an echo of the status variable makes the invocation a compound, which is refused. A successful exit 0 is inferred from the absence of an error banner. Fine in practice, but R2 is load-bearing and is verified by inference; say so in the procedure so future auditors do not spend calls rediscovering it.
+
+PD-5 — step 4 says read the source and locate each fix; the tasking said not to read source at all. The auditor honoured the tasking, so no finding carries a source location. The two documents must agree. Worth deciding deliberately: the no-source rule is what keeps the outside-in view honest, and step 4 may simply belong to whoever triages the report rather than to the auditor.
+
+PD-6 — the report cannot be written where it was asked for. The agent has no write tool by design, redirection is denied, and the target path is outside its read roots. It returned the report as a message and the orchestrating session transcribed it. Fix: either drop the write-to-file instruction from the tasking, or add a `make audit-report` target reading stdin.
+
+PD-7 — the cost estimate is low. The procedure predicts roughly 100k tokens and 90+ tool calls; this run made ~130 pql invocations plus ~14 help and make calls, with 26 warnings checked. State 130+ if the core set, a full warnings pass and real exploration are all expected.
+
+Filing note, and an eighth defect by demonstration: the first attempt at this description was written with backticks around a shell example, and bash ran it as command substitution — so the ticket landed with the string 127 where the example should have been. Exactly the anti-pattern the skill under audit warns about, committed while filing the audit''s own findings. Use a quoted heredoc through --stdin for any description containing shell syntax.', NULL, '2026-08-08 18:08:24', '2026-08-08 18:08:24.942', '2026-08-08 18:08:24.942', NULL, 'ef6bb24143854ed660cb86b6af191460', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52S461Z9QKWVK0JTJEFKN8', 'parent_id', NULL, 'T-89', NULL, '2026-08-08 18:08:53', '2026-08-08 18:08:53.660', '2026-08-08 18:08:53.660', NULL, 'e5cb1ab3d3a0e1f283079134114c56af', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53BSK27Y4K571GPGD3JA2R', 'parent_id', NULL, 'T-89', NULL, '2026-08-08 18:08:53', '2026-08-08 18:08:53.667', '2026-08-08 18:08:53.667', NULL, '0b9f8c767e8d5d75a5f33bdf537f8d10', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53V23XT3Y1NBT9Y4E0R438', 'parent_id', NULL, 'T-89', NULL, '2026-08-08 18:08:53', '2026-08-08 18:08:53.667', '2026-08-08 18:08:53.667', NULL, '28266b12a794c066a6c752980b0efc3a', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY541P00NKK9Q7PD5CP02PTM', 'status', 'backlog', 'ready', NULL, '2026-08-08 18:08:53', '2026-08-08 18:08:53.683', '2026-08-08 18:08:53.683', NULL, 'b80e0adfe369cd356042c50035ded4b4', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52S461Z9QKWVK0JTJEFKN8', 'status', 'ready', 'in_progress', NULL, '2026-08-08 18:10:43', '2026-08-08 18:10:43.828', '2026-08-08 18:10:43.828', NULL, 'e6ac75b57014d3a06d0d173e2802fb66', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52TK0B80DXVEKGVGBRMNVR', 'status', 'ready', 'in_progress', NULL, '2026-08-08 18:10:43', '2026-08-08 18:10:43.834', '2026-08-08 18:10:43.834', NULL, '880f27a873ef74741dbcdf2e37f6be64', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52Y65C1K85YMW8HAJS831G', 'status', 'ready', 'in_progress', NULL, '2026-08-08 18:10:43', '2026-08-08 18:10:43.835', '2026-08-08 18:10:43.835', NULL, 'c39f3382f4aae670058ff7dc4b6a041f', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52VTK08206BJ7Z21JMZRQM', 'status', 'ready', 'in_progress', NULL, '2026-08-08 18:10:43', '2026-08-08 18:10:43.835', '2026-08-08 18:10:43.835', NULL, 'cd6786b5430e4c8e2326255ac1dd4e84', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52X079W1G0SPCBAVPYABXR', 'status', 'ready', 'in_progress', NULL, '2026-08-08 18:10:43', '2026-08-08 18:10:43.835', '2026-08-08 18:10:43.835', NULL, 'f435fbd51f0d69d54a55ea3734b0f665', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53064TNJBNG3SAW3HJ438G', 'status', 'ready', 'in_progress', NULL, '2026-08-08 18:10:43', '2026-08-08 18:10:43.836', '2026-08-08 18:10:43.836', NULL, '2d3337dd33828a9565b7ffc42057d853', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY538NZECFSTEWA3831TA410', 'status', 'ready', 'in_progress', NULL, '2026-08-08 18:10:43', '2026-08-08 18:10:43.836', '2026-08-08 18:10:43.836', NULL, '646056e9161445718538cad39989a423', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY537DDR64R4DYT04X86JWZW', 'status', 'ready', 'in_progress', NULL, '2026-08-08 18:10:43', '2026-08-08 18:10:43.836', '2026-08-08 18:10:43.836', NULL, '7f91acc03a2174fe5d7d81defb6fc7c5', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52TK0B80DXVEKGVGBRMNVR', 'description', 'Audit finding Wrong #1; confirms leads C1 and C2.
+
+The Contracts section enumerates the verbs returning a single object: ticket show <one-id>, decisions show, plan status, plan whatsnext, doctor, version --build-info, watch status, ticket new. Two defects in one list.
+
+C1: decisions show is listed unqualified while ticket show gets <one-id>, and the Decisions section says the opposite — one id returns an object, several return an array. Verified: decisions show D-1,D-2 --fields id returns an array. Batched decisions show is new in 2.1.0 (T-76), so this is a stale sentence the rewrite missed.
+
+C2: plan review is absent, though plan whatsnext is listed and the two are described identically.
+
+Beyond the leads, all of these return objects and none is listed: meta <path>, decisions read, decisions claim, decisions validate, decisions sync, ticket refine next, ticket assign, ticket label, plan export, plan rebuild, plan upgrade. meta is the omission that matters most — it is a core vault verb in the routing table.
+
+The section is written in a register that invites the caller to treat it as exhaustive (''Do not write one parser assuming an array''), which is what makes an incomplete enumeration worse than none.
+
+Fix: replace the enumeration with a rule — list and query verbs return arrays, everything else returns an object — plus the genuine exceptions. An enumeration assembled from the verbs the author had in mind will drift again on the next verb added.', 'Audit finding Wrong #1; confirms leads C1 and C2.
+
+The Contracts section enumerates the verbs returning a single object: ticket show <one-id>, decisions show, plan status, plan whatsnext, doctor, version --build-info, watch status, ticket new. Two defects in one list.
+
+C1: decisions show is listed unqualified while ticket show gets <one-id>, and the Decisions section says the opposite — one id returns an object, several return an array. Verified: decisions show D-1,D-2 --fields id returns an array. Batched decisions show is new in 2.1.0 (T-76), so this is a stale sentence the rewrite missed.
+
+C2: plan review is absent, though plan whatsnext is listed and the two are described identically.
+
+Beyond the leads, all of these return objects and none is listed: meta <path>, decisions read, decisions claim, decisions validate, decisions sync, ticket refine next, ticket assign, ticket label, plan export, plan rebuild, plan upgrade. meta is the omission that matters most — it is a core vault verb in the routing table.
+
+The section is written in a register that invites the caller to treat it as exhaustive (''Do not write one parser assuming an array''), which is what makes an incomplete enumeration worse than none.
+
+Fix: replace the enumeration with a rule — list and query verbs return arrays, everything else returns an object — plus the genuine exceptions. An enumeration assembled from the verbs the author had in mind will drift again on the next verb added.
+
+Fixed 2026-08-08 in 2.1.0. The enumeration is gone, replaced by a rule: verbs that answer ''which things'' return an array, everything else returns an object, with the array verbs named. An enumeration assembled from the verbs the author had in mind drifts on the next verb added — this one had already missed eleven. Two edges are now stated explicitly rather than left to the reader: the batching verbs switch shape (one id gives an object, several give an array, which is what C1 caught), and plan whatsnext / plan review return {message: ...} instead of a record when there is nothing to hand back, so reaching for .id gets nothing and no error. That second one was audit finding #12 and is folded in here rather than deferred, since it is the same defect — a caller told the shape is an object still cannot parse it.', NULL, '2026-08-08 18:22:31', '2026-08-08 18:22:31.248', '2026-08-08 18:22:31.248', NULL, '22dce542f709824326b727a3e5795169', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52VTK08206BJ7Z21JMZRQM', 'description', 'Audit finding Wrong #2.
+
+The skill states, and docs/output-contract.md now states as binding on every surface: empty fields are omitted from JSON rather than set to null; check for presence, not for null. Two shipped verbs emit null.
+
+  query ''SELECT name, fm.lens LIMIT 2''  ->  [{''fm.lens'':null,''name'':''NOTE''}, ...]
+  plan export                           ->  {''files_written'':null,''rows_written'':0}
+
+A caller obeying the documented rule reads fm.lens as present on a file carrying no lens key.
+
+Correction to record: when T-75 was closed I claimed the whole output surface had been audited and doctor.index was the only violation. That was wrong twice over. The audit was a grep over Go struct tags, so it could not see the DSL, which builds dynamic maps rather than structs. And FilesWritten []string appeared in that same grep output and was dismissed without testing the zero-write case. Generalising from the cases checked is shape E, which this repo''s own audit procedure names.
+
+Two-part fix. Code: omitempty on the changelog result structs — plan export''s FilesWritten, and check the siblings in rebuild.go, importer.go and collision.go for the same shape. Skill and output-contract: the DSL null is arguably correct and should stay, since SELECT fm.lens over files that lack the key needs to distinguish absent from empty — so scope the rule rather than claim a universal that is not true.', 'Audit finding Wrong #2.
+
+The skill states, and docs/output-contract.md now states as binding on every surface: empty fields are omitted from JSON rather than set to null; check for presence, not for null. Two shipped verbs emit null.
+
+  query ''SELECT name, fm.lens LIMIT 2''  ->  [{''fm.lens'':null,''name'':''NOTE''}, ...]
+  plan export                           ->  {''files_written'':null,''rows_written'':0}
+
+A caller obeying the documented rule reads fm.lens as present on a file carrying no lens key.
+
+Correction to record: when T-75 was closed I claimed the whole output surface had been audited and doctor.index was the only violation. That was wrong twice over. The audit was a grep over Go struct tags, so it could not see the DSL, which builds dynamic maps rather than structs. And FilesWritten []string appeared in that same grep output and was dismissed without testing the zero-write case. Generalising from the cases checked is shape E, which this repo''s own audit procedure names.
+
+Two-part fix. Code: omitempty on the changelog result structs — plan export''s FilesWritten, and check the siblings in rebuild.go, importer.go and collision.go for the same shape. Skill and output-contract: the DSL null is arguably correct and should stay, since SELECT fm.lens over files that lack the key needs to distinguish absent from empty — so scope the rule rather than claim a universal that is not true.
+
+Fixed 2026-08-08 in 2.1.0, both halves. Code: Export and Import now initialise their file-list slices, so plan export, plan import and plan rebuild report [] rather than null. Checked the siblings — RebuildResult builds from a make() slice and Import''s result, UpgradeResult already used omitempty, TicketCollision.Records is only constructed non-empty. Chose [] over omitempty deliberately: ''nothing was written'' is the answer to what the verb was asked, so the key stays present. Skill and output-contract: the universal claim was replaced with the invariant that actually holds — never null — plus the two forms empty takes. Scalars are omitted, collections are present and empty. meta has returned tags: [] all along, so ''check for presence, not for null'' was wrong even before this. The DSL null is documented as a deliberate exception and kept: a SELECT over files where some carry a frontmatter key and some do not has to distinguish absent from empty, and omitting the key would make the rows ragged.', NULL, '2026-08-08 18:22:31', '2026-08-08 18:22:31.266', '2026-08-08 18:22:31.266', NULL, 'ec01f9a8bd349152c8cd7e408276c82a', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52X079W1G0SPCBAVPYABXR', 'description', 'Audit finding Wrong #3.
+
+The skill claims backlinks ''accepts any spelling of the file — full path, extensionless, or bare basename — and matches links written in any of them''. It does not.
+
+Verified in this repo: backlinks governance/decisions/architecture.md returns 1 row, while backlinks decisions/architecture.md returns 28. The correct vault-relative path — the spelling every other pql command accepts and returns — largely misses, while a path that does not exist as a file succeeds. In the audit''s scratch vault the bare basename never worked at all: backlinks persona, backlinks architecture, backlinks koskela/persona all returned [].
+
+The failing case is an ordinary sibling-relative markdown link written from a subdirectory index — the most common shape in a governance/README.md — and the skill''s caveat only names ../-prefixed links. So the caveat is narrower than the defect.
+
+This is the documentation half of T-72. That fix added the extensionless-full-path form and was correct as far as it went; the claim written alongside it overstated the result. Resolution to a real path is Q-6, tracked separately and not attempted here.
+
+Fix, skill-side: describe what actually happens — the query is matched against link spellings as written — and give the recovery route, which is to run outlinks on a file expected to link there and query the exact target string it returns. That route works and is undiscoverable from the current text.', 'Audit finding Wrong #3.
+
+The skill claims backlinks ''accepts any spelling of the file — full path, extensionless, or bare basename — and matches links written in any of them''. It does not.
+
+Verified in this repo: backlinks governance/decisions/architecture.md returns 1 row, while backlinks decisions/architecture.md returns 28. The correct vault-relative path — the spelling every other pql command accepts and returns — largely misses, while a path that does not exist as a file succeeds. In the audit''s scratch vault the bare basename never worked at all: backlinks persona, backlinks architecture, backlinks koskela/persona all returned [].
+
+The failing case is an ordinary sibling-relative markdown link written from a subdirectory index — the most common shape in a governance/README.md — and the skill''s caveat only names ../-prefixed links. So the caveat is narrower than the defect.
+
+This is the documentation half of T-72. That fix added the extensionless-full-path form and was correct as far as it went; the claim written alongside it overstated the result. Resolution to a real path is Q-6, tracked separately and not attempted here.
+
+Fix, skill-side: describe what actually happens — the query is matched against link spellings as written — and give the recovery route, which is to run outlinks on a file expected to link there and query the exact target string it returns. That route works and is undiscoverable from the current text.
+
+Fixed 2026-08-08 in 2.1.0, documentation only — the resolution defect itself is Q-6 and untouched. The claim that backlinks ''accepts any spelling'' is replaced by what actually happens: it compares spellings, trying the path given, that path without .md, the bare basename, and each with an anchor. The failing case is now named specifically, because it is the common one rather than the exotic one the old caveat described: a file at governance/README.md writing a directory-relative link is not found by querying the correct vault-relative path. And the recovery route is given, which is the part that was missing entirely — run outlinks on a file expected to link there, read the raw target, query that string. Verified live: outlinks governance/README.md returns targets spelled decisions/architecture.md#anchor, which is exactly the string backlinks wants. Two related findings folded in rather than deferred, since they are the same trap seen from the other side. outlinks now has its row shape documented ({target, alias, line, via}) with the explicit warning that target is raw link text, plus the append-.md hop and what to do when that still 66s. And backlinks is described as one row per link occurrence, not per file, so counting linking files needs a dedupe — 28 rows for one file surprised the auditor. Also noted: context does resolve outbound targets against the index (T-73), so it is the verb to prefer when real paths are wanted.', NULL, '2026-08-08 18:22:45', '2026-08-08 18:22:45.383', '2026-08-08 18:22:45.383', NULL, '1a86663d3da4d3e9bf33a3ec497abe0a', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52Y65C1K85YMW8HAJS831G', 'description', 'Audit finding Wrong #4. Third time this passage has been wrong.
+
+The skill gives a diagnostic: ''in a link-sparse vault centrality is 0 on every candidate, so recency decides... a score exactly equal to the recency weight means nothing else contributed.'' The named per-command weights are all correct. What is missing is that recency is 0.25 on search but 0.05 on related and context.
+
+The auditor hit it live: related returned three rows at exactly 0.2500, applied the skill''s rule, and concluded nothing but recency contributed. --full showed the opposite — path_proximity weighted 0.20, recency 0.05. The rule produced a confidently wrong reading of correct output, which is worse than no rule.
+
+History worth recording, because the passage keeps failing the same way: the first audit found the weights section wrong, the correction named centrality but missed that recency decides in link-sparse vaults, and this correction adds that the recency weight is not one number. Each fix has been a patch to a numeric shortcut that keeps not surviving contact with a real vault.
+
+Fix: drop the numeric shortcut. Say ''run --full and read signals[]'' — which is now one flag away by design (T-74) and cannot go stale. If a per-command number is kept, state all three.', 'Audit finding Wrong #4. Third time this passage has been wrong.
+
+The skill gives a diagnostic: ''in a link-sparse vault centrality is 0 on every candidate, so recency decides... a score exactly equal to the recency weight means nothing else contributed.'' The named per-command weights are all correct. What is missing is that recency is 0.25 on search but 0.05 on related and context.
+
+The auditor hit it live: related returned three rows at exactly 0.2500, applied the skill''s rule, and concluded nothing but recency contributed. --full showed the opposite — path_proximity weighted 0.20, recency 0.05. The rule produced a confidently wrong reading of correct output, which is worse than no rule.
+
+History worth recording, because the passage keeps failing the same way: the first audit found the weights section wrong, the correction named centrality but missed that recency decides in link-sparse vaults, and this correction adds that the recency weight is not one number. Each fix has been a patch to a numeric shortcut that keeps not surviving contact with a real vault.
+
+Fix: drop the numeric shortcut. Say ''run --full and read signals[]'' — which is now one flag away by design (T-74) and cannot go stale. If a per-command number is kept, state all three.
+
+Fixed 2026-08-08 in 2.1.0 by deleting the shortcut rather than correcting it a third time. The passage now says: if results look arbitrary, re-run with --full and read signals[], and do not infer mechanism from the score. It states that a score equal to one weight does not mean that signal decided it, and gives the per-command difference (recency 0.25 on search, 0.05 on related and context) as the reason not to trust the arithmetic. Rationale for removal over repair: this is the third correction to the same numeric heuristic. Audit one found the weights section wrong; the fix named centrality but missed that recency decides in link-sparse vaults; audit three found the recency weight is not one number. Each repair kept the shape that keeps failing — a derived rule that has to be re-derived whenever a weight profile changes. signals[] is one flag away by design since T-74 and cannot go stale, so pointing at it is strictly better than any number in prose.', NULL, '2026-08-08 18:22:45', '2026-08-08 18:22:45.402', '2026-08-08 18:22:45.402', NULL, 'ad0ce70075b82a27ceac3d10a506d783', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53064TNJBNG3SAW3HJ438G', 'description', 'Audit findings Wrong #5 and Missing #9.
+
+  ticket show T-63 --with-context --fields id,title
+  -> {"id":"T-63","title":"..."}    exit 0, no ancestors, no warning
+
+  ticket show T-63 --with-context --fields id,ancestors
+  -> {"id":"T-63","ancestors":[...]}
+
+So --fields does select the joins; a join key not named is dropped even though its --with- flag was passed. The skill says --fields ''narrows the top level only: the join-trees are all-or-nothing'', which describes what happens to a join that survives but reads as a promise the join arrives whole, and gives no hint a lever exists.
+
+Compounded by Missing #9: the skill''s --fields valid-name lists give 13 ticket fields and 8 decision fields, while the exit-64 error lists 19. ancestors, blockers, children, decisions, subtree and message are all absent from the skill — and that section opens with ''Valid field names, since guessing them costs a round trip''.
+
+Failure mode: ask for context, ask to trim, get neither, notice nothing. Both halves are from T-67, shipped the same day.
+
+Fix, skill-side: state that --fields also selects joins and that an unnamed join key is dropped, list the join keys, and keep the true part — join contents are never projected. Decide deliberately whether passing --with-X while omitting X from --fields warrants a stderr warning; a silent drop of something explicitly requested is what diagnostics are for, but warning on a legitimate top-level-only call would be noise.
+
+Filing note: this ticket could not be created with its title as a positional argument — a title beginning with -- is parsed as a flag and exits 64. `ticket new bug -- "--fields ..."` works. Worth a line in the skill.', 'Audit findings Wrong #5 and Missing #9.
+
+  ticket show T-63 --with-context --fields id,title
+  -> {"id":"T-63","title":"..."}    exit 0, no ancestors, no warning
+
+  ticket show T-63 --with-context --fields id,ancestors
+  -> {"id":"T-63","ancestors":[...]}
+
+So --fields does select the joins; a join key not named is dropped even though its --with- flag was passed. The skill says --fields ''narrows the top level only: the join-trees are all-or-nothing'', which describes what happens to a join that survives but reads as a promise the join arrives whole, and gives no hint a lever exists.
+
+Compounded by Missing #9: the skill''s --fields valid-name lists give 13 ticket fields and 8 decision fields, while the exit-64 error lists 19. ancestors, blockers, children, decisions, subtree and message are all absent from the skill — and that section opens with ''Valid field names, since guessing them costs a round trip''.
+
+Failure mode: ask for context, ask to trim, get neither, notice nothing. Both halves are from T-67, shipped the same day.
+
+Fix, skill-side: state that --fields also selects joins and that an unnamed join key is dropped, list the join keys, and keep the true part — join contents are never projected. Decide deliberately whether passing --with-X while omitting X from --fields warrants a stderr warning; a silent drop of something explicitly requested is what diagnostics are for, but warning on a legitimate top-level-only call would be noise.
+
+Filing note: this ticket could not be created with its title as a positional argument — a title beginning with -- is parsed as a flag and exits 64. `ticket new bug -- "--fields ..."` works. Worth a line in the skill.
+
+Fixed 2026-08-08 in 2.1.0, documentation. The skill now states plainly that --fields selects the joins too, with the worked pair showing --with-context --fields id,title returning no ancestors and --fields id,title,ancestors returning them. The true part is kept: you cannot project inside a join, so it is the whole subtree or none of it. What changed is that ''all-or-nothing'' is no longer left to carry a meaning it does not have. Missing #9 fixed alongside, since the two compound: the join keys are now in the valid-name list — ancestors, children, blockers, subtree, decisions and message on tickets, tickets and refs on decisions. That section opens by promising to save a round trip and was omitting six of nineteen names. Also added: projection does not reach the mutation verbs, which reject --fields at 64 and several of which return the whole record including description (audit findings #13 and #25, folded in as one line here rather than deferred, because a caller budgeting payload needs it in the same place). Decided against a stderr warning when --with-X is passed without X in --fields. It would fire on the legitimate ''I want the top level only'' call, which is common, and the skill line costs nothing and misfires never. Revisit if the silent drop is reported again by someone who had read the fixed text.', NULL, '2026-08-08 18:22:58', '2026-08-08 18:22:58.701', '2026-08-08 18:22:58.701', NULL, 'da20e8fa09416a4aaca748904c392cfb', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY537DDR64R4DYT04X86JWZW', 'description', 'Audit finding Wrong #6.
+
+  pql query --help
+  Exit codes follow docs/output-contract.md: 0 with results, 2 with zero
+  matches, 65 on parse/compile errors ...
+
+D-22 retired exit 2; zero matches is exit 0 with an empty array, and both the skill and the output-contract doc say so. The binary contradicts them on demand.
+
+Why this is Wrong rather than a stray doc nit: the skill tells an agent that --help is the way to fill a gap in its own coverage. An agent that does so here is told to treat every empty result as a distinct failure code — which is precisely the misreading D-22 existed to prevent, delivered by the tool itself.
+
+Fix: correct the Long text on the query command. Then grep every other Long/Short string for exit-code claims, since one stale copy implies the others were never swept when D-22 landed.', 'Audit finding Wrong #6.
+
+  pql query --help
+  Exit codes follow docs/output-contract.md: 0 with results, 2 with zero
+  matches, 65 on parse/compile errors ...
+
+D-22 retired exit 2; zero matches is exit 0 with an empty array, and both the skill and the output-contract doc say so. The binary contradicts them on demand.
+
+Why this is Wrong rather than a stray doc nit: the skill tells an agent that --help is the way to fill a gap in its own coverage. An agent that does so here is told to treat every empty result as a distinct failure code — which is precisely the misreading D-22 existed to prevent, delivered by the tool itself.
+
+Fix: correct the Long text on the query command. Then grep every other Long/Short string for exit-code claims, since one stale copy implies the others were never swept when D-22 landed.
+
+Fixed 2026-08-08 in 2.1.0. The query command''s Long text no longer claims exit 2 for zero matches; it states exit 0 including zero matches, citing D-22, and 65 for parse, unknown-column and evaluation errors. Swept the rest of the CLI for the same staleness — grep for exit-code claims across every Long and Short string found this as the only instance, so D-22''s cleanup missed exactly one site. Took the opportunity to make the same help text carry the DSL vocabulary (T-86), since an agent that consults --help to fill a gap in the skill should find the answer rather than a second stale document.', NULL, '2026-08-08 18:22:58', '2026-08-08 18:22:58.720', '2026-08-08 18:22:58.720', NULL, '6e5cdbbc5b453ff6f3f0e6fef7c3545f', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY538NZECFSTEWA3831TA410', 'description', 'Audit findings Missing #7 and #8. The auditor calls this the omission blocking the most task classes.
+
+The skill documents the DSL as: ''fm.<key> reads frontmatter; tags, path and name are built in.'' All of these also work and none is mentioned:
+
+  query ''SELECT name, folder WHERE folder = "members/vaasa"''
+  query ''SELECT path WHERE "Mari Koskela" IN headings''
+  query ''SELECT path, size, mtime WHERE size > 50000''
+  query ''SELECT DISTINCT fm.type''
+  query ''SELECT path WHERE path LIKE "members/%"''
+
+folder even appears in query --help''s own example. So ''notes in this folder'' and ''notes with this heading'' look impossible from the skill alone.
+
+DISTINCT matters most: it is the single-call answer to ''which values does this frontmatter key actually take'', which the skill documents no route for at all. schema gives keys, types and counts — never values. An agent following the skill either gives up or selects every row and folds client-side. The auditor guessed DISTINCT; it should not have had to.
+
+Worth stating too: COUNT(*) and GROUP BY are correctly unsupported and fail loudly at exit 65. Saying so saves a caller the attempt.
+
+Second half, discoverability. Unlike --fields, the unknown-column error is a dead end:
+
+  query ''SELECT bogus_column''
+  -> pql.eval.unknown_column at line 1, col 8: unknown column "bogus_column"
+
+and the only pointer is docs/pql-grammar.md, which is not shipped to consumers and which a consuming agent cannot read. Make the error list the valid set, the way the --fields error does — the audit singles that one out as ''genuinely a usable lookup''.', 'Audit findings Missing #7 and #8. The auditor calls this the omission blocking the most task classes.
+
+The skill documents the DSL as: ''fm.<key> reads frontmatter; tags, path and name are built in.'' All of these also work and none is mentioned:
+
+  query ''SELECT name, folder WHERE folder = "members/vaasa"''
+  query ''SELECT path WHERE "Mari Koskela" IN headings''
+  query ''SELECT path, size, mtime WHERE size > 50000''
+  query ''SELECT DISTINCT fm.type''
+  query ''SELECT path WHERE path LIKE "members/%"''
+
+folder even appears in query --help''s own example. So ''notes in this folder'' and ''notes with this heading'' look impossible from the skill alone.
+
+DISTINCT matters most: it is the single-call answer to ''which values does this frontmatter key actually take'', which the skill documents no route for at all. schema gives keys, types and counts — never values. An agent following the skill either gives up or selects every row and folds client-side. The auditor guessed DISTINCT; it should not have had to.
+
+Worth stating too: COUNT(*) and GROUP BY are correctly unsupported and fail loudly at exit 65. Saying so saves a caller the attempt.
+
+Second half, discoverability. Unlike --fields, the unknown-column error is a dead end:
+
+  query ''SELECT bogus_column''
+  -> pql.eval.unknown_column at line 1, col 8: unknown column "bogus_column"
+
+and the only pointer is docs/pql-grammar.md, which is not shipped to consumers and which a consuming agent cannot read. Make the error list the valid set, the way the --fields error does — the audit singles that one out as ''genuinely a usable lookup''.
+
+Fixed 2026-08-08 in 2.1.0, both halves. Documentation: the skill''s DSL section now lists every column — path, name, folder, size, mtime, ctime, content_hash, last_scanned, fm.<key> — and names tags, headings, inlinks and outlinks as array columns usable only on the right of IN. Operators are listed including LIKE, BETWEEN and DISTINCT, with the explicit note that COUNT and GROUP BY are unsupported and fail at 65, so a caller does not spend a call finding out. SELECT DISTINCT fm.<key> gets its own callout as the single-call route to ''which values does this key take'', which had no documented route at all, and a row in the Choosing a command table pointing away from pql schema, which reports types and counts rather than values. Discoverability: the unknown-column error now lists the vocabulary rather than repeating the bad name back. That error was the only discovery route a consuming agent had — docs/pql-grammar.md is not shipped with the binary — and it was a dead end. It now reads like the --fields error, which the audit singled out as genuinely usable. Guarded by TestFileColumns_MatchesErrorList, which checks both directions: every name the error advertises is accepted by fileColumn, and a set of plausible additions is either rejected or listed. A switch cannot be enumerated by reflection, so the second direction probes candidates rather than proving completeness — imperfect, but it catches the realistic case of a column added without a line in the list. Same help text also fixed for T-85.', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.215', '2026-08-08 18:23:17.215', NULL, '197e70d33f84c172b1916f9124269634', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52TK0B80DXVEKGVGBRMNVR', 'status', 'in_progress', 'done', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.260', '2026-08-08 18:23:17.260', NULL, 'f1f68d9ea4a0f458ff534ce6148b15e3', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52VTK08206BJ7Z21JMZRQM', 'status', 'in_progress', 'done', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.262', '2026-08-08 18:23:17.262', NULL, '36ff02ff229840b00fe9a5031d9de12b', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52X079W1G0SPCBAVPYABXR', 'status', 'in_progress', 'done', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.263', '2026-08-08 18:23:17.263', NULL, 'd880621eeb8bc8ca509a62cf2453160b', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY53064TNJBNG3SAW3HJ438G', 'status', 'in_progress', 'done', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.264', '2026-08-08 18:23:17.264', NULL, '9ec9e24e22ab646fa33211a06c172a0a', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52Y65C1K85YMW8HAJS831G', 'status', 'in_progress', 'done', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.264', '2026-08-08 18:23:17.264', NULL, 'ec1af0e47db52e2844875687ec3b9ae6', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY537DDR64R4DYT04X86JWZW', 'status', 'in_progress', 'done', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.265', '2026-08-08 18:23:17.265', NULL, '2882d17820c4109ab661c3b4ed607642', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY538NZECFSTEWA3831TA410', 'status', 'in_progress', 'done', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.266', '2026-08-08 18:23:17.266', NULL, 'bc353bcefb50c2c936e6b810d14cacb6', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52S461Z9QKWVK0JTJEFKN8', 'description', 'Raised 2026-08-08 by the third run of the pql-skill-auditor against 2.1.0 — the first run that executed (the two before it aborted on permission denials, which turned out to be workspace trust never having been accepted for this repo).
+
+A real audit: 15/15 core retrievals, 44 exploratory, 26 warnings checked, ~130 pql invocations. Verdict: not fit to ship as it stands, but close. 26 findings — 6 Wrong, 15 Missing, 5 Unusable, 0 Bloat — plus 7 procedure defects, and all six leads from the aborted run''s static read confirmed.
+
+The pattern worth recording: three of the six Wrong findings are defects in work shipped the same day, by the author who then documented it. T-72''s backlinks fix, T-67''s --fields on the show verbs, and T-75''s omitted-not-null audit each shipped with a skill claim that live use disproves. That is the case for the gate existing, and the case for it running on an agent that has not read the source.
+
+This epic covers the fix set the verdict names, plus the DSL documentation gap the auditor calls the omission blocking the most task classes. The remaining Missing and Unusable findings are filed separately for 2.2.0.
+
+Full report: /var/mnt/data/projects/claude/scratch/pql-audit-2.1.0.md', 'Raised 2026-08-08 by the third run of the pql-skill-auditor against 2.1.0 — the first run that executed (the two before it aborted on permission denials, which turned out to be workspace trust never having been accepted for this repo).
+
+A real audit: 15/15 core retrievals, 44 exploratory, 26 warnings checked, ~130 pql invocations. Verdict: not fit to ship as it stands, but close. 26 findings — 6 Wrong, 15 Missing, 5 Unusable, 0 Bloat — plus 7 procedure defects, and all six leads from the aborted run''s static read confirmed.
+
+The pattern worth recording: three of the six Wrong findings are defects in work shipped the same day, by the author who then documented it. T-72''s backlinks fix, T-67''s --fields on the show verbs, and T-75''s omitted-not-null audit each shipped with a skill claim that live use disproves. That is the case for the gate existing, and the case for it running on an agent that has not read the source.
+
+This epic covers the fix set the verdict names, plus the DSL documentation gap the auditor calls the omission blocking the most task classes. The remaining Missing and Unusable findings are filed separately for 2.2.0.
+
+Full report: /var/mnt/data/projects/claude/scratch/pql-audit-2.1.0.md
+
+Closed 2026-08-08. All seven delivered in 2.1.0 and each verified against the installed binary rather than the edit: plan export returns [] not null, the DSL still returns null by design, SELECT DISTINCT works and is documented, query --help no longer mentions exit 2, --with-context --fields id,ancestors returns ancestors, and outlinks governance/README.md returns the raw spelling that the backlinks recovery route tells you to query. make skill-drift agrees across all three copies at adb43628. Two judgement calls worth recording. Several findings filed against T-87 for 2.2.0 were folded in here instead, where they were the same defect seen from another angle rather than separate work: #12 (plan whatsnext/review message shape) went into the output-shape rule, #10 and #11 (outlinks shape, backlinks per-occurrence rows) into the link-matching section, #13 and #25 (mutation verbs return whole records, reject --fields) into the projection section as one line. Deferring those would have left the corrected sections still incomplete on the exact question a caller was asking. And T-83 was fixed by deleting the heuristic rather than correcting it, on the third correction to the same passage — the shape that keeps failing is a derived rule that must be re-derived whenever a weight changes.', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.281', '2026-08-08 18:23:17.281', NULL, 'a8ea775044a7d021e37daff743acc4e8', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY52S461Z9QKWVK0JTJEFKN8', 'status', 'in_progress', 'done', NULL, '2026-08-08 18:23:17', '2026-08-08 18:23:17.295', '2026-08-08 18:23:17.295', NULL, '2b0bd370278d00f52a84a45253462106', 2) ON CONFLICT(hash) DO NOTHING;
