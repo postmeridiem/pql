@@ -159,6 +159,14 @@ clean: ## Remove build artefacts.
 skill-drift: ## Compare the repo, shipped and installed copies of the pql skill.
 	@./.claude/skills/pql-testing/scripts/check-drift.sh
 
+.PHONY: binary-drift
+binary-drift: ## Check the pql on PATH was built from HEAD. `--version` cannot tell you this.
+	@./.claude/skills/pql-testing/scripts/check-binary-drift.sh
+
+.PHONY: audit-ready
+audit-ready: skill-drift binary-drift ## Both drift checks — run before a skill audit.
+	@echo "Ready to audit."
+
 # Disposable audit vault. Not /tmp: this box runs a tmpfs /tmp that is wiped on
 # reboot and shared with every other process, and an audit that plants a
 # malformed file then rebuilds wants somewhere durable and its own.
@@ -185,6 +193,27 @@ scratch-poison: ## Plant a file with malformed frontmatter in the scratch vault 
 	@printf -- '---\ntitle: [unclosed\n  bad: : :\n---\n\n# Poisoned\n' > "$(SCRATCH_VAULT)/poisoned.md"
 	@echo "Planted $(SCRATCH_VAULT)/poisoned.md — every vault command should now fail at exit 70."
 	@echo "Reset with: make scratch-vault"
+
+# The companion to scratch-poison. Planting the bad file was reachable; the
+# documented recovery was not, because writing .pqlignore needs shell
+# redirection. So an audit could break the vault and never test the fix.
+.PHONY: scratch-ignore
+scratch-ignore: ## Append PATTERN= to the scratch vault's .pqlignore (audit shape D recovery).
+	@test -d "$(SCRATCH_VAULT)" || { echo "no scratch vault at $(SCRATCH_VAULT) — run: make scratch-vault"; exit 1; }
+	@test -n "$(PATTERN)" || { echo "usage: make scratch-ignore PATTERN=poisoned.md"; exit 1; }
+	@printf '%s\n' '$(PATTERN)' >> "$(SCRATCH_VAULT)/.pqlignore"
+	@echo "Added '$(PATTERN)' to $(SCRATCH_VAULT)/.pqlignore"
+	@echo "It takes effect on the next indexed command — .pqlignore is read by default."
+
+# pql init writes into a directory and neither the skill nor --help pins which
+# one, so an auditor cannot safely run it: aimed wrong it edits this repo.
+# Pointing it at the scratch vault makes it exercisable.
+.PHONY: scratch-init
+scratch-init: build ## Run `pql init` against the scratch vault, never the repo.
+	@test -d "$(SCRATCH_VAULT)" || { echo "no scratch vault at $(SCRATCH_VAULT) — run: make scratch-vault"; exit 1; }
+	$(BIN_DIR)/pql --vault "$(SCRATCH_VAULT)" init
+	@echo
+	@echo "Ran against $(SCRATCH_VAULT). Reset with: make scratch-vault"
 
 COUNCIL_SRC ?= /var/mnt/data/projects/council
 .PHONY: refresh-fixtures

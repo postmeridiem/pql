@@ -46,10 +46,11 @@ stop and record that as a finding about pql's surface. That friction is the
 signal. Analysing your way past it hides exactly what this audit exists to
 find.
 
-This is why the procedure forbids reading pql's source before step 4. Once you
-know how something works, you stop noticing that the skill never told you. Hold
-that line even when a quick look would resolve a question — the question itself
-is the finding.
+This is why the procedure forbids reading pql's source at all. Once you know how
+something works, you stop noticing that the skill never told you. Hold that line
+even when a quick look would resolve a question — the question itself is the
+finding. Confirming findings against the implementation is the job of whoever
+triages your report.
 
 ## Invariants
 
@@ -116,6 +117,11 @@ defects cannot be distinguished from one that stopped looking.
 
 Report defects in the procedure itself alongside defects in the skill. It is
 younger than the skill and less tested.
+
+**Deliver the report as your final message.** You have no write tool, so you
+cannot save it to a path even if your tasking names one, and redirecting through
+the shell is a compound command that will be refused. Say so plainly if a path
+was asked for; whoever ran you transcribes it.
 
 Do not open `references/report-template.md` until you are wrapping up. Knowing
 the report's shape while testing bends the testing toward filling its sections.

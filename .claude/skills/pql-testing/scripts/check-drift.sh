@@ -18,11 +18,11 @@ hash_of() { sha256sum "$1" | cut -c1-16; }
 
 repo=$(hash_of internal/skill/SKILL.md)
 
-shipped=$(pql skill show | python3 -c '
-import hashlib, json, sys
-body = json.load(sys.stdin)["files"]["SKILL.md"]
-print(hashlib.sha256(body.encode()).hexdigest()[:16])
-')
+# `skill show --raw` writes the file's bytes and nothing else, so the hash is a
+# straight sha256sum. This used to extract the body from the JSON bundle with
+# python3 — an undeclared dependency, added because there was no way to get the
+# skill as text. There is now.
+shipped=$(pql skill show --raw | sha256sum | cut -c1-16)
 
 installed_path="$HOME/.claude/skills/pql/SKILL.md"
 if [ -f "$installed_path" ]; then

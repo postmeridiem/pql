@@ -16,45 +16,48 @@ every agent using pql. Nothing verifies it — the tests assert only that the
 file exists and has frontmatter, so it can document removed commands and omit
 shipped ones while passing.
 
-**This audit is expensive.** A full run is roughly 100k tokens and 90+ tool
-calls over 25–30 minutes, because step 3 means actually retrieving data rather
-than reading about it. Run it when the skill or the CLI surface has changed and
-something ships as a result — a release gate, a new command or flag, a
-suspected drift. Do not run it after an ordinary edit; for that, `make
-skill-drift` costs nothing and answers the only question a small edit raises.
-When in doubt, ask before starting one.
+**This audit is expensive.** Budget 130+ tool calls and 30-plus minutes for a
+full run — the core set, a complete warnings pass and real exploration. The
+measured run that produced the current findings made ~130 pql invocations and
+checked 26 warnings. Step 3 means actually retrieving data rather than reading
+about it, and that is where the cost goes.
+
+Run it when the skill or the CLI surface has changed and something ships as a
+result — a release gate, a new command or flag, a suspected drift. Do not run it
+after an ordinary edit; for that, `make skill-drift` costs nothing and answers
+the only question a small edit raises. When in doubt, ask before starting one.
 
 ## Setup
 
-Three checks, then a vault. Do them in this order — each one prevents a whole
+Two checks, then a vault. Do them in this order — each one prevents a whole
 class of wasted audit.
 
-**1. Confirm you are auditing the artefact you think you are.** The skill is
-embedded at build time, so an edited-but-unrebuilt tree means auditing
-something nobody ships:
+**1. Confirm you are auditing the artefact you think you are.**
 
 ```bash
-make skill-drift
+make audit-ready
 ```
 
-It compares the repo file, the copy embedded in the binary, and the installed
-copy. Neither `pql skill status` nor `pql doctor` can detect this — both compare
-the installed file against the binary's own embed, so a stale build reads as
-"current" in each.
+That runs both drift checks, and they catch different things.
 
-**2. Confirm the binary on PATH is the one just built.** `skill-drift` compares
-*skill text*, not binaries, so a stale `~/.local/bin/pql` whose embedded skill
-happens to match still passes it. Check the versions agree:
+`skill-drift` compares the repo file, the copy embedded in the binary, and the
+installed copy. The skill is embedded at build time, so an edited-but-unrebuilt
+tree means auditing something nobody ships. Neither `pql skill status` nor `pql
+doctor` can detect this — both compare the installed file against the binary's
+own embed, so a stale build reads as "current" in each.
 
-```bash
-pql --version
-./bin/pql --version
-```
+`binary-drift` compares the commit the binary on PATH was built from against
+HEAD. **Do not check this by comparing version strings.** They are deliberately
+clean — just the number, no SHA (D-12) — so two binaries built from different
+commits print the same string whenever the release version has not been bumped.
+An earlier version of this procedure did exactly that, passed, and the binary
+under test was eleven commits behind. Version equality is the one field
+guaranteed not to move.
 
-If they differ, `make install` and start over. Everything below invokes `pql`
+If either fails, `make install` and start over. Everything below invokes `pql`
 from PATH.
 
-**3. Build the vault.** Never test against a repo anyone works in.
+**2. Build the vault.** Never test against a repo anyone works in.
 
 ```bash
 make scratch-vault
@@ -213,10 +216,22 @@ Beyond the core set, follow whatever the vault and the skill suggest. New
 retrievals find defects a fixed list cannot. Number these E1, E2 … and log them
 the same way.
 
-### 4. Read the source
+### 4. Do not read the source
 
-Confirm each finding and locate its fix. Also diff the shipped skill against
-`internal/skill/SKILL.md` — see shape G below.
+There is no read-the-source step. An earlier version of this procedure had one,
+and it contradicted the rule that makes the audit worth running: once you know
+how something works, you stop noticing that the skill never told you. Findings
+rest on observed CLI behaviour, and that is the point — a statement can match
+the implementation exactly and still be a defect.
+
+The one exception is shape G, which needs a comparison the tool cannot make
+about itself: confirm the shipped skill matches `internal/skill/SKILL.md`. `make
+audit-ready` does that in setup, so quote its result rather than opening the
+file.
+
+Confirming findings against the source and locating fixes belongs to whoever
+triages the report. Leaving it there keeps this run outside-in from the first
+call to the last.
 
 ### 5. Report
 
@@ -230,6 +245,17 @@ Keep a running friction note from step 3 onward: goal, command, whether the
 skill routed you there, whether the output was workable, what post-processing
 you needed. Reconstructing that at the end produces a tidy account of a process
 that was not tidy, and the friction is the measurement.
+
+**Deliver the report as your final message.** You have no write tool — that is
+deliberate, and it means you cannot save it to a path even when one is named in
+your tasking. Redirecting through the shell is a compound command and will be
+refused. Whoever asked for the run transcribes it.
+
+**On observing exit codes:** you see non-zero exits clearly, because the tool
+surfaces the error. A successful `0` you will mostly infer from the absence of
+one, since appending a status echo makes the invocation a compound and gets it
+refused. That is good enough — but say "no error surfaced" rather than "exit 0
+observed" when that is what happened. R2 turns on this distinction.
 
 ## Shapes to probe for
 
@@ -254,14 +280,20 @@ if a "raw" mode returns the same count as listing everything, it is not
 answering the question.
 
 **D. Aborts that poison every command.** One malformed input can fail an entire
-index, making every unrelated command fail too. Plant a bad file and check
-whether the skill names a recovery path that actually works — follow it
-literally rather than reading it charitably:
+index, making every unrelated command fail too. Plant a bad file, then follow
+the skill's recovery path literally rather than reading it charitably — and
+check it actually works, which is the half that gets skipped:
 
 ```bash
-make scratch-poison    # plants a file with malformed frontmatter
-make scratch-vault     # resets, afterwards — the poisoned index affects everything after it
+make scratch-poison                       # plants a file with malformed frontmatter
+make scratch-ignore PATTERN=poisoned.md   # the documented recovery
+make scratch-vault                        # reset — a poisoned index affects everything after it
 ```
+
+`pql init` is the other command with side effects worth exercising, and it is
+unsafe to run bare because neither the skill nor its `--help` says whether it
+targets the current directory or `--vault`. `make scratch-init` aims it at the
+scratch vault. Do not run it any other way.
 
 Planting it is sanctioned and not a breach of "change nothing": that rule is
 about the repository and about fixing defects, not about the disposable vault
