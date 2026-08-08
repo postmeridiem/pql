@@ -61,6 +61,17 @@ four defects nobody had hit from the inside.
   substitution, both of which fail under the prefix allowlists consuming
   projects use.
 
+- **`--fields` works on `ticket show` and `decisions show`** (D-27 amended,
+  T-67). It was scoped to the list verbs on purpose, but the boundary is not
+  guessable: two agents in live sessions learned `--fields` on `list`, ran
+  `ticket show <id> --fields id,status,title`, and got exit `64` — a wasted
+  round trip each time. One projection vocabulary across the planning surface
+  costs less than documenting where it stops.
+
+  It narrows the top level only. The join-trees attached by `--with-context`,
+  `--with-blockers`, `--with-children` and `--tree` are all-or-nothing.
+  `--oneline` and `--full` stay list-only.
+
 - **`pql decisions show` batches comma-separated ids** (T-76), the way
   `ticket show` always has. It previously failed with
   `decision D-1,D-2 not found`, so "which of these decisions has anything
@@ -95,6 +106,14 @@ four defects nobody had hit from the inside.
   `ignore_files:` explicitly keeps whatever it set.
 
 ### Fixed
+
+- **`ticket show --with-children` returned nothing, ever** — and so did the
+  children half of `--with-context`. `repo.ChildrenOf` is keyed on
+  `parent_record_id`, but the CLI passed it the friendly `T-NNN`, so the query
+  matched no row from the moment D-26 split the two identifiers. Silent,
+  because an epic with no children is a legitimate answer. Found while wiring
+  `--fields` onto `show` (T-67) — projecting `children` on a ticket with seven
+  of them returned the key empty.
 
 - **`pql doctor` emitted `"index": null` when there was no database** (T-75),
   against its own output contract — empty means the key is *omitted*, so a

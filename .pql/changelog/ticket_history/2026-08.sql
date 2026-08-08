@@ -785,3 +785,77 @@ INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, chang
 
 Delivered 2026-08-08 in 2.1.0, two of the three asks. --open drops every column the vault classes as terminal; --status takes an explicit comma-separated column set. Measured on this repo: 10883 bytes unfiltered, 1755 with --open. Each column now also carries label alongside status, so a UI rendering headers no longer joins against ticket statuslist to turn in_progress into ''In Progress''. Deliberate departure recorded in boardColumns: --status here validates against the vocabulary and exits 64 listing it, where ticket list --status passes any value through to SQL and returns empty at exit 0. That asymmetry is intentional and now documented in the skill''s filter-value warning as one of the two checked flags. Reason: a mistyped row filter returns fewer rows, a mistyped column name renders an empty board that is indistinguishable from a finished one. --status and --open are mutually exclusive, exit 64, since --open is just the shorthand for the non-terminal set. Not delivered: --fields on board. Rows are nested inside columns, so a field list is ambiguous about which level it projects — columns or tickets — and resolving that needs projection machinery render.Project does not have, for a row shape this ticket itself calls the best in the tool (5 small fields, no descriptions). The 82 percent problem was the terminal columns, and that is fixed. Stated in the board help text and the CHANGELOG rather than left silent; ticket list --fields covers the case where an exact key set is genuinely wanted.', NULL, '2026-08-08 14:55:09', '2026-08-08 14:55:09.645', '2026-08-08 14:55:09.645', NULL, '4ad792367cc5fbfb603a05c4db56886a', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2JPSWKSACAV6AGKWDWQ5W0', 'status', 'in_progress', 'done', NULL, '2026-08-08 14:55:09', '2026-08-08 14:55:09.662', '2026-08-08 14:55:09.662', NULL, '0d8e6e13525c98b6ca0f964d78f3c3ca', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY2HM1XJV12S25YK3EHRV32C', 'status', 'ready', 'in_progress', NULL, '2026-08-08 14:55:54', '2026-08-08 14:55:54.244', '2026-08-08 14:55:54.244', NULL, 'aa4c0ae2b69e13b4401ac3f6dc33a241', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRVT8QNJ0V4WPGZQW9DNH5C', 'status', 'ready', 'in_progress', NULL, '2026-08-08 14:55:54', '2026-08-08 14:55:54.261', '2026-08-08 14:55:54.261', NULL, '1ccad6c6265dff8dbddb818b0b978e06', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRVT8QNJ0V4WPGZQW9DNH5C', 'description', 'Source: observed twice in live sessions on 2026-08-07 — two different agents
+reached for `pql ticket show <id> --fields id,status,title` and got exit 64,
+`unknown flag: --fields`.
+
+D-27 scoped `--fields` / `--oneline` to the *list* verbs on purpose: the problem
+it solved was list dumps blowing tool-output budgets, and `show` is the
+record-level surface that returns whole records by design
+(`docs/output-contract.md:71` states this). The reasoning is sound, but the
+surface is not guessable: an agent that has just learned `--fields` on `list`
+has no way to know it stops there, and the failure costs a round trip plus a
+retry every time.
+
+Two ways out, and the second is the one asked for:
+
+1. Sharpen the docs — say explicitly in the embedded skill that `--fields` and
+   `--oneline` are list-verb flags, and that `show` always returns whole
+   records.
+2. Add `--fields` to `ticket show` and `decisions show`. Cheap, removes the
+   footgun rather than documenting it, and keeps one projection vocabulary
+   across the planning surface. `render.Project` already exists from T-56, so
+   this is wiring plus tests, not new machinery.
+
+Do both: the flag, and a skill line that states the projection vocabulary is
+uniform across list and show.
+
+Open questions for the implementer:
+
+- `show` has shapes `list` does not: `--with-context`, `--with-blockers`,
+  `--with-children`, `--tree` all attach nested join-trees. Decide whether
+  `--fields` projects only the top-level record (simplest, and probably right)
+  or recurses into the attached trees. State the choice in the help text.
+- Comma-batched `show T-1,T-2` returns an array of show-trees; projection has
+  to apply per element.
+- D-27''s record should be amended to reflect the widened surface rather than
+  left describing a list-only flag.', 'Source: observed twice in live sessions on 2026-08-07 — two different agents
+reached for `pql ticket show <id> --fields id,status,title` and got exit 64,
+`unknown flag: --fields`.
+
+D-27 scoped `--fields` / `--oneline` to the *list* verbs on purpose: the problem
+it solved was list dumps blowing tool-output budgets, and `show` is the
+record-level surface that returns whole records by design
+(`docs/output-contract.md:71` states this). The reasoning is sound, but the
+surface is not guessable: an agent that has just learned `--fields` on `list`
+has no way to know it stops there, and the failure costs a round trip plus a
+retry every time.
+
+Two ways out, and the second is the one asked for:
+
+1. Sharpen the docs — say explicitly in the embedded skill that `--fields` and
+   `--oneline` are list-verb flags, and that `show` always returns whole
+   records.
+2. Add `--fields` to `ticket show` and `decisions show`. Cheap, removes the
+   footgun rather than documenting it, and keeps one projection vocabulary
+   across the planning surface. `render.Project` already exists from T-56, so
+   this is wiring plus tests, not new machinery.
+
+Do both: the flag, and a skill line that states the projection vocabulary is
+uniform across list and show.
+
+Open questions for the implementer:
+
+- `show` has shapes `list` does not: `--with-context`, `--with-blockers`,
+  `--with-children`, `--tree` all attach nested join-trees. Decide whether
+  `--fields` projects only the top-level record (simplest, and probably right)
+  or recurses into the attached trees. State the choice in the help text.
+- Comma-batched `show T-1,T-2` returns an array of show-trees; projection has
+  to apply per element.
+- D-27''s record should be amended to reflect the widened surface rather than
+  left describing a list-only flag.
+
+Delivered 2026-08-08 in 2.1.0. Answers to the three open questions the ticket left the implementer. (1) --fields projects the top level only. The join-trees from --with-context, --with-blockers, --with-children and --tree are all-or-nothing: naming a key inside a nested tree needs a path syntax --fields does not have, and inventing one would be a second projection language for the rarer case. Stated in both verbs'' help text as the ticket asked. (2) Batched show projects per element via render.Project over the tree slice; a single id keeps its object shape, several render an array. Shared helper renderShowRecords in internal/cli/projection.go, used by both verbs. (3) D-27 amended, not left describing a list-only flag. The amendment separates what the record got right from what it got wrong: the default is still whole records, which is what D-27 was actually reasoning about; making the flag list-only was the error, because the boundary is not guessable. --oneline and --full stay list-only and remain unknown flags on show, exit 64 — --oneline would turn a record-level verb into an index, and --full has nothing to restore where nothing is dropped. Found a real bug doing this, filed nowhere because it is fixed in the same change: ticket show --with-children returned nothing, ever, and so did the children half of --with-context. repo.ChildrenOf is keyed on parent_record_id but the CLI passed it the friendly T-NNN, so the query matched no row from the moment D-26 split the two identifiers. Silent, because an epic with no children is a legitimate answer. It surfaced only because projecting children on T-71, which has seven, came back empty. Guarded by TestIntegration_TicketShow_ChildrenJoinResolves, which checks both flags populate and that a genuine leaf still reports none, so the fix cannot pass by always populating.', NULL, '2026-08-08 15:25:58', '2026-08-08 15:25:58.637', '2026-08-08 15:25:58.637', NULL, 'd079acb91c5caafd3547d2cd275d5f5e', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FXRVT8QNJ0V4WPGZQW9DNH5C', 'status', 'in_progress', 'done', NULL, '2026-08-08 15:25:58', '2026-08-08 15:25:58.655', '2026-08-08 15:25:58.655', NULL, '678de5b201488a95e56eaf9a320e7394', 2) ON CONFLICT(hash) DO NOTHING;

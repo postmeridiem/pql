@@ -318,6 +318,7 @@ func buildDecisionTree(ctx context.Context, db *sql.DB, d *repo.Decision, withRe
 
 func newDecisionsShowCmd() *cobra.Command {
 	var withTickets, withRefs bool
+	var fields string
 	cmd := &cobra.Command{
 		Use:   "show <id[,id,...]>",
 		Short: "Show one or more decisions with optional joins",
@@ -328,7 +329,11 @@ func newDecisionsShowCmd() *cobra.Command {
 
 A single ID renders a single show-tree object; multiple IDs render an
 array of show-trees in the order given. Any unknown ID fails the call.
-Same batching rule as ` + "`pql ticket show`" + `.`,
+Same batching rule as ` + "`pql ticket show`" + `.
+
+--fields narrows each record to the named keys, same vocabulary as
+` + "`decisions list`" + `. It projects the top level only: the refs and
+tickets joins are all-or-nothing.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -361,28 +366,15 @@ Same batching rule as ` + "`pql ticket show`" + `.`,
 				trees = append(trees, tree)
 			}
 
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
 			// One id keeps the single-object shape it has always had; a
 			// batch renders an array. Same rule as `ticket show`, so a
 			// caller that learned one knows the other.
-			if len(trees) == 1 {
-				if _, err := render.One(trees[0], rOpts); err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
-				return nil
-			}
-			if _, err := render.Render(trees, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
+			return renderShowRecords(cmd, trees, fields)
 		},
 	}
 	cmd.Flags().BoolVar(&withTickets, "with-tickets", false, "include linked tickets")
 	cmd.Flags().BoolVar(&withRefs, "with-refs", false, "include cross-references")
+	cmd.Flags().StringVar(&fields, "fields", "", showFieldsHelp)
 	return cmd
 }
 

@@ -112,6 +112,54 @@ func renderProjectedList[T any](cmd *cobra.Command, rows []T, p *projection, lin
 	return nil
 }
 
+// showFieldsHelp is the --fields help shared by the record-level show verbs.
+const showFieldsHelp = "project each record to these comma-separated fields (top level only; '*' selects all)"
+
+// renderShowRecords renders one or more show-trees, honouring --fields.
+// A single id keeps the object shape it has always had; several render an
+// array, and the projection applies per element.
+//
+// Projection reaches the top level only. The join-trees that --with-context,
+// --with-blockers, --with-children and --tree attach are all-or-nothing:
+// naming a key inside a nested tree would need a path syntax --fields does
+// not have, and inventing one for this would be a second projection
+// vocabulary. Ask for the join or don't (T-67).
+func renderShowRecords[T any](cmd *cobra.Command, records []T, fields string) error {
+	rOpts, err := renderOptsFromFlags(cmd)
+	if err != nil {
+		return &exitError{code: diag.Usage, msg: err.Error()}
+	}
+	rOpts.Out = cmd.OutOrStdout()
+
+	if fields != "" && fields != "*" {
+		projected, err := render.Project(records, splitFieldList(fields))
+		if err != nil {
+			return &exitError{code: diag.Usage, msg: err.Error()}
+		}
+		if len(projected) == 1 {
+			if _, err := render.One(&projected[0], rOpts); err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
+			return nil
+		}
+		if _, err := render.Render(projected, rOpts); err != nil {
+			return &exitError{code: diag.Software, msg: err.Error()}
+		}
+		return nil
+	}
+
+	if len(records) == 1 {
+		if _, err := render.One(&records[0], rOpts); err != nil {
+			return &exitError{code: diag.Software, msg: err.Error()}
+		}
+		return nil
+	}
+	if _, err := render.Render(records, rOpts); err != nil {
+		return &exitError{code: diag.Software, msg: err.Error()}
+	}
+	return nil
+}
+
 // splitFieldList parses the --fields value: comma-separated, whitespace
 // tolerated, duplicates collapsed to the first occurrence (a repeated
 // key would otherwise emit twice).

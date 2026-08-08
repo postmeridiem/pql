@@ -95,7 +95,11 @@ func buildShowTree(ctx context.Context, db *sql.DB, t *repo.Ticket, o showOpts) 
 		}
 	}
 	if o.withChildren || o.withContext {
-		children, err := repo.ChildrenOf(ctx, db, t.ID)
+		// ChildrenOf is keyed on parent_record_id, so it needs the record
+		// id — passing the friendly T-NNN matched nothing and both
+		// --with-children and the children half of --with-context came back
+		// empty from the day D-26 split the two identifiers.
+		children, err := repo.ChildrenOf(ctx, db, t.RecordID)
 		if err != nil {
 			return nil, err
 		}
@@ -407,6 +411,7 @@ whole records.`,
 func newTicketShowCmd() *cobra.Command {
 	var withContext, withBlockers, withChildren, tree bool
 	var depth int
+	var fields string
 	cmd := &cobra.Command{
 		Use:   "show <id[,id,...]>",
 		Short: "Show one or more tickets with optional joins",
@@ -421,7 +426,11 @@ array of show-trees in the order given. Any unknown ID fails the call.
 --with-children lists direct children only. --tree instead nests the
 full descendant subtree (cap depth with --depth N) and includes the
 direct parent for context. --with-context pulls the full ancestor spine
-to the root plus linked decisions.`,
+to the root plus linked decisions.
+
+--fields narrows each record to the named keys, same vocabulary as
+` + "`ticket list`" + `. It projects the top level only: the join-trees the
+flags above attach are all-or-nothing.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -459,21 +468,7 @@ to the root plus linked decisions.`,
 				trees = append(trees, showTree)
 			}
 
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			if len(trees) == 1 {
-				if _, err := render.One(trees[0], rOpts); err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
-			} else {
-				if _, err := render.Render(trees, rOpts); err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
-				}
-			}
-			return nil
+			return renderShowRecords(cmd, trees, fields)
 		},
 	}
 	cmd.Flags().BoolVar(&withContext, "with-context", false, "include ancestor tree and linked decisions")
@@ -481,6 +476,7 @@ to the root plus linked decisions.`,
 	cmd.Flags().BoolVar(&withChildren, "with-children", false, "include direct child tickets")
 	cmd.Flags().BoolVar(&tree, "tree", false, "include the nested descendant subtree plus the direct parent")
 	cmd.Flags().IntVar(&depth, "depth", 0, "limit --tree to this many levels (0 = unlimited)")
+	cmd.Flags().StringVar(&fields, "fields", "", showFieldsHelp)
 	return cmd
 }
 

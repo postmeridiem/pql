@@ -223,7 +223,7 @@ they live in SQLite and travel via the changelog described below.
 | `pql decisions sync [--no-style]` | Parse the DQR tree into pql.db. Also reports style problems (filename, subdir/type mismatch, domain conflicts) unless suppressed |
 | `pql decisions validate [--no-style]` | Dry run. Structural errors exit non-zero; style issues only warn |
 | `pql decisions list [--type T] [--domain D] [--status S]` | List records. `--type confirmed\|question\|rejected`, `--status active\|superseded\|resolved\|open` |
-| `pql decisions show <id[,id,…]> [--with-refs] [--with-tickets]` | One or more records, optionally with cross-references or the tickets implementing them |
+| `pql decisions show <id[,id,…]> [--with-refs] [--with-tickets] [--fields …]` | One or more records, optionally with cross-references or the tickets implementing them. `--fields` narrows the top level; the joins are all-or-nothing |
 | `pql decisions read <id>` | The record's full markdown body |
 | `pql decisions refs <id>` | Cross-references involving a record |
 | `pql decisions claim <D\|Q\|R> <domain> "title"` | Print the next free id. No side effects |
@@ -275,7 +275,7 @@ create-time-only.
 | Command | Does |
 |---|---|
 | `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--decision D-N] [--under T-N] [--leaf] [--unblocked]` | Filtered list, uncapped unless you pass `--limit`. `--decision` is the one that makes decision→ticket questions a single call; `--under` = all descendants (not the parent itself); `--leaf` = no children; `--unblocked` = every blocker reached a terminal status. No `--type` filter exists |
-| `pql ticket show <id[,id,…]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N]` | One or more full records. `--tree` = nested descendants plus the direct parent |
+| `pql ticket show <id[,id,…]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N] [--fields …]` | One or more full records. `--tree` = nested descendants plus the direct parent. `--fields` narrows the top level; the joins are all-or-nothing |
 | `pql ticket board [--team T] [--open] [--status S,S]` | Kanban view: one column per status, each with compact rows and a display `label`. `--open` drops the terminal columns — usually most of the payload on a mature board. `--status` names an exact column set; an unknown name exits `64` here rather than returning empty |
 | `pql ticket statuslist` | The configured status vocabulary — what a UI reads to build columns |
 
@@ -380,8 +380,11 @@ Two verbs trim their default output because one key dominates the payload:
 `connections[]`. `--full` opts back in on both, and naming the key in
 `--fields` always returns it.
 
-Record-level commands like `ticket show` always return whole records —
-projection flags do not apply there, and exit `64` if you pass one.
+`--fields` also works on `ticket show` and `decisions show`, with the same
+vocabulary — one projection language across the planning surface. On the show
+verbs it narrows the **top level only**: the join-trees that `--with-context`,
+`--with-blockers`, `--with-children` and `--tree` attach are all-or-nothing.
+`--oneline` and `--full` remain list-verb flags and exit `64` on `show`.
 
 Valid field names, since guessing them costs a round trip:
 

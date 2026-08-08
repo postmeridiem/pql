@@ -1793,6 +1793,112 @@ func TestIntegration_PlanRebuildVerify_LostRowsExit65(t *testing.T) {
 	}
 }
 
+// `--fields` was scoped to the list verbs, so two agents in live sessions ran
+// `ticket show <id> --fields id,status,title` and got exit 64 — the surface is
+// not guessable from having learned it on `list` (T-67). It projects the top
+// level only; the join-trees are all-or-nothing.
+func TestIntegration_ShowVerbs_FieldsProjection(t *testing.T) {
+	vault := initVaultIT(t)
+	writeFileIT(t, filepath.Join(vault, "governance", "decisions", "architecture.md"), `### D-1: Only decision
+- **Date:** 2026-08-08
+- **Decision:** One.
+`)
+	pqlIT(t, vault, "decisions", "sync")
+	pqlIT(t, vault, "ticket", "new", "epic", "parent", "--id-only")
+	pqlIT(t, vault, "ticket", "new", "task", "child", "--parent", "T-1", "--description", "a heavy body", "--id-only")
+
+	// Single id keeps the object shape, projected to exactly the named keys.
+	var one map[string]any
+	out := pqlIT(t, vault, "ticket", "show", "T-2", "--fields", "id,status,title")
+	if err := json.Unmarshal([]byte(out), &one); err != nil {
+		t.Fatalf("single show should stay an object: %v\n%s", err, out)
+	}
+	if len(one) != 3 || one["id"] != "T-2" {
+		t.Fatalf("want exactly the 3 requested keys, got %s", out)
+	}
+	if _, ok := one["description"]; ok {
+		t.Errorf("description was not requested: %s", out)
+	}
+
+	// Batched, the projection applies per element.
+	var many []map[string]any
+	out = pqlIT(t, vault, "ticket", "show", "T-1,T-2", "--fields", "id")
+	if err := json.Unmarshal([]byte(out), &many); err != nil {
+		t.Fatalf("batch should render an array: %v\n%s", err, out)
+	}
+	if len(many) != 2 || len(many[0]) != 1 {
+		t.Fatalf("want 2 single-key rows, got %s", out)
+	}
+
+	// Same vocabulary and same error shape as the list verbs.
+	_, stderr, code := run(t, vault, "ticket", "show", "T-1", "--fields", "titel")
+	if code != 64 {
+		t.Fatalf("unknown field should exit 64, got %d", code)
+	}
+	if !strings.Contains(string(stderr), "titel") || !strings.Contains(string(stderr), "title") {
+		t.Errorf("error should name the bad field and the valid set:\n%s", stderr)
+	}
+
+	// decisions show takes it too. Fresh map: unmarshalling into a populated
+	// one merges rather than replaces, so leftover keys would inflate the
+	// count and fail an assertion the output actually satisfies.
+	var dec map[string]any
+	out = pqlIT(t, vault, "decisions", "show", "D-1", "--fields", "id,title")
+	if err := json.Unmarshal([]byte(out), &dec); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if len(dec) != 2 || dec["id"] != "D-1" {
+		t.Fatalf("decisions show projection wrong: %s", out)
+	}
+}
+
+// ChildrenOf is keyed on parent_record_id but `ticket show` passed it the
+// friendly T-NNN, so --with-children and the children half of --with-context
+// returned nothing at all from the moment D-26 split the two identifiers —
+// silently, since an epic with no children is a legitimate answer.
+func TestIntegration_TicketShow_ChildrenJoinResolves(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "epic", "parent", "--id-only")
+	pqlIT(t, vault, "ticket", "new", "task", "first child", "--parent", "T-1", "--id-only")
+	pqlIT(t, vault, "ticket", "new", "task", "second child", "--parent", "T-1", "--id-only")
+
+	childIDs := func(args ...string) []string {
+		t.Helper()
+		var shown struct {
+			Children []struct {
+				ID string `json:"id"`
+			} `json:"children"`
+		}
+		out := pqlIT(t, vault, append([]string{"ticket", "show", "T-1"}, args...)...)
+		if err := json.Unmarshal([]byte(out), &shown); err != nil {
+			t.Fatalf("invalid JSON: %v\n%s", err, out)
+		}
+		ids := make([]string, 0, len(shown.Children))
+		for _, c := range shown.Children {
+			ids = append(ids, c.ID)
+		}
+		return ids
+	}
+
+	for _, flag := range []string{"--with-children", "--with-context"} {
+		got := childIDs(flag)
+		if !slices.Equal(got, []string{"T-2", "T-3"}) {
+			t.Errorf("%s children = %v, want [T-2 T-3]", flag, got)
+		}
+	}
+
+	// A genuine leaf still reports none, so the fix did not turn the join
+	// into something that always populates.
+	var leaf map[string]any
+	out := pqlIT(t, vault, "ticket", "show", "T-2", "--with-children")
+	if err := json.Unmarshal([]byte(out), &leaf); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if _, ok := leaf["children"]; ok {
+		t.Errorf("a leaf should have no children key, got %s", out)
+	}
+}
+
 // `ticket board` emitted every column, and on a mature board the terminal
 // ones are most of the payload — 82% on this repo's own dataset, with no way
 // to drop them (T-77). It also carried the status name but not its display
