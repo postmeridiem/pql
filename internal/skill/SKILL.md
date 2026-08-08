@@ -57,6 +57,12 @@ Exclude it either way: write the path into a `.pqlignore` at the vault root
 pattern to `exclude:` in `.pql/config.yaml`. Indexing stops at the *first* bad
 file, so expect to repeat this if there are several.
 
+**Both `.gitignore` and `.pqlignore` are read by default**, in that order, with
+later files winning. So a file already excluded from git is already out of the
+index — worth knowing when a file you expected to find is missing and there is
+no `.pqlignore` in sight. `pql doctor` reports the active list under
+`config.ignore_files`.
+
 Do not use `pql doctor` to confirm the fix. It reports whatever the last
 successful index left behind — a healthy-looking `index.files: 44` while every
 command is still failing — because it never triggers indexing itself. Re-run
@@ -173,7 +179,7 @@ result relates. Naming a key in `--fields` always returns it, so
 | `pql outlinks <path>` | Links **from** a file, in document order — `{target, alias, line, via}`. `target` is the raw text of the link, not a resolved path |
 | `pql meta <path>` | One file's frontmatter, tags, outlinks and headings |
 | `pql schema` | Inferred frontmatter schema across the vault |
-| `pql base [name] [--view V]` | Execute an Obsidian `.base` file. **Bare `pql base` lists the bases it found** with their names — the only discovery route, since `files '*.base'` returns `[]`. `--view` picks among a base's named views |
+| `pql base [name] [--view V]` | Execute an Obsidian `.base` file. **Bare `pql base` lists the bases it found** with their names — the only discovery route, since `files '*.base'` returns `[]`. `--view` picks among a base's named views; there is no way to list those, so pass a wrong one and read the valid set off the exit-`65` error. Rows carry the columns the `.base` declares and nothing else — often no `path`, so results may not be feedable onward |
 
 ```bash
 pql files 'sessions/*'          # note: * crosses /, so this is recursive
@@ -334,7 +340,7 @@ create-time-only.
 |---|---|
 | `pql ticket list [--status S] [--team T] [--assigned A] [--label L] [--decision D-N] [--under T-N] [--leaf] [--unblocked]` | Filtered list, uncapped unless you pass `--limit`. `--decision` is the one that makes decision→ticket questions a single call; `--under` = all descendants (not the parent itself); `--leaf` = no children; `--unblocked` = every blocker reached a terminal status. No `--type` filter exists |
 | `pql ticket show <id[,id,…]> [--with-context] [--with-blockers] [--with-children] [--tree] [--depth N] [--fields …]` | One or more full records. `--tree` = nested descendants plus the direct parent. `--fields` narrows the top level; the joins are all-or-nothing |
-| `pql ticket board [--team T] [--open] [--status S,S]` | Kanban view: one column per status, each with compact rows and a display `label`. `--open` drops the terminal columns — usually most of the payload on a mature board. `--status` names an exact column set; an unknown name exits `64` here rather than returning empty |
+| `pql ticket board [--team T] [--open] [--status S,S]` | Kanban view: one column per status, each with compact rows and a display `label`. `--open` drops the terminal columns — usually most of the payload on a mature board. `--status` names an exact column set; an unknown name exits `64` here rather than returning empty. **Empty columns are omitted**, so a named column that holds nothing is simply absent — `[]` means no tickets in any requested column, not a bad name |
 | `pql ticket statuslist` | The configured status vocabulary — what a UI reads to build columns |
 
 Identity: the `T-NNN` you see is a friendly *label* over a stable underlying
@@ -617,3 +623,9 @@ which version of this document an installed binary carries.
 text**: it writes one file's bytes and nothing else. Without it you would have
 to pipe the JSON through an extractor, and piping is what this document tells
 you to avoid. `--raw --file <path>` reaches other files in a multi-file bundle.
+
+The binary bundles more than this document. `pql skill status` lists every
+bundled skill — currently `pql` and `clean-house`, a documentation-discipline
+pass over a DQR tree — with each one's `lines` and `words` alongside its hash,
+so you can size a skill without reading it. `pql skill show <name> --raw` reads
+any of them.
