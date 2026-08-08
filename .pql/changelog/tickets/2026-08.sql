@@ -2798,3 +2798,159 @@ Follow-up 2026-08-08: finding #23 is resolved, both halves, and it splits into o
 Not a bug — pql base dropping path. Read the .base file the auditor was using: council-members.base declares only note.name, note.prior_job, note.lens, note.voting, note.model. No file.path, so pql returning no path is faithful to the file. Confirmed pql does support it by writing a probe base declaring file.path and file.name: both come back, and path is a real vault-relative path (members/holt/persona.md) that other commands accept. Bare names in a view''s order: prefer a declared note property over the file column of the same name, which is why ''name'' resolved to fm.name; file.name gets the file column explicitly. So the skill wording added in 2.1.0 — rows carry the columns the .base declares, often no path — is correct, and the actionable advice is to declare file.path in the base.
 
 Real bug — the fm.voting: 1 versus voting: true discrepancy the auditor noticed alongside it. Same key, same file, meta returns true and the DSL returns 1, and base inherits it because base compiles to the DSL. Cause is the type-dispatching subquery in compile.go choosing value_num for bools so SQLite can compare against literals; the same expression is used for projection, where the comparison shape is wrong and value_json already holds the right one. Probed every frontmatter type: bool is the only one affected — integers stay integers, lists and objects decode to real nested JSON. Filed as T-93.', 'done', 'medium', NULL, NULL, NULL, '2026-08-08 18:05:50.360', '2026-08-08 19:10:07.192', NULL, '78f2051e52dc9b1d950be3c66cbe467a', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5PDDXT59VGNRYSC4E4XRSR', 'bug', NULL, 'DSL name column truncates any filename ending in d, m or a period', 'Found while fixing T-93, and it is the worse of the two.
+
+  pql query "SELECT path, name"
+  [{"name":"albu","path":"album.md"},
+   {"name":"diagra","path":"diagram.md"},
+   {"name":"secon","path":"second.md"},
+   {"name":"README","path":"README.md"}]
+
+  pql meta second.md  ->  "name": "second"
+
+Cause: fileColumn("name") in internal/query/dsl/eval/compile.go derives the basename and then calls rtrim(..., ''.md''). SQLite''s two-argument rtrim removes any trailing characters that appear in the second argument treated as a SET, not as a literal suffix. So it strips the extension and then keeps going through any trailing d, m or period in the stem. README survives because it ends in E; types survives because it ends in s; album, diagram, second, keyword, system, method, problem do not.
+
+Severity: name is a documented built-in column, it appears in the skill''s DSL examples and in the routing table, and the failure is silent — a wrong string, not an error. Any vault with a file ending in m or d gets corrupted output from a core column, and those endings are common.
+
+meta is unaffected because it derives the name in Go, which is also why the audit never caught this: it exercised meta and read name from ranked output, never SELECT name against a filename in the affected set.
+
+Fix: replace the rtrim with a real suffix strip — CASE WHEN <basename> LIKE ''%.md'' THEN substr(<basename>, 1, length(<basename>) - 3) ELSE <basename> END. Verbose because the basename expression repeats, but correct. Check whether folder has the same class of defect while there — it uses instr/substr arithmetic rather than rtrim, so probably not, but confirm rather than assume.
+
+Regression test must cover a name ending in each of d, m and period, plus one unaffected, plus a file with no extension.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-08 19:29:04.494', '2026-08-08 19:29:04.494', NULL, '5757b7922ac8ff5b3a6172d190cc55ff', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C6ZEE2W3DEZX0MGF3EYF0', 'bug', NULL, 'ranked verbs accept an unindexed path and return [] at exit 0', 'Implements D-29 on the three ranked verbs.
+
+pql related, pql context and pql search take a path argument and do not check it exists. A typo returns [] at exit 0, which reads as ''nothing is related to this file'' when the truth is ''there is no such file''. pql meta on the same typo exits 66, so the identical mistake is loud on one verb and silent on the neighbouring one — and the silent one is the verb the skill tells an agent to reach for first.
+
+D-29 settles the rule: an argument that names a thing is validated, a value that filters a set is not. These three arguments name things.
+
+Fix: resolve the path against files before ranking, exit 66 naming the path when absent. context already does exactly this for its outbound targets (T-73), so the query shape exists. One extra query on a path that already opens the store.
+
+Not in scope: backlinks and outlinks, whose argument is matched against link text rather than resolved. Validating there needs the normalization Q-6 is still open about, so they keep returning [] and the skill says why. Nor the DSL, where WHERE path = ''nope.md'' is a filter and correctly empty.
+
+Behaviour change — a caller relying on the empty gets 66. Ships in a minor with a compatibility note.', 'ready', 'high', NULL, NULL, 'D-29', '2026-08-08 18:44:30.195', '2026-08-08 19:33:56.392', NULL, 'b1ee544e24c4dd27b6536394d39e683e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C99ZKBZWAYDVY8PFYFHEM', 'task', NULL, 'document the absence-question pattern and reject its fake filter', 'Implements D-31.
+
+D-31 declines to add absence filters — no decisions list --unimplemented, no --without-<x> family — on the grounds that each is a join predicate in disguise and adding them one at a time turns a query surface into an ad-hoc ORM. The supported route is a batched positive call plus a client-side fold, which is cheap now that batching and projection both work.
+
+Two things make that decision honest, and neither is done.
+
+First, the skill has to carry a worked example, because an agent will not discover a fold pattern from a flag list. Something like: decisions list --oneline to source the ids, decisions show <ids> --with-tickets --fields id,tickets, then filter for the missing tickets key. That is the route the audit reconstructed by hand across four calls.
+
+Second, ticket list --decision none currently returns empty silently, which is worse than not supporting the question — it looks like a supported filter that found nothing. Per D-29''s closed-set rule it should exit 64 naming the supported values. Same for any other spelling that reads as a negative filter and is not one.', 'ready', 'medium', NULL, NULL, 'D-31', '2026-08-08 18:44:49.276', '2026-08-08 19:33:56.399', NULL, '07beb75b1050276d979b9050baf13f02', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C83X7F5WDSXK11XWKM47C', 'task', NULL, 'converge mutation verb return shapes and document them', 'Implements D-30.
+
+The mutation verbs return whatever each one happened to return. ticket assign gives a whole record including a 2 KB description; ticket label gives {ticket_ids, action, label}. Neither is documented, and --fields is rejected, so the verbs with the fattest output are the ones with no way to trim.
+
+D-30 keeps projection off the mutation surface — a mutation''s return value is a receipt, and a caller who trimmed it to id has confirmed nothing — and standardises the shapes instead. One record changed returns that record whole. Several changed return a summary object naming the ids and what was applied, which is what ticket label already does.
+
+Work: audit every mutation verb (status, assign, team, label, setparent, decision, block, unblock, append, refine write) for which shape it currently returns, converge the batch cases on the summary, and document both shapes in the skill. The documentation half is worth doing first and separately — it is the part a caller is blocked on today, and it does not change behaviour.
+
+The shape change lands in a minor.', 'ready', 'medium', NULL, NULL, 'D-30', '2026-08-08 18:44:39.529', '2026-08-08 19:33:56.399', NULL, 'a1b8df7459428ae11b2fa11e8bc1cb30', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5PDDXT59VGNRYSC4E4XRSR', 'bug', NULL, 'DSL name column truncates any filename ending in d, m or a period', 'Found while fixing T-93, and it is the worse of the two.
+
+  pql query "SELECT path, name"
+  [{"name":"albu","path":"album.md"},
+   {"name":"diagra","path":"diagram.md"},
+   {"name":"secon","path":"second.md"},
+   {"name":"README","path":"README.md"}]
+
+  pql meta second.md  ->  "name": "second"
+
+Cause: fileColumn("name") in internal/query/dsl/eval/compile.go derives the basename and then calls rtrim(..., ''.md''). SQLite''s two-argument rtrim removes any trailing characters that appear in the second argument treated as a SET, not as a literal suffix. So it strips the extension and then keeps going through any trailing d, m or period in the stem. README survives because it ends in E; types survives because it ends in s; album, diagram, second, keyword, system, method, problem do not.
+
+Severity: name is a documented built-in column, it appears in the skill''s DSL examples and in the routing table, and the failure is silent — a wrong string, not an error. Any vault with a file ending in m or d gets corrupted output from a core column, and those endings are common.
+
+meta is unaffected because it derives the name in Go, which is also why the audit never caught this: it exercised meta and read name from ranked output, never SELECT name against a filename in the affected set.
+
+Fix: replace the rtrim with a real suffix strip — CASE WHEN <basename> LIKE ''%.md'' THEN substr(<basename>, 1, length(<basename>) - 3) ELSE <basename> END. Verbose because the basename expression repeats, but correct. Check whether folder has the same class of defect while there — it uses instr/substr arithmetic rather than rtrim, so probably not, but confirm rather than assume.
+
+Regression test must cover a name ending in each of d, m and period, plus one unaffected, plus a file with no extension.', 'ready', 'high', NULL, NULL, NULL, '2026-08-08 19:29:04.494', '2026-08-08 19:33:56.399', NULL, 'b978992e7e00f653a532a1b34a1ae733', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5H3J0H3JC5ZQZ9QCPT3P9R', 'bug', NULL, 'DSL projects bool frontmatter as 1/0 while meta returns true/false', 'Resolves the open half of audit finding #23, and it is a real defect rather than the .base file''s doing.
+
+Same key, same file, two answers:
+
+  pql meta members/holt/persona.md   ->  "voting": true
+  pql query "SELECT fm.voting ..."   ->  {"fm.voting": 1}
+
+pql base inherits it, since base compiles to the DSL — which is where the auditor met it.
+
+Cause, in internal/query/dsl/eval/compile.go around line 345. The fm.<key> reference compiles to a type-dispatching subquery: CASE type WHEN ''string'' THEN value_text WHEN ''number'' THEN value_num WHEN ''bool'' THEN value_num ELSE value_json END. For a bool that yields SQLite''s 1/0. The comment says the shape is chosen so SQLite can compare directly against literals, which is true and is why WHERE fm.voting = true works — the parser lowers true to 1. The problem is that the same expression is used for projection, where the comparison-friendly shape is the wrong one and the schema already stores the right one in value_json.
+
+So the fix is not to change the CASE. Comparison genuinely wants value_num; projection wants value_json, or a type-aware decode on the way out. Changing it in one place breaks the other — verified that both = true and = 1 currently match, and both should keep matching.
+
+Scope check before fixing: bool is the visible case, but the same CASE returns value_num for ''number'' too, so check whether an integer frontmatter value round-trips as an integer or as a REAL — value_num is REAL, so a year like 2026 may well be emitting 2026.0. And ''list''/''object'' fall to value_json, which is a JSON string in a JSON field, so confirm whether those come back as nested structures or as escaped strings. Worth settling all three at once rather than patching bool alone.
+
+Not filed against the base surface: pql base returns exactly the columns the .base declares, which the same investigation confirmed — see the note on T-87.
+
+Scope settled by probe, and narrower than the ticket first guessed. Planted a file carrying one of each frontmatter type and read it through both paths:
+
+  DSL   {"fm.abool":0,  "fm.alist":["a","b"], "fm.anobj":{"k":"v"}, "fm.num_float":1.5, "fm.num_int":2026}
+  meta  {"abool":false, "alist":["a","b"],    "anobj":{"k":"v"},    "num_float":1.5,    "num_int":2026}
+
+So bool is the only divergence. The speculation in the description above was wrong on both counts and is retracted: integers do not come back as REAL — 2026 stays 2026, not 2026.0 — and list/object values decode into real nested JSON rather than escaped strings, so the ELSE value_json branch is already doing the right thing.
+
+That makes the fix small and local: the CASE needs one more arm so a bool projects as its JSON form while still comparing numerically. Everything else in the expression is correct as written. Both spellings — WHERE fm.abool = false and = 0 — must keep matching after the change; they both match today.', 'ready', 'medium', NULL, NULL, NULL, '2026-08-08 19:05:52.900', '2026-08-08 19:33:56.399', NULL, 'cc3e5295ff2a158a9a59c6deba4111df', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C6ZEE2W3DEZX0MGF3EYF0', 'bug', NULL, 'ranked verbs accept an unindexed path and return [] at exit 0', 'Implements D-29 on the three ranked verbs.
+
+pql related, pql context and pql search take a path argument and do not check it exists. A typo returns [] at exit 0, which reads as ''nothing is related to this file'' when the truth is ''there is no such file''. pql meta on the same typo exits 66, so the identical mistake is loud on one verb and silent on the neighbouring one — and the silent one is the verb the skill tells an agent to reach for first.
+
+D-29 settles the rule: an argument that names a thing is validated, a value that filters a set is not. These three arguments name things.
+
+Fix: resolve the path against files before ranking, exit 66 naming the path when absent. context already does exactly this for its outbound targets (T-73), so the query shape exists. One extra query on a path that already opens the store.
+
+Not in scope: backlinks and outlinks, whose argument is matched against link text rather than resolved. Validating there needs the normalization Q-6 is still open about, so they keep returning [] and the skill says why. Nor the DSL, where WHERE path = ''nope.md'' is a filter and correctly empty.
+
+Behaviour change — a caller relying on the empty gets 66. Ships in a minor with a compatibility note.', 'in_progress', 'high', NULL, NULL, 'D-29', '2026-08-08 18:44:30.195', '2026-08-08 19:33:56.413', NULL, '4a49fd5c2179295f112f6f56447983b9', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5H3J0H3JC5ZQZ9QCPT3P9R', 'bug', NULL, 'DSL projects bool frontmatter as 1/0 while meta returns true/false', 'Resolves the open half of audit finding #23, and it is a real defect rather than the .base file''s doing.
+
+Same key, same file, two answers:
+
+  pql meta members/holt/persona.md   ->  "voting": true
+  pql query "SELECT fm.voting ..."   ->  {"fm.voting": 1}
+
+pql base inherits it, since base compiles to the DSL — which is where the auditor met it.
+
+Cause, in internal/query/dsl/eval/compile.go around line 345. The fm.<key> reference compiles to a type-dispatching subquery: CASE type WHEN ''string'' THEN value_text WHEN ''number'' THEN value_num WHEN ''bool'' THEN value_num ELSE value_json END. For a bool that yields SQLite''s 1/0. The comment says the shape is chosen so SQLite can compare directly against literals, which is true and is why WHERE fm.voting = true works — the parser lowers true to 1. The problem is that the same expression is used for projection, where the comparison-friendly shape is the wrong one and the schema already stores the right one in value_json.
+
+So the fix is not to change the CASE. Comparison genuinely wants value_num; projection wants value_json, or a type-aware decode on the way out. Changing it in one place breaks the other — verified that both = true and = 1 currently match, and both should keep matching.
+
+Scope check before fixing: bool is the visible case, but the same CASE returns value_num for ''number'' too, so check whether an integer frontmatter value round-trips as an integer or as a REAL — value_num is REAL, so a year like 2026 may well be emitting 2026.0. And ''list''/''object'' fall to value_json, which is a JSON string in a JSON field, so confirm whether those come back as nested structures or as escaped strings. Worth settling all three at once rather than patching bool alone.
+
+Not filed against the base surface: pql base returns exactly the columns the .base declares, which the same investigation confirmed — see the note on T-87.
+
+Scope settled by probe, and narrower than the ticket first guessed. Planted a file carrying one of each frontmatter type and read it through both paths:
+
+  DSL   {"fm.abool":0,  "fm.alist":["a","b"], "fm.anobj":{"k":"v"}, "fm.num_float":1.5, "fm.num_int":2026}
+  meta  {"abool":false, "alist":["a","b"],    "anobj":{"k":"v"},    "num_float":1.5,    "num_int":2026}
+
+So bool is the only divergence. The speculation in the description above was wrong on both counts and is retracted: integers do not come back as REAL — 2026 stays 2026, not 2026.0 — and list/object values decode into real nested JSON rather than escaped strings, so the ELSE value_json branch is already doing the right thing.
+
+That makes the fix small and local: the CASE needs one more arm so a bool projects as its JSON form while still comparing numerically. Everything else in the expression is correct as written. Both spellings — WHERE fm.abool = false and = 0 — must keep matching after the change; they both match today.', 'in_progress', 'medium', NULL, NULL, NULL, '2026-08-08 19:05:52.900', '2026-08-08 19:33:56.415', NULL, '29635c737f9a0af8795b7624062aa2bd', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C99ZKBZWAYDVY8PFYFHEM', 'task', NULL, 'document the absence-question pattern and reject its fake filter', 'Implements D-31.
+
+D-31 declines to add absence filters — no decisions list --unimplemented, no --without-<x> family — on the grounds that each is a join predicate in disguise and adding them one at a time turns a query surface into an ad-hoc ORM. The supported route is a batched positive call plus a client-side fold, which is cheap now that batching and projection both work.
+
+Two things make that decision honest, and neither is done.
+
+First, the skill has to carry a worked example, because an agent will not discover a fold pattern from a flag list. Something like: decisions list --oneline to source the ids, decisions show <ids> --with-tickets --fields id,tickets, then filter for the missing tickets key. That is the route the audit reconstructed by hand across four calls.
+
+Second, ticket list --decision none currently returns empty silently, which is worse than not supporting the question — it looks like a supported filter that found nothing. Per D-29''s closed-set rule it should exit 64 naming the supported values. Same for any other spelling that reads as a negative filter and is not one.', 'in_progress', 'medium', NULL, NULL, 'D-31', '2026-08-08 18:44:49.276', '2026-08-08 19:33:56.415', NULL, '48c06fbcd441b9d3f389bff4d894a494', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5PDDXT59VGNRYSC4E4XRSR', 'bug', NULL, 'DSL name column truncates any filename ending in d, m or a period', 'Found while fixing T-93, and it is the worse of the two.
+
+  pql query "SELECT path, name"
+  [{"name":"albu","path":"album.md"},
+   {"name":"diagra","path":"diagram.md"},
+   {"name":"secon","path":"second.md"},
+   {"name":"README","path":"README.md"}]
+
+  pql meta second.md  ->  "name": "second"
+
+Cause: fileColumn("name") in internal/query/dsl/eval/compile.go derives the basename and then calls rtrim(..., ''.md''). SQLite''s two-argument rtrim removes any trailing characters that appear in the second argument treated as a SET, not as a literal suffix. So it strips the extension and then keeps going through any trailing d, m or period in the stem. README survives because it ends in E; types survives because it ends in s; album, diagram, second, keyword, system, method, problem do not.
+
+Severity: name is a documented built-in column, it appears in the skill''s DSL examples and in the routing table, and the failure is silent — a wrong string, not an error. Any vault with a file ending in m or d gets corrupted output from a core column, and those endings are common.
+
+meta is unaffected because it derives the name in Go, which is also why the audit never caught this: it exercised meta and read name from ranked output, never SELECT name against a filename in the affected set.
+
+Fix: replace the rtrim with a real suffix strip — CASE WHEN <basename> LIKE ''%.md'' THEN substr(<basename>, 1, length(<basename>) - 3) ELSE <basename> END. Verbose because the basename expression repeats, but correct. Check whether folder has the same class of defect while there — it uses instr/substr arithmetic rather than rtrim, so probably not, but confirm rather than assume.
+
+Regression test must cover a name ending in each of d, m and period, plus one unaffected, plus a file with no extension.', 'in_progress', 'high', NULL, NULL, NULL, '2026-08-08 19:29:04.494', '2026-08-08 19:33:56.416', NULL, 'd38c941dd624e5977d4b5f585c497aa8', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

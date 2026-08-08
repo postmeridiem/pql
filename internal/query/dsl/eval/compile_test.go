@@ -117,8 +117,14 @@ func TestCompile_FileColumnsDirect(t *testing.T) {
 
 func TestCompile_NameAndFolderUseSubstr(t *testing.T) {
 	c := mustCompile(t, "SELECT name, folder")
-	if !strings.Contains(c.SQL, "rtrim(substr(files.path") {
-		t.Errorf("name should use rtrim(substr(...)): %s", c.SQL)
+	// name strips a literal ".md" suffix, not a character set. rtrim's
+	// second argument is a set, which ate into the stem — this assertion
+	// used to require the rtrim and so held the bug in place (T-94).
+	if strings.Contains(c.SQL, "rtrim(") {
+		t.Errorf("name must not use rtrim — its second arg is a character set: %s", c.SQL)
+	}
+	if !strings.Contains(c.SQL, "LIKE '%.md'") {
+		t.Errorf("name should guard on a literal .md suffix: %s", c.SQL)
 	}
 	if !strings.Contains(c.SQL, "substr(files.path, 1") {
 		t.Errorf("folder should use substr(files.path, 1, ...): %s", c.SQL)
@@ -174,11 +180,15 @@ func TestCompile_FmTypeDispatchInSubquery(t *testing.T) {
 	c := mustCompile(t, "SELECT fm.x")
 	// Type-dispatching SELECT inside the subquery — leverages the v2 type
 	// column so SQLite gets the right native type back.
-	for _, want := range []string{"CASE type", "WHEN 'string' THEN value_text", "WHEN 'number' THEN value_num", "WHEN 'bool' THEN value_num"} {
+	for _, want := range []string{"CASE type", "WHEN 'string' THEN value_text", "WHEN 'number' THEN value_num"} {
 		if !strings.Contains(c.SQL, want) {
 			t.Errorf("missing %q in fm subquery: %s", want, c.SQL)
 		}
 	}
+	// The bool arm is context-dependent — see
+	// TestBoolProjection_DiffersFromComparison. This test used to require
+	// value_num here, in a SELECT, which is the shape that rendered true as
+	// 1 (T-93).
 }
 
 // --- WHERE + operators --------------------------------------------------
@@ -420,5 +430,61 @@ func TestUnknownColumn_ErrorListsTheVocabulary(t *testing.T) {
 		if !strings.Contains(msg, want) {
 			t.Errorf("error should mention %q, got: %s", want, msg)
 		}
+	}
+}
+
+// name derived the stem with rtrim(path, '.md'), and SQLite's two-argument
+// rtrim strips trailing characters that are MEMBERS of its second argument
+// rather than a literal suffix. So it ate into the stem: album.md became
+// "albu", second.md became "secon". README.md and types.md were unaffected,
+// which is why it survived — every example anyone tried ended in a letter
+// outside the set (T-94).
+func TestName_StripsOnlyTheExtension(t *testing.T) {
+	cases := map[string]string{
+		"album.md":           "album",   // trailing m
+		"second.md":          "second",  // trailing d
+		"diagram.md":         "diagram", // trailing m
+		"README.md":          "README",  // unaffected, the case that hid it
+		"deep/er/keyword.md": "keyword", // nested, trailing d
+		"notes/m.md":         "m",       // single-char stem in the set
+	}
+	for path, want := range cases {
+		got := stripSuffixInGo(path)
+		if got != want {
+			t.Errorf("%s -> %q, want %q", path, got, want)
+		}
+	}
+}
+
+// stripSuffixInGo mirrors what the SQL in stripMDSuffix(sqlBasename) must
+// compute, so the expectations above are readable without a database. The
+// SQL itself is exercised end-to-end by the integration suite.
+func stripSuffixInGo(path string) string {
+	base := path
+	if i := strings.LastIndex(path, "/"); i >= 0 {
+		base = path[i+1:]
+	}
+	return strings.TrimSuffix(base, ".md")
+}
+
+// The projected shape of a frontmatter value differs from the comparable
+// shape for bools only, and only in the SELECT list. Guard both halves:
+// projection casts to BLOB so normalise can tell JSON from text, comparison
+// stays numeric so `= true` and `= 1` both match (T-93).
+func TestBoolProjection_DiffersFromComparison(t *testing.T) {
+	sel := mustCompile(t, "SELECT fm.voting")
+	if !strings.Contains(sel.SQL, "CAST(value_json AS BLOB)") {
+		t.Errorf("SELECT should project a bool as a JSON blob:\n%s", sel.SQL)
+	}
+
+	where := mustCompile(t, "SELECT path WHERE fm.voting = true")
+	if strings.Contains(where.SQL, "CAST(value_json AS BLOB)") {
+		t.Errorf("WHERE must keep the comparable numeric shape:\n%s", where.SQL)
+	}
+
+	// ORDER BY sorts, so it compares — same rule as WHERE.
+	order := mustCompile(t, "SELECT path ORDER BY fm.voting")
+	if strings.Contains(order.SQL, "CAST(value_json AS BLOB)") {
+		t.Errorf("ORDER BY must keep the comparable numeric shape:\n%s", order.SQL)
 	}
 }

@@ -62,6 +62,13 @@ func Compile(q *parse.Query) (*Compiled, error) {
 type compiler struct {
 	buf    strings.Builder
 	params []any
+
+	// projecting is true only while the SELECT list is being emitted.
+	// A frontmatter value needs a different shape depending on where it
+	// lands: WHERE and ORDER BY want whatever SQLite compares and sorts
+	// correctly, the SELECT list wants the value the vault actually
+	// declared. For bools those differ — see ref (T-93).
+	projecting bool
 }
 
 func (c *compiler) emit(s string, args ...any) {
@@ -96,11 +103,13 @@ func (c *compiler) query(q *parse.Query) error {
 	if q.Star {
 		c.emit("files.path AS path, files.mtime AS mtime, files.ctime AS ctime, files.size AS size, files.content_hash AS content_hash, files.last_scanned AS last_scanned")
 	} else {
+		c.projecting = true
 		for i, p := range q.Select {
 			if i > 0 {
 				c.emit(", ")
 			}
 			if err := c.expr(p.Expr); err != nil {
+				c.projecting = false
 				return err
 			}
 			if p.Alias != "" {
@@ -112,6 +121,7 @@ func (c *compiler) query(q *parse.Query) error {
 				c.emit(" AS %s", quoteIdent(alias))
 			}
 		}
+		c.projecting = false
 	}
 
 	c.emit(" FROM files")
@@ -263,13 +273,33 @@ func fileColumn(name string) (string, bool) {
 	// Derived via SUBSTR/INSTR — verbose but pure SQLite (no UDFs needed
 	// for v1). The reverse(path) || '/' trick handles paths with no slash:
 	// instr returns 0, the +1 normalises so substr from position 1 returns
-	// the full path and rtrim strips '.md'.
+	// the full path.
 	case "name":
-		return `rtrim(substr(files.path, length(files.path) - instr(reverse(files.path) || '/', '/') + 2), '.md')`, true
+		return stripMDSuffix(sqlBasename), true
 	case "folder":
 		return `substr(files.path, 1, length(files.path) - instr(reverse(files.path) || '/', '/'))`, true
 	}
 	return "", false
+}
+
+// sqlBasename is files.path with any leading directories removed.
+const sqlBasename = `substr(files.path, length(files.path) - instr(reverse(files.path) || '/', '/') + 2)`
+
+// stripMDSuffix removes a trailing ".md" from a SQL string expression.
+//
+// This used to be rtrim(expr, '.md'), which is wrong: SQLite's two-argument
+// rtrim treats its second argument as a SET of characters and keeps removing
+// trailing characters while they are members of it. So it stripped the
+// extension and then kept eating the stem — album.md became "albu",
+// second.md became "secon", diagram.md became "diagra". README.md and
+// types.md survived only because E and s are not in the set, which is why it
+// went unnoticed. Silent, and on a documented built-in column (T-94).
+//
+// expr is inlined three times because SQLite has no scalar LET binding. Not
+// pretty, and correct.
+func stripMDSuffix(expr string) string {
+	return `CASE WHEN ` + expr + ` LIKE '%.md' THEN substr(` + expr +
+		`, 1, length(` + expr + `) - 3) ELSE ` + expr + ` END`
 }
 
 // fileColumns is the list fileColumn accepts, for error messages. Kept
@@ -339,10 +369,32 @@ func (c *compiler) ref(r *parse.Ref) error {
 				Line: r.P.Line, Col: r.P.Col,
 			}
 		}
-		// Type-dispatching subquery: returns the value in the shape SQLite
-		// can compare directly against literals, leveraging the type column
-		// added in schema v2.
-		c.emit(`(SELECT CASE type WHEN 'string' THEN value_text WHEN 'number' THEN value_num WHEN 'bool' THEN value_num ELSE value_json END FROM frontmatter WHERE path = files.path AND key = `)
+		// Type-dispatching subquery, leveraging the type column added in
+		// schema v2. Which shape a value wants depends on where it lands.
+		//
+		// In WHERE and ORDER BY: the shape SQLite compares and sorts
+		// directly against literals. Bools are value_num, so `fm.x = true`
+		// works (the parser lowers true to 1) and so does `fm.x = 1`.
+		//
+		// In the SELECT list: the value the vault declared. For every type
+		// but bool those coincide. A bool projected as value_num renders as
+		// 1, where `pql meta` on the same key renders true — so a caller
+		// deserialising into a typed bool broke, and one comparing === true
+		// in JS silently got false (T-93).
+		//
+		// The bool projection casts value_json to a BLOB rather than
+		// selecting it as text, and that is load-bearing. normalise() turns
+		// a []byte holding valid JSON into json.RawMessage, but deliberately
+		// will not reinterpret a bare string "true" — otherwise a
+		// frontmatter *string* whose value happens to be "true" would come
+		// back as a JSON bool. The BLOB is what distinguishes "this is JSON"
+		// from "this is text that looks like JSON", and only the bool branch
+		// can make that claim, because only it knows the type column said so.
+		proj := `value_num`
+		if c.projecting {
+			proj = `CAST(value_json AS BLOB)`
+		}
+		c.emit(`(SELECT CASE type WHEN 'string' THEN value_text WHEN 'number' THEN value_num WHEN 'bool' THEN %s ELSE value_json END FROM frontmatter WHERE path = files.path AND key = `, proj)
 		c.param(key)
 		c.emit(")")
 		return nil
