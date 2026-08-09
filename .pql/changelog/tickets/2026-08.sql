@@ -3197,3 +3197,27 @@ That claim was overstated and was used to explain the wrong thing. What is true:
 The mistake underneath it is worth recording because it is the same shape as this ticket''s own subject. pql doctor reports db.exists for index.db, the query cache. Planning state is a different database, pql.db, and it did exist. Reading one field as evidence about the other produced a confident and wrong conclusion about the repo''s state - exactly the way an empty label sequence produced a confident and wrong T-1 above.
 
 Nothing about the proposed fix changes. The guard still belongs in the mutation path rather than in the hooks, for the reason already given: the hooks are what is missing whenever this bites.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-08 23:51:49.814', '2026-08-09 02:17:44.881', NULL, '1f977a195311b0b3062e21a7839c15a7', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY8Q1PNR891VZ61QV641CGJM', 'bug', NULL, 'clean-house RULE-DEAD-FILE-REFERENCE truncates the leading dot off dotfile paths', 'The detection regex in references/rules.md is:
+
+  \b([\w./-]+\.(md|go|py|sql|yaml|yml|toml))\b
+
+The leading \b sits before a character class that does not include the dot, so a path beginning with a dot matches from the character after it. Verified:
+
+  .gitea/workflows/build.yml  ->  gitea/workflows/build.yml
+  .pql/config.yaml            ->  pql/config.yaml
+  .goreleaser.yaml            ->  goreleaser.yaml
+  internal/cli/init.go        ->  unaffected
+
+The truncated token then fails both resolution filters, because neither the source-relative nor the repo-relative path exists without its dot, and the reference is reported as dead. Every dotfile path in a record is therefore a guaranteed false positive rather than an occasional one.
+
+This is not theoretical for this project. Its own conventions are dotfile paths - .pql/config.yaml, .pqlignore, .goreleaser.yaml, .gitea/ - and a decision record here already cites .pql/config.yaml. .goreleaser.yaml exists at the repo root, so a record citing it would be flagged today.
+
+The rule text is candid that the first detection pass produced six false positives out of six and that the filters are necessary but not sufficient. This looks like a survivor of that: the filters were tuned against whatever the sample contained, and dotfile paths either were not in it or were misread as genuine misses.
+
+Suggested fix is to allow an optional leading dot in the capture rather than relying on the boundary:
+
+  (?:^|[^\w./-])((?:\.)?[\w./-]+\.(md|go|py|sql|yaml|yml|toml))
+
+or simply drop the leading \b and anchor on a non-path character. Worth adding a fixture with a dotfile path so the case is pinned.
+
+Found while evaluating whether this rule ports to non-DQR markdown. It does not, for reasons that are about document genre rather than this bug - most path mentions in a general document are history, absence or command names rather than pointers - but the dot truncation is a defect in the rule as it stands and affects the DQR case it was written for.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-09 02:31:16.398', '2026-08-09 02:31:16.398', NULL, 'dfc55940719e028ce374a958038f3213', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
