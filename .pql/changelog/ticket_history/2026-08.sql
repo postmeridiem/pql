@@ -1681,3 +1681,28 @@ That claim was overstated and was used to explain the wrong thing. What is true:
 The mistake underneath it is worth recording because it is the same shape as this ticket''s own subject. pql doctor reports db.exists for index.db, the query cache. Planning state is a different database, pql.db, and it did exist. Reading one field as evidence about the other produced a confident and wrong conclusion about the repo''s state - exactly the way an empty label sequence produced a confident and wrong T-1 above.
 
 Nothing about the proposed fix changes. The guard still belongs in the mutation path rather than in the hooks, for the reason already given: the hooks are what is missing whenever this bites.', NULL, '2026-08-09 02:17:44', '2026-08-09 02:17:44.881', '2026-08-09 02:17:44.881', NULL, 'da10ae67cabc34262886af7a3a5768d2', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FYBX6214TDP22Q7PASAAN8YG', 'description', 'pql can mint a record id but cannot close one. ''decisions claim <D|Q|R>'' is the only authoring verb, and there is no counterpart for the Q -> D transition.
+
+The schema already has the states: type question and status resolved both exist and are queryable. What is missing is the transition and the link. So every vault invents its own convention for it. In one vault I work in, the convention is a ''Resolved -> D-N'' line in the question body plus a hand-edited status field - written into a file header ad hoc, enforced by nobody, and not surfaced by ''decisions refs'' unless it happens to parse as a cross-reference.
+
+Suggested shape, matching the existing surface:
+
+  pql decisions resolve Q-2 --into D-23
+
+sets the question status to resolved, records the link so ''decisions refs Q-2'' and ''decisions show D-23 --with-refs'' both show it, and rejects an unknown or non-question id the way ''ticket decision'' already rejects an unknown D. The markdown stays the source of truth, so it would write the backlink line rather than only touching pql.db - same direction as ''ticket relabel --fix-prose''.
+
+Why it matters beyond tidiness: an open question that is never formally closed stays open in the index forever. This vault reports 12 open questions against 13 total, which is either accurate or an artefact of there being no cheap way to close one - and no way to tell which from the outside.
+
+Second, smaller point, docs rather than code. The bundled SKILL.md documents the D/Q/R vocabulary but not when to reach for each. Two rules would carry most of the value: a deferral is written as a Q rather than left as prose, and a D record is a home for durable documentation and not only for a choice between alternatives. The type is already named ''confirmed'' rather than ''decision'', which fits both readings - but the command, the directory and the --decision flag all say decision, so readers narrow it. A sentence in the skill fixes that; renaming anything would not be worth it.', 'pql can mint a record id but cannot close one. ''decisions claim <D|Q|R>'' is the only authoring verb, and there is no counterpart for the Q -> D transition.
+
+The schema already has the states: type question and status resolved both exist and are queryable. What is missing is the transition and the link. So every vault invents its own convention for it. In one vault I work in, the convention is a ''Resolved -> D-N'' line in the question body plus a hand-edited status field - written into a file header ad hoc, enforced by nobody, and not surfaced by ''decisions refs'' unless it happens to parse as a cross-reference.
+
+Suggested shape, matching the existing surface:
+
+  pql decisions resolve Q-2 --into D-23
+
+sets the question status to resolved, records the link so ''decisions refs Q-2'' and ''decisions show D-23 --with-refs'' both show it, and rejects an unknown or non-question id the way ''ticket decision'' already rejects an unknown D. The markdown stays the source of truth, so it would write the backlink line rather than only touching pql.db - same direction as ''ticket relabel --fix-prose''.
+
+Why it matters beyond tidiness: an open question that is never formally closed stays open in the index forever. This vault reports 12 open questions against 13 total, which is either accurate or an artefact of there being no cheap way to close one - and no way to tell which from the outside.
+
+Second, smaller point, docs rather than code. The bundled SKILL.md documents the D/Q/R vocabulary but not when to reach for each. Two rules would carry most of the value: a deferral is written as a Q rather than left as prose, and a D record is a home for durable documentation and not only for a choice between alternatives. The type is already named ''confirmed'' rather than ''decision'', which fits both readings - but the command, the directory and the --decision flag all say decision, so readers narrow it. A sentence in the skill fixes that; renaming anything would not be worth it.', NULL, '2026-08-09 09:58:29', '2026-08-09 09:58:29.474', '2026-08-09 09:58:29.474', NULL, 'f8271ad7618deac98fe33622e170427d', 2) ON CONFLICT(hash) DO NOTHING;
