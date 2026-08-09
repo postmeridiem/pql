@@ -23,6 +23,33 @@ The project is **`pql` / PQL (Project Query Language)**. The pre-rename name was
 
 Hosted at https://github.com/postmeridiem/pql. Module path: `github.com/postmeridiem/pql`.
 
+## This repo is public — keep the environment out of it
+
+Everything committed here is published and indexed, including
+`.pql/changelog/`. That last one is the trap: the changelog is committed *by
+design*, because it is how tickets travel with a clone — so **ticket prose is
+published prose**, even though typing `pql ticket new` feels like a local note.
+
+Most bug reports here come from running pql on a real machine, so describe the
+**condition, not the machine**:
+
+| Do not commit | Write instead |
+|---|---|
+| a hostname | "a host where pql was installed from the release binary" |
+| `/home/<user>/.local/bin/pql` | `~/.local/bin/pql` |
+| a private repo or service name | "a consuming repo", "the vault" |
+| an internal domain, IP or port | omit, or describe the role |
+
+The condition is also the more useful report: a maintainer needs to know the
+binary was outside `PATH`, not which box it was on.
+
+Check before pushing, not after — once published it is cached and indexed even
+if deleted:
+
+```bash
+git diff @{u}..HEAD | grep -nEi '<hostname>|/home/[a-z]+|<private-repo-names>'
+```
+
 ## Architecture invariants
 
 These are load-bearing — preserve them when implementing. Full rationale in the docs above.
