@@ -10,6 +10,13 @@ HOMEBREW_BIN := $(firstword $(wildcard /home/linuxbrew/.linuxbrew/bin /opt/homeb
 ifneq ($(HOMEBREW_BIN),)
   export PATH := $(HOMEBREW_BIN):$(PATH)
 endif
+# Same reasoning one directory over. gitleaks ships as a release tarball that
+# conventionally lands in ~/.local/bin, which a non-login shell misses for
+# exactly the reason above. Without this, ci/secrets.sh announces a skip on
+# every hook-invoked push and the scan quietly never runs.
+ifneq ($(wildcard $(HOME)/.local/bin),)
+  export PATH := $(HOME)/.local/bin:$(PATH)
+endif
 
 GO       ?= go
 BIN_DIR  ?= bin
@@ -115,6 +122,10 @@ lint: ## Full lint gate: golangci-lint + goreleaser check + govulncheck (ci/lint
 ci-test: ## Exactly what CI runs for tests: unit + race + integration (ci/test.sh).
 	./ci/test.sh
 
+.PHONY: secrets
+secrets: ## Scan the outgoing commits for secrets and PII (ci/secrets.sh).
+	./ci/secrets.sh
+
 .PHONY: vuln
 vuln: ## govulncheck alone. Also covered by `make lint`; kept for running it in isolation.
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@v1.2.0 ./...
@@ -134,7 +145,14 @@ tidy: ## go mod tidy.
 	$(GO) mod tidy
 
 .PHONY: pre-push
-pre-push: ## Local pre-push gate: full lint gate + test + test-race. Wired by .githooks/pre-push.
+pre-push: ## Local pre-push gate: secrets + full lint gate + test + test-race. Wired by .githooks/pre-push.
+	# First, and deliberately: it is the only check whose failure cannot be
+	# undone by fixing it afterwards. A failed test costs another commit; a
+	# pushed secret is cached and indexed whether or not it is deleted. The
+	# repo already asked for this in CLAUDE.md ("keep the environment out of
+	# it") as a grep to run by hand — which is how a home-directory path in
+	# the T-25 changelog entry reached the remote and stayed.
+	$(MAKE) secrets
 	$(MAKE) lint
 	$(MAKE) test
 	$(MAKE) test-race

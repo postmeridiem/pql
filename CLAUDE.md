@@ -44,11 +44,28 @@ The condition is also the more useful report: a maintainer needs to know the
 binary was outside `PATH`, not which box it was on.
 
 Check before pushing, not after — once published it is cached and indexed even
-if deleted:
+if deleted. `make secrets` does this over the outgoing range, and `make
+pre-push` runs it first, before lint and tests:
 
 ```bash
-git diff @{u}..HEAD | grep -nEi '<hostname>|/home/[a-z]+|<private-repo-names>'
+make secrets        # ci/secrets.sh — gitleaks over <upstream>..HEAD
 ```
+
+It scans the outgoing commits rather than full history, because history holds
+findings that were resolved by untracking a file instead of rewriting the past
+— `.pql/hooks/*` and the T-25 changelog entry both carry an absolute home
+directory. A gate that fails on unfixable history gets bypassed within a week.
+
+Rules beyond the gitleaks defaults live in an untracked `.gitleaks.toml`
+(see `.git/info/exclude`), because a rule naming the thing it guards cannot be
+committed to a public repo. **The defaults alone will not catch any of this**:
+verified 2026-08-09 that a Visa number, an Amex number, an IBAN, a BSN and a
+US SSN all pass a default scan untouched. The default ruleset is a secrets
+scanner — API keys, tokens, private keys — not a PII scanner.
+
+This section used to prescribe a `git diff | grep` by hand. Both leaks it was
+written to prevent got through it anyway, which is the argument for a gate
+rather than a habit.
 
 ## Architecture invariants
 
