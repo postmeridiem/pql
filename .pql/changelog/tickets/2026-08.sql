@@ -3260,3 +3260,73 @@ Suggested shape, matching what search already does elsewhere:
 One literal lowercase substring against title and description, combinable with --status and the rest. The caveat that applies to ''pql search'' applies here too and should be documented the same way: it is a substring filter, not a search engine, so a multi-word query is one literal string and an empty result is not evidence of absence.
 
 Worth considering alongside: the same absence applies to decisions. ''decisions list'' filters by type, domain and status, so ''did we already decide this?'' has the identical problem, and it is the question most likely to be asked before writing a new record.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-09 11:34:58.163', '2026-08-09 11:34:58.163', NULL, 'ac75ec5b00b23be272cd25c943a69491', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FYV6JZ16G1Q5RSAC0JW9N5V8', 'task', NULL, 'clean-house should sweep the ticket board, not just decisions/', 'clean-house sweeps decisions/ only. The name promises the house, and a user reaching for it after a heavy session expects the board swept too — ours was invoked with "several tickets are complete but still open, and nothing is in the ready lane so pql plan whatsnext returns nothing actionable", and the skill had nothing to say about any of that.
+
+WHAT THE GAP LOOKS LIKE IN PRACTICE, from a workspace vault on 2026-08-10:
+
+  - Four high-priority tickets were complete but still open, because closing them was never
+    the last step of the work that finished them.
+  - Every open ticket sat in `backlog`. Nothing was in `ready`, so `pql plan whatsnext`
+    returned "no actionable ticket" on a board of 51 open items. The planner was correct and
+    useless at the same time.
+  - Tickets referenced files deleted earlier the same session.
+
+Each of those is the ticket equivalent of a rule clean-house already implements for records. The skill''s own framing fits: mechanical findings batched behind one approval, judgment findings prompted individually, a skip ledger, promotion candidates.
+
+CANDIDATE RULES, in the existing format:
+
+  RULE-EMPTY-READY-LANE      judgment, one finding per run. `plan whatsnext` returns nothing
+                             while open tickets exist. Fix: prompt to promote N tickets to
+                             ready, or confirm the lane is deliberately empty.
+  RULE-DONE-BUT-OPEN         judgment, per ticket. A ticket whose linked decision is active
+                             and whose described artefact exists — heuristic, not certain,
+                             hence judgment. Fix: close / append a note / skip.
+  RULE-TICKET-DEAD-PATH      mechanical-ish, per ticket. A ticket body naming a file path
+                             that no longer exists. Fix: append a correction, or flag.
+  RULE-ORPHAN-EPIC           mechanical, per epic. An epic whose children are all terminal
+                             but which is itself open — pql already refuses to close an epic
+                             with open children, so the inverse is detectable and safe.
+  RULE-STALE-IN-PROGRESS     judgment. in_progress with no changelog activity for N days.
+
+The last one has a natural threshold to match RULE-STALE-OPEN-Q''s 60 days.
+
+WORTH NOTING ABOUT THE EXISTING RULES, from the same run:
+
+RULE-ANCHOR-DRIFT produced 38 findings, all false. pql''s own generated decision index writes vault-root-relative links (`governance/decisions/infrastructure.md#...`) from a README that sits inside `governance/`. The rule resolves cross-file targets relative to the source file''s directory, so every generated link reads as a missing file. Two ways out: teach the rule that a path resolving from the vault root is valid, or have pql emit file-relative links. Either way the skill currently reports 38 findings against a file pql itself generates and would overwrite.
+
+RULE-RECORD-SORT''s detection says to read the file and find `## D-N` headings. Ours are `### D-N` and separated by blank lines rather than `---`; a splitter assuming `---` sees four records in a thirteen-record file and reports a sorted no-op. The heading_level probe covers the first half of that, not the separator. Splitting on the headings themselves is separator-agnostic and needs no probe.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-10 21:35:44.905', '2026-08-10 21:35:44.905', NULL, 'dbf7d814ef6fcb8cb5c9dac0a49ed49e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FYV6JZ16G1Q5RSAC0JW9N5V8', 'task', NULL, 'clean-house should sweep the ticket board, not just decisions/', 'clean-house sweeps decisions/ only. The name promises the house, and a user reaching for it after a heavy session expects the board swept too — it was invoked downstream with "several tickets are complete but still open, and nothing is in the ready lane so pql plan whatsnext returns nothing actionable", and the skill had nothing to say about any of that.
+
+WHAT THE GAP LOOKS LIKE IN PRACTICE, observed on a real vault:
+
+  - Four high-priority tickets were complete but still open, because closing them was never
+    the last step of the work that finished them.
+  - Every open ticket sat in `backlog`. Nothing was in `ready`, so `pql plan whatsnext`
+    returned "no actionable ticket" on a board of 51 open items. The planner was correct and
+    useless at the same time.
+  - Tickets referenced files deleted earlier the same session.
+
+Each is the ticket equivalent of a rule clean-house already implements for records, and the skill''s own framing fits: mechanical findings batched behind one approval, judgment findings prompted individually, a skip ledger, promotion candidates.
+
+CANDIDATE RULES, in the existing format:
+
+  RULE-EMPTY-READY-LANE      judgment, one finding per run. `plan whatsnext` returns nothing
+                             while open tickets exist. Fix: prompt to promote N tickets to
+                             ready, or confirm the lane is deliberately empty.
+  RULE-DONE-BUT-OPEN         judgment, per ticket. A ticket whose linked decision is active
+                             and whose described artefact exists — heuristic, not certain,
+                             hence judgment. Fix: close / append a note / skip.
+  RULE-TICKET-DEAD-PATH      mechanical, per ticket. A ticket body naming a file path that no
+                             longer exists. Fix: append a correction, or flag.
+  RULE-ORPHAN-EPIC           mechanical, per epic. An epic whose children are all terminal but
+                             which is itself open. pql already refuses to close an epic with
+                             open children, so the inverse is detectable and safe.
+  RULE-STALE-IN-PROGRESS     judgment. in_progress with no changelog activity for N days,
+                             with a threshold matching RULE-STALE-OPEN-Q''s 60.
+
+TWO EXISTING RULES ALSO MISFIRED against that vault, and both are worth fixing regardless of the above.
+
+RULE-ANCHOR-DRIFT produced 38 findings, every one false. pql''s own generated decision index writes links relative to the vault root, from a README that sits below the vault root. The rule resolves cross-file targets relative to the source file''s directory, so every generated link reads as a missing file. Two ways out: teach the rule that a path resolving from the vault root is valid, or emit file-relative links. Either way the skill currently reports dozens of findings against a section pql itself generates and would overwrite.
+
+RULE-RECORD-SORT''s detection assumes `---` separators between records. That vault separates them with blank lines, so a splitter keyed on `---` saw four records in a thirteen-record file and reported a sorted no-op — silently, since the output looked ordered. Splitting on the `### <ID>` headings themselves is separator-agnostic and needs no probe; the existing heading_level probe covers only half the problem.
+', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-10 21:35:44.905', '2026-08-10 21:50:14.125', NULL, 'ece479b62e53e3cf6f0a21db84b5f8fb', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

@@ -1706,3 +1706,72 @@ sets the question status to resolved, records the link so ''decisions refs Q-2''
 Why it matters beyond tidiness: an open question that is never formally closed stays open in the index forever. This vault reports 12 open questions against 13 total, which is either accurate or an artefact of there being no cheap way to close one - and no way to tell which from the outside.
 
 Second, smaller point, docs rather than code. The bundled SKILL.md documents the D/Q/R vocabulary but not when to reach for each. Two rules would carry most of the value: a deferral is written as a Q rather than left as prose, and a D record is a home for durable documentation and not only for a choice between alternatives. The type is already named ''confirmed'' rather than ''decision'', which fits both readings - but the command, the directory and the --decision flag all say decision, so readers narrow it. A sentence in the skill fixes that; renaming anything would not be worth it.', NULL, '2026-08-09 09:58:29', '2026-08-09 09:58:29.474', '2026-08-09 09:58:29.474', NULL, 'f8271ad7618deac98fe33622e170427d', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FYV6JZ16G1Q5RSAC0JW9N5V8', 'description', 'clean-house sweeps decisions/ only. The name promises the house, and a user reaching for it after a heavy session expects the board swept too — ours was invoked with "several tickets are complete but still open, and nothing is in the ready lane so pql plan whatsnext returns nothing actionable", and the skill had nothing to say about any of that.
+
+WHAT THE GAP LOOKS LIKE IN PRACTICE, from a workspace vault on 2026-08-10:
+
+  - Four high-priority tickets were complete but still open, because closing them was never
+    the last step of the work that finished them.
+  - Every open ticket sat in `backlog`. Nothing was in `ready`, so `pql plan whatsnext`
+    returned "no actionable ticket" on a board of 51 open items. The planner was correct and
+    useless at the same time.
+  - Tickets referenced files deleted earlier the same session.
+
+Each of those is the ticket equivalent of a rule clean-house already implements for records. The skill''s own framing fits: mechanical findings batched behind one approval, judgment findings prompted individually, a skip ledger, promotion candidates.
+
+CANDIDATE RULES, in the existing format:
+
+  RULE-EMPTY-READY-LANE      judgment, one finding per run. `plan whatsnext` returns nothing
+                             while open tickets exist. Fix: prompt to promote N tickets to
+                             ready, or confirm the lane is deliberately empty.
+  RULE-DONE-BUT-OPEN         judgment, per ticket. A ticket whose linked decision is active
+                             and whose described artefact exists — heuristic, not certain,
+                             hence judgment. Fix: close / append a note / skip.
+  RULE-TICKET-DEAD-PATH      mechanical-ish, per ticket. A ticket body naming a file path
+                             that no longer exists. Fix: append a correction, or flag.
+  RULE-ORPHAN-EPIC           mechanical, per epic. An epic whose children are all terminal
+                             but which is itself open — pql already refuses to close an epic
+                             with open children, so the inverse is detectable and safe.
+  RULE-STALE-IN-PROGRESS     judgment. in_progress with no changelog activity for N days.
+
+The last one has a natural threshold to match RULE-STALE-OPEN-Q''s 60 days.
+
+WORTH NOTING ABOUT THE EXISTING RULES, from the same run:
+
+RULE-ANCHOR-DRIFT produced 38 findings, all false. pql''s own generated decision index writes vault-root-relative links (`governance/decisions/infrastructure.md#...`) from a README that sits inside `governance/`. The rule resolves cross-file targets relative to the source file''s directory, so every generated link reads as a missing file. Two ways out: teach the rule that a path resolving from the vault root is valid, or have pql emit file-relative links. Either way the skill currently reports 38 findings against a file pql itself generates and would overwrite.
+
+RULE-RECORD-SORT''s detection says to read the file and find `## D-N` headings. Ours are `### D-N` and separated by blank lines rather than `---`; a splitter assuming `---` sees four records in a thirteen-record file and reports a sorted no-op. The heading_level probe covers the first half of that, not the separator. Splitting on the headings themselves is separator-agnostic and needs no probe.', 'clean-house sweeps decisions/ only. The name promises the house, and a user reaching for it after a heavy session expects the board swept too — it was invoked downstream with "several tickets are complete but still open, and nothing is in the ready lane so pql plan whatsnext returns nothing actionable", and the skill had nothing to say about any of that.
+
+WHAT THE GAP LOOKS LIKE IN PRACTICE, observed on a real vault:
+
+  - Four high-priority tickets were complete but still open, because closing them was never
+    the last step of the work that finished them.
+  - Every open ticket sat in `backlog`. Nothing was in `ready`, so `pql plan whatsnext`
+    returned "no actionable ticket" on a board of 51 open items. The planner was correct and
+    useless at the same time.
+  - Tickets referenced files deleted earlier the same session.
+
+Each is the ticket equivalent of a rule clean-house already implements for records, and the skill''s own framing fits: mechanical findings batched behind one approval, judgment findings prompted individually, a skip ledger, promotion candidates.
+
+CANDIDATE RULES, in the existing format:
+
+  RULE-EMPTY-READY-LANE      judgment, one finding per run. `plan whatsnext` returns nothing
+                             while open tickets exist. Fix: prompt to promote N tickets to
+                             ready, or confirm the lane is deliberately empty.
+  RULE-DONE-BUT-OPEN         judgment, per ticket. A ticket whose linked decision is active
+                             and whose described artefact exists — heuristic, not certain,
+                             hence judgment. Fix: close / append a note / skip.
+  RULE-TICKET-DEAD-PATH      mechanical, per ticket. A ticket body naming a file path that no
+                             longer exists. Fix: append a correction, or flag.
+  RULE-ORPHAN-EPIC           mechanical, per epic. An epic whose children are all terminal but
+                             which is itself open. pql already refuses to close an epic with
+                             open children, so the inverse is detectable and safe.
+  RULE-STALE-IN-PROGRESS     judgment. in_progress with no changelog activity for N days,
+                             with a threshold matching RULE-STALE-OPEN-Q''s 60.
+
+TWO EXISTING RULES ALSO MISFIRED against that vault, and both are worth fixing regardless of the above.
+
+RULE-ANCHOR-DRIFT produced 38 findings, every one false. pql''s own generated decision index writes links relative to the vault root, from a README that sits below the vault root. The rule resolves cross-file targets relative to the source file''s directory, so every generated link reads as a missing file. Two ways out: teach the rule that a path resolving from the vault root is valid, or emit file-relative links. Either way the skill currently reports dozens of findings against a section pql itself generates and would overwrite.
+
+RULE-RECORD-SORT''s detection assumes `---` separators between records. That vault separates them with blank lines, so a splitter keyed on `---` saw four records in a thirteen-record file and reported a sorted no-op — silently, since the output looked ordered. Splitting on the `### <ID>` headings themselves is separator-agnostic and needs no probe; the existing heading_level probe covers only half the problem.
+', NULL, '2026-08-10 21:50:14', '2026-08-10 21:50:14.125', '2026-08-10 21:50:14.125', NULL, '2bcd9014a980db54e1845853e8712b62', 2) ON CONFLICT(hash) DO NOTHING;
