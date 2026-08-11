@@ -220,7 +220,7 @@ func pruneUninterpretableStamps(ctx context.Context, db *sql.DB) error {
 // reach. pql.db is regenerable from the committed changelog, which is what
 // makes this an acceptable answer here and *not* an acceptable answer for the
 // changelog itself.
-const schemaRecoveryHint = "delete pql.db and run `pql plan rebuild` to regenerate it from .pql/changelog/"
+const schemaRecoveryHint = "delete pql.db and run `pql plan rebuild` to regenerate it from .pql/changelog/ (rebuild auto-syncs decisions/decision_refs from markdown when it finds the table empty against a populated DQR tree; run `pql decisions sync` yourself if decisions_synced is absent from the receipt and you expected it)"
 
 // SchemaAxisStatus reports the pql.db schema axis for `pql plan upgrade`.
 type SchemaAxisStatus struct {

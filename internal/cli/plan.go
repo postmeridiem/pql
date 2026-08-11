@@ -13,9 +13,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/postmeridiem/pql/internal/cli/render"
+	"github.com/postmeridiem/pql/internal/config"
 	"github.com/postmeridiem/pql/internal/diag"
 	"github.com/postmeridiem/pql/internal/planning"
 	"github.com/postmeridiem/pql/internal/planning/changelog"
+	"github.com/postmeridiem/pql/internal/planning/parser"
 	"github.com/postmeridiem/pql/internal/planning/repo"
 )
 
@@ -411,10 +413,17 @@ under .pql/changelog/. Used by the post-checkout and post-rewrite
 hooks (D-18) because LWW-guarded incremental replay can't remove
 rows that existed on the previous branch but not the new one.
 
-Decisions and decision_refs are NOT touched — they are
-markdown-sourced (D-8) and refreshed via ` + "`pql decisions sync`" + `.
-After a branch switch that changed decisions/*.md, follow rebuild
-with that command.
+Decisions and decision_refs are markdown-sourced (D-8), not
+changelog-backed, so this command's own truncate-and-replay never
+touches them — but a database it finds already empty (recovery from
+a deleted pql.db, or a fresh clone) is not distinguishable from one
+mid-rebuild, so rebuild also checks: if decisions is empty and
+` + "`governance/*.md`" + ` (or the configured DQR root) holds records, it runs
+the equivalent of ` + "`pql decisions sync`" + ` and reports the result under
+` + "`decisions_synced`" + `. After a branch switch that only changed
+decisions/*.md content (same file set, different bodies), that
+condition is false — decisions was never empty — so follow rebuild
+with an explicit sync in that case.
 
   pql plan rebuild            # power-user / disaster recovery
   pql plan rebuild --verify   # same, plus a before/after row comparison
@@ -454,7 +463,15 @@ warning, not a failure; only rows that disappear outright exit non-zero.`,
 					return &exitError{code: diag.Software, msg: err.Error()}
 				}
 				warnTicketCollisions(res.Collisions)
-				if _, err := render.One(res, rOpts); err != nil {
+				sync, err := syncDecisionsIfEmpty(ctx, pdb.SQL(), cfg)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				out := &struct {
+					*changelog.RebuildResult
+					DecisionsSynced *repo.SyncResult `json:"decisions_synced,omitempty"`
+				}{res, sync}
+				if _, err := render.One(out, rOpts); err != nil {
 					return &exitError{code: diag.Software, msg: err.Error()}
 				}
 				return nil
@@ -466,11 +483,16 @@ warning, not a failure; only rows that disappear outright exit non-zero.`,
 			}
 			warnTicketCollisions(res.Collisions)
 			warnRebuildDivergences(report)
+			sync, err := syncDecisionsIfEmpty(ctx, pdb.SQL(), cfg)
+			if err != nil {
+				return &exitError{code: diag.Software, msg: err.Error()}
+			}
 
 			verified := &struct {
 				*changelog.RebuildResult
-				Verify *changelog.VerifyReport `json:"verify"`
-			}{res, report}
+				Verify          *changelog.VerifyReport `json:"verify"`
+				DecisionsSynced *repo.SyncResult        `json:"decisions_synced,omitempty"`
+			}{res, report, sync}
 			if _, err := render.One(verified, rOpts); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
@@ -483,6 +505,55 @@ warning, not a failure; only rows that disappear outright exit non-zero.`,
 	}
 	cmd.Flags().BoolVar(&verify, "verify", false, "compare row hashes before and after the replay and report divergences")
 	return cmd
+}
+
+// syncDecisionsIfEmpty closes the gap T-106 found: rebuild truncates and
+// replays only the changelog-backed tables (tickets, ticket_deps,
+// ticket_labels, ticket_history) by design (D-8) — decisions and
+// decision_refs are markdown-sourced and were never rebuild's job. But a
+// database rebuild finds already at zero decisions is indistinguishable
+// from one whose decisions were just destroyed by the `rm .pql/pql.db`
+// half of the documented recovery, and the two documented follow-ups
+// (`pql decisions sync`, restated here) only fire if the operator already
+// knows the gap exists. So: if decisions is empty AND the DQR tree on
+// disk holds at least one parseable record, run the sync automatically
+// and report what it did, rather than staying silent and letting `plan
+// status` report 0 as if it were an answer.
+//
+// Deliberately narrow. A rebuild after a branch switch that changed
+// decisions/*.md content without changing which decisions exist (D-1's
+// body edited, no records added or removed) leaves the decisions table
+// non-empty, so this does not fire — that case still needs an explicit
+// `pql decisions sync`, same as before this fix. Auto-syncing on every
+// rebuild regardless of table state was rejected: it would silently
+// overwrite a decisions table an operator had reason to leave alone
+// (e.g. one seeded ahead of the markdown source existing) as a side
+// effect of a command whose documented job is the changelog-backed
+// tables only.
+func syncDecisionsIfEmpty(ctx context.Context, db *sql.DB, cfg *config.Config) (*repo.SyncResult, error) {
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM decisions`).Scan(&n); err != nil {
+		return nil, fmt.Errorf("plan rebuild: count decisions: %w", err)
+	}
+	if n > 0 {
+		return nil, nil
+	}
+	dir := decisionsDir(cfg)
+	records, _, err := parser.ParseAll(dir, cfg.Vault.Path)
+	if err != nil || len(records) == 0 {
+		// No DQR tree, or nothing parseable in it — genuinely zero
+		// decisions, not a rebuild gap. Say nothing; there is nothing to
+		// recover.
+		return nil, nil
+	}
+	res, err := repo.SyncDecisions(ctx, db, dir, cfg.Vault.Path)
+	if err != nil {
+		return nil, fmt.Errorf("plan rebuild: auto decisions sync: %w", err)
+	}
+	diag.Warn("pql.plan.rebuild_decisions_synced", fmt.Sprintf(
+		"decisions table was empty against %d markdown record(s) under %s — ran `pql decisions sync` automatically (synced=%d, refs=%d, broken=%d); this rebuild's tables_cleared did not include decisions, only the changelog-backed tables",
+		len(records), dir, res.Synced, res.Refs, res.Broken))
+	return res, nil
 }
 
 // warnRebuildDivergences emits one stderr warning per row that did not survive

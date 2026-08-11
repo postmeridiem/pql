@@ -1278,6 +1278,146 @@ func TestIntegration_Rebuild_NoCollisionNoWarning(t *testing.T) {
 	}
 }
 
+// --- rebuild + decisions recovery (T-106) ----------------------------------
+
+// TestIntegration_Rebuild_RecoversDecisionsWhenEmpty reproduces the exact
+// sequence T-106 documented as THE recovery — `rm .pql/pql.db && pql plan
+// rebuild` — and asserts decisions come back rather than staying at 0 with
+// no diagnostic. Before the fix: 44 -> 0 (analogue here: 1 -> 0), exit 0,
+// no warning, tables_cleared naming five tables on an already-empty db.
+func TestIntegration_Rebuild_RecoversDecisionsWhenEmpty(t *testing.T) {
+	vault := initVaultIT(t)
+	writeFileIT(t, filepath.Join(vault, "governance", "decisions", "architecture.md"), `### D-1: Only decision
+- **Date:** 2026-08-08
+- **Decision:** One.
+`)
+	pqlIT(t, vault, "decisions", "sync")
+	pqlIT(t, vault, "ticket", "new", "task", "seed", "--id-only")
+
+	dbPath := filepath.Join(vault, ".pql", "pql.db")
+	if err := os.Remove(dbPath); err != nil {
+		t.Fatalf("rm pql.db: %v", err)
+	}
+
+	stdout, stderr, code := run(t, vault, "plan", "rebuild")
+	if code != 0 {
+		t.Fatalf("rebuild exit=%d\nstderr: %s", code, stderr)
+	}
+	if !strings.Contains(string(stderr), "pql.plan.rebuild_decisions_synced") {
+		t.Errorf("stderr missing the decisions-synced warning:\n%s", stderr)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(stdout, &res); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
+	}
+	synced, ok := res["decisions_synced"].(map[string]any)
+	if !ok {
+		t.Fatalf("result missing decisions_synced object: %s", stdout)
+	}
+	if got, want := synced["synced"], float64(1); got != want {
+		t.Errorf("decisions_synced.synced = %v, want %v", got, want)
+	}
+
+	statusOut := pqlIT(t, vault, "plan", "status")
+	var dash map[string]any
+	if err := json.Unmarshal([]byte(statusOut), &dash); err != nil {
+		t.Fatalf("invalid status JSON: %v\n%s", err, statusOut)
+	}
+	decisions := dash["decisions"].(map[string]any)
+	if got, want := decisions["total"], float64(1); got != want {
+		t.Fatalf("plan status decisions.total after rebuild = %v, want %v — the recovery lost decisions silently", got, want)
+	}
+}
+
+// TestIntegration_Rebuild_NoSyncWarningWhenDecisionsNonEmpty guards the
+// judgement call in syncDecisionsIfEmpty: a rebuild must not touch or
+// report on decisions when the table already holds rows, even though a
+// DQR tree is present. Auto-syncing unconditionally was rejected because it
+// would run a write the operator did not ask for as a side effect of a
+// command whose documented job is the changelog-backed tables only.
+func TestIntegration_Rebuild_NoSyncWarningWhenDecisionsNonEmpty(t *testing.T) {
+	vault := initVaultIT(t)
+	writeFileIT(t, filepath.Join(vault, "governance", "decisions", "architecture.md"), `### D-1: Only decision
+- **Date:** 2026-08-08
+- **Decision:** One.
+`)
+	pqlIT(t, vault, "decisions", "sync")
+	writeFileIT(t, filepath.Join(vault, ".pql", "changelog", "tickets", "2025-05.sql"),
+		ticketChangelogRow("rec-1", "Only ticket"))
+	writeFileIT(t, filepath.Join(vault, ".pql", "changelog", "ticket_idmap", "2025-05.sql"),
+		idmapChangelogRow("rec-1", "T-1"))
+
+	stdout, stderr, code := run(t, vault, "plan", "rebuild")
+	if code != 0 {
+		t.Fatalf("rebuild exit=%d\nstderr: %s", code, stderr)
+	}
+	if strings.Contains(string(stderr), "rebuild_decisions_synced") {
+		t.Errorf("non-empty decisions should not trigger an auto-sync warning:\n%s", stderr)
+	}
+	if strings.Contains(string(stdout), "decisions_synced") {
+		t.Errorf("non-empty decisions should omit decisions_synced from the receipt:\n%s", stdout)
+	}
+}
+
+// --- rebuild does not re-emit already-replayed rows (T-107) ----------------
+
+// TestIntegration_Rebuild_NextMutationEmitsOnlyNewRows reproduces T-107's
+// scenario directly against the CLI: rm pql.db, rebuild, then one mutation.
+// T-107 as filed claimed the export marker is left behind by rebuild and the
+// next mutation re-emits already-exported rows; this asserts the opposite
+// and pins it so a regression is caught.
+func TestIntegration_Rebuild_NextMutationEmitsOnlyNewRows(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "first", "--id-only")
+	pqlIT(t, vault, "ticket", "new", "task", "second", "--id-only")
+
+	dbPath := filepath.Join(vault, ".pql", "pql.db")
+	if err := os.Remove(dbPath); err != nil {
+		t.Fatalf("rm pql.db: %v", err)
+	}
+	if _, stderr, code := run(t, vault, "plan", "rebuild"); code != 0 {
+		t.Fatalf("rebuild exit=%d\nstderr: %s", code, stderr)
+	}
+
+	before := changelogLineCounts(t, vault)
+
+	pqlIT(t, vault, "ticket", "new", "task", "third", "--id-only")
+
+	after := changelogLineCounts(t, vault)
+
+	added := 0
+	for path, n := range after {
+		added += n - before[path] // before[path] is 0 for a newly created file
+	}
+	// One new ticket = one tickets row + one ticket_idmap row = 2 lines.
+	// T-107 as filed predicted re-emission of prior rows on top of that.
+	if added != 2 {
+		t.Errorf("changelog grew by %d line(s) after one post-rebuild mutation, want 2 (no re-emission of already-replayed rows)", added)
+	}
+}
+
+// changelogLineCounts maps each .sql file under .pql/changelog/ to its line
+// count, so a caller can diff before/after and assert exactly how much a
+// mutation appended.
+func changelogLineCounts(t *testing.T, vault string) map[string]int {
+	t.Helper()
+	root := filepath.Join(vault, ".pql", "changelog")
+	counts := make(map[string]int)
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".sql") {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		counts[path] = strings.Count(string(b), "\n")
+		return nil
+	})
+	return counts
+}
+
 // --- child-completeness guard + --force cascade (D-25) --------------------
 
 func TestIntegration_Status_BlocksCloseWithOpenChildren(t *testing.T) {

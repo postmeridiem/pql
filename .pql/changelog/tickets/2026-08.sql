@@ -3425,3 +3425,442 @@ DIRECTIONS, not a prescription:
   - At minimum, document that a scrub is incomplete until the database is rebuilt from the scrubbed file, and say so where the scrub-before-commit practice is described rather than only under recovery.
 
 Distinct from T-96, which is about a mutation against a populated changelog with an empty database. This is the reverse: a populated database re-deriving over an edited changelog.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-11 19:13:08.647', '2026-08-11 19:13:08.785', NULL, '3321e729d3d9147c78f7a53f6b1b56d8', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4Y5QHW0KE654MRTF869XF8', 'bug', NULL, 'The documented pql.db recovery restores only the changelog-backed half, and nothing says so', NULL, 'backlog', 'high', NULL, NULL, NULL, '2026-08-11 20:17:05.423', '2026-08-11 20:17:05.423', NULL, '2ea5b90f03ea94a72c493c40797f9fd2', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4Y5QHW0KE654MRTF869XF8', 'bug', NULL, 'The documented pql.db recovery restores only the changelog-backed half, and nothing says so', '`rm .pql/pql.db && pql plan rebuild` is prescribed as THE recovery in three places: CLAUDE.md, `schemaRecoveryHint` at internal/planning/schema_migrate.go:223, and T-105''s body. `plan rebuild` restores only the replicated tables. Decisions and decision_refs are markdown-sourced (D-8) and are not in the changelog, so the `rm` destroys them and the rebuild does not bring them back. Anyone following any of the three lands with an empty decisions index and no indication of it.
+
+VERIFIED 2026-08-11 by A/B on a byte-for-byte copy of this vault, not by reading the code:
+
+  plan rebuild alone            44 -> 44
+  rm .pql/pql.db, then rebuild  44 -> 0, exit 0, no diagnostic
+
+Reproduced in the live vault, where the count sat at 0 until a manual `decisions sync` returned {"synced":44,"refs":69,"broken":0}.
+
+TWO AGGRAVATORS, and they are why this is filed high rather than as a doc fix.
+
+The receipt actively misleads. After the `rm`, rebuild still reports `tables_cleared` naming five tables — on a database created empty milliseconds earlier. It reads as "cleared and restored everything" on a run that restored half.
+
+`plan status` then reports `decisions.total: 0` at exit 0, as an answer. Nothing on stdout or stderr observes that the markdown on disk holds 44 records the database does not. A reader has no way to tell an empty vault from a destroyed index.
+
+rebuild.go:47-51 already knows a follow-up sync is needed and frames it as "after a branch switch that changed decisions/*.md". That framing does not cover recovery-from-nothing, which is precisely the case where the loss is total rather than stale.
+
+DIRECTIONS, not a prescription:
+  (a) have `plan rebuild` detect an empty decisions table against a populated DQR tree, and either sync or warn loudly
+  (b) have `plan status` say so rather than reporting 0 as an answer
+  (c) at minimum, add `pql decisions sync` to the recovery hint in all three places — the hint is a single string constant and is the cheapest of the three
+
+The recovery as written in T-105 and T-96 is incomplete for the same reason; both should cite this once it is settled.
+
+Found during pql-survey-001. The lead triggered the loss while completing a leak scrub, which is how it surfaced — but the defect is in the documented procedure, not in that use of it.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-11 20:17:05.423', '2026-08-11 20:17:05.602', NULL, '391fcb00f781c2ea557304e80b421449', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4ZHPF771CM1RNT3NS4KBC0', 'bug', NULL, 'plan rebuild does not advance the export marker, so the next mutation re-emits', NULL, 'backlog', 'medium', NULL, NULL, NULL, '2026-08-11 20:23:05.593', '2026-08-11 20:23:05.593', NULL, 'fcc18f07093d96bcd0ba388ebebea719', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4ZHPF771CM1RNT3NS4KBC0', 'bug', NULL, 'plan rebuild does not advance the export marker, so the next mutation re-emits', 'After `plan rebuild`, the next ticket mutation re-appends rows that were already exported and already committed.
+
+OBSERVED 2026-08-11. Filing one ticket appended 52 lines across three changelog files: 30 genuinely new for that ticket, and 22 byte-identical to lines already present at HEAD, belonging to three unrelated tickets created earlier the same day.
+
+MECHANISM. `meta` holds `last_import_marker` and `last_export_marker`. A rebuild replays the changelog into the database and sets the import marker, but does not advance the export marker past the content it just imported. Every replayed row therefore has `updated_at` newer than the export marker, and the next export emits all of them again.
+
+  last_import_marker  2026-08-11 19:12:02   the rebuild
+  last_export_marker  2026-08-11 20:17:05   the next mutation, which re-emitted
+
+HARM IS NOT CORRUPTION. Every statement is `INSERT ... ON CONFLICT(record_id) DO UPDATE ... WHERE excluded.updated_at >= tickets.updated_at`, so replaying a duplicate is a no-op. Verified on a copy: rebuild over the duplicated changelog ran 640 statements cleanly and produced the correct ticket count. Nothing is lost and nothing is wrong in the database.
+
+HARM IS LEGIBILITY, and that is why this is filed rather than tolerated. A person diffing the changelog to see what a mutation did now reads 22 lines of noise around 30 lines of signal. That is exactly the condition under which a re-published value gets missed — which is T-105, observed for real, and caught that day only because someone diffed the export before staging. Growth is the lesser cost; a diff nobody trusts is the real one.
+
+DIRECTION, not a prescription: on rebuild, set the export marker to the maximum `updated_at` among replayed rows, or to the rebuild timestamp. The replayed content came FROM the changelog, so by definition it has already been exported; treating it as pending inverts that.
+
+FAMILY. Same root as T-106 — `plan rebuild` leaves the database in a state that is not quite the one it reports having restored. T-106 is the half it does not restore; this is the bookkeeping it does not carry forward. Worth fixing together, and T-105''s prescription needs correcting in the same pass.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-11 20:23:05.593', '2026-08-11 20:23:05.789', NULL, '09e5a68fa32d7bdc38f015f456bf93fe', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4FHC4YQRSRC071QNEWM64G', 'bug', NULL, 'Scrubbing a changelog file does not survive the next mutation', 'A value removed from a committed changelog file is re-published by the next ticket mutation, because pql.db still holds the original row and the write-through export (D-23) re-derives the file from it.
+
+OBSERVED 2026-08-11. A ticket_history row had been scrubbed by hand — one line edited — before the commit that introduced it. Creating an unrelated ticket months later triggered the export, which re-appended that same row: byte-identical to the committed one apart from the scrubbed line, which came back in full. Same content hash on both. It was caught in review and removed from the working tree before staging, so nothing was published, but only because someone happened to diff the export before committing it.
+
+TWO MECHANISMS COMPOUND, and either alone would be survivable.
+
+1. The export boundary appears to be inclusive. The re-appended row''s updated_at equalled last_export_marker exactly, so a row already exported was exported again. A row that has not changed since the last export has nothing new to say, and re-emitting it is what turned a stale row into a live one.
+
+2. The changelog is derived, and a scrub edits only the derivation. pql.db is the source the export reads. Editing the artefact leaves the source untouched, so the edit survives exactly until the next write — which is the least intuitive moment for it to be undone, because nothing about creating an unrelated ticket suggests it will rewrite history.
+
+WHY THIS MATTERS MORE THAN IT LOOKS. This repo''s own CLAUDE.md states that everything committed here is published and indexed, that ticket prose is published prose, and that the changelog is committed by design so tickets travel with a clone. It also documents that history already carries findings resolved by untracking a file rather than rewriting the past. So scrubbing-before-commit is an established practice here, and this makes that practice unreliable in a way its user cannot see.
+
+The pre-push gate scans the outgoing range, so it can catch a re-published value — but only for patterns its ruleset knows. A consuming repo''s name, a project path, or anything else specific to an operator''s environment is not a secret by any default ruleset, and those are precisely what the scrub-before-commit habit exists to remove.
+
+WHAT ACTUALLY WORKED, and is worth documenting either way: `rm .pql/pql.db && pql plan rebuild` rebuilt the database from the scrubbed changelog and dropped the row. The repo''s documented recovery path is also its scrub-completion path, which is not obvious from either description. Verified: the row was present before the rebuild and absent after, with no ticket lost.
+
+DIRECTIONS, not a prescription:
+  - Make the export boundary exclusive, so an unchanged row is not re-emitted. Necessary, not sufficient: it fixes recurrence, not the divergence.
+  - Treat a changelog edit as a database edit, or refuse it — the artefact and its source must not be independently editable if one regenerates the other.
+  - At minimum, document that a scrub is incomplete until the database is rebuilt from the scrubbed file, and say so where the scrub-before-commit practice is described rather than only under recovery.
+
+Distinct from T-96, which is about a mutation against a populated changelog with an empty database. This is the reverse: a populated database re-deriving over an edited changelog.
+
+CORRECTION (T-106/T-107 round, 2026-08-11). The first prescribed direction here —
+"make the export boundary exclusive" — is wrong and must not be implemented as
+written.
+
+The boundary is inclusive (`updated_at >= marker`) by design, not by oversight.
+`exporter.go:26-33` documents why: write-through (D-23) calls Export after every
+mutation, advancing the marker to "now" at second granularity. A mutation landing
+in the SAME second as the marker would be silently skipped under a strict `>` —
+which is exactly the data-loss class write-through exists to close. Making the
+boundary exclusive trades this ticket''s re-emission-of-a-stale-row problem for
+silent non-persistence of a live one. The second problem is worse: this ticket''s
+symptom is noise a diff can catch (as this one was); the exclusive-boundary
+failure mode is data that was never written and gives no signal that it is
+missing.
+
+The actual mechanism, confirmed by tracing `fileSink.appendLine` /
+`fileSink.loadSeen` (`exporter.go:108-157`): a re-scanned row that is
+byte-identical to what is already in the file is deduped and never written twice
+— dedup is by content, not by marker exclusion. This ticket''s failure case is
+narrower than "the boundary re-emits": it is specifically the scrub case, where
+the row on disk and the row in pql.db have *diverged* (the file was hand-edited,
+the database was not), so the re-scanned line is no longer byte-identical to what
+loadSeen has on record and gets written as new content. An exclusive boundary
+would not touch this at all, because the row that re-appears was never re-scanned
+by the exclusive/inclusive distinction in the failing case that matters —
+it would only stop the *harmless* re-scan-of-identical-content case T-107
+separately (and also wrongly) worried about.
+
+Second and third directions stand. "Treat a changelog edit as a database edit,
+or refuse it" is the real fix and is still undecided — out of scope for the
+T-106/T-107 round, which fixed the two rebuild-side defects (T-106: decisions
+lost on recovery; T-107: investigated and found already fixed by T-26, see that
+ticket''s closing note) without touching the export-boundary question this
+ticket raises. "Document that a scrub is incomplete until rebuilt" is now true
+by construction where it matters: `pql plan rebuild` (this ticket''s own
+documented recovery) now also restores decisions (T-106''s fix), so the rebuild
+path is a more complete scrub-completion step than it was when this ticket was
+filed, but the underlying editable-artefact-vs-source divergence this ticket
+names is unresolved and open.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-11 19:13:08.647', '2026-08-11 20:34:46.151', NULL, '7b54e580f613e38b03d1645df48c7536', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4Y5QHW0KE654MRTF869XF8', 'bug', NULL, 'The documented pql.db recovery restores only the changelog-backed half, and nothing says so', '`rm .pql/pql.db && pql plan rebuild` is prescribed as THE recovery in three places: CLAUDE.md, `schemaRecoveryHint` at internal/planning/schema_migrate.go:223, and T-105''s body. `plan rebuild` restores only the replicated tables. Decisions and decision_refs are markdown-sourced (D-8) and are not in the changelog, so the `rm` destroys them and the rebuild does not bring them back. Anyone following any of the three lands with an empty decisions index and no indication of it.
+
+VERIFIED 2026-08-11 by A/B on a byte-for-byte copy of this vault, not by reading the code:
+
+  plan rebuild alone            44 -> 44
+  rm .pql/pql.db, then rebuild  44 -> 0, exit 0, no diagnostic
+
+Reproduced in the live vault, where the count sat at 0 until a manual `decisions sync` returned {"synced":44,"refs":69,"broken":0}.
+
+TWO AGGRAVATORS, and they are why this is filed high rather than as a doc fix.
+
+The receipt actively misleads. After the `rm`, rebuild still reports `tables_cleared` naming five tables — on a database created empty milliseconds earlier. It reads as "cleared and restored everything" on a run that restored half.
+
+`plan status` then reports `decisions.total: 0` at exit 0, as an answer. Nothing on stdout or stderr observes that the markdown on disk holds 44 records the database does not. A reader has no way to tell an empty vault from a destroyed index.
+
+rebuild.go:47-51 already knows a follow-up sync is needed and frames it as "after a branch switch that changed decisions/*.md". That framing does not cover recovery-from-nothing, which is precisely the case where the loss is total rather than stale.
+
+DIRECTIONS, not a prescription:
+  (a) have `plan rebuild` detect an empty decisions table against a populated DQR tree, and either sync or warn loudly
+  (b) have `plan status` say so rather than reporting 0 as an answer
+  (c) at minimum, add `pql decisions sync` to the recovery hint in all three places — the hint is a single string constant and is the cheapest of the three
+
+The recovery as written in T-105 and T-96 is incomplete for the same reason; both should cite this once it is settled.
+
+Found during pql-survey-001. The lead triggered the loss while completing a leak scrub, which is how it surfaced — but the defect is in the documented procedure, not in that use of it.
+
+FIXED 2026-08-11. Direction (a) chosen — `plan rebuild` now detects the gap and
+syncs — combined with (c)''s cheapest half (the recovery hint corrected in all
+three places this ticket named). Direction (b) (`plan status` narrating absence)
+was not needed once (a) closes the gap at its source; revisit only if a caller
+reaches `plan status` without ever having run `plan rebuild` against an empty db.
+
+CHOICE AND WHY, since the ticket offered three directions and none was picked
+for me. (a) lives in `internal/cli/plan.go` (`syncDecisionsIfEmpty`), not inside
+`changelog.Rebuild` itself. `internal/planning/changelog` is consumer-agnostic
+core (CLAUDE.md''s architecture invariants: "must not import internal/cli") and
+has no access to `cfg.DQRDir`/the vault-relative decisions path resolution that
+lives in `internal/cli/decisions.go`''s `decisionsDir()`. Duplicating that
+resolution into the core package to make `changelog.Rebuild` self-sufficient
+would have meant two copies of a fallback (`governance/` vs legacy `decisions/`)
+that must never drift. Doing it at the CLI layer, after `changelog.Rebuild`
+returns, keeps the core package exactly as narrow as its own doc comment already
+claims ("Decisions and decision_refs are NOT touched") while still making the
+CLI verb whole. `TestRebuild_LeavesDecisionsUntouched` in
+`internal/planning/changelog/rebuild_test.go` — which predates this ticket and
+asserts exactly that narrowness at the core-package level — was left
+unmodified and still passes; the fix adds a layer on top of it rather than
+changing what it asserts.
+
+CONDITION, deliberately narrow: fires only when decisions is EMPTY against a
+non-empty DQR tree. A rebuild that finds decisions non-empty (e.g. after a
+branch switch that edited existing records'' bodies without adding or removing
+any) does not auto-sync — that case still needs an explicit `pql decisions
+sync`, unchanged from before this fix, and is now stated as such in
+CLAUDE.md:79 and the `rebuild` command''s own --help text. Considered and
+rejected: auto-syncing unconditionally on every rebuild. That would run a
+write the operator did not ask for as a side effect of a command whose
+documented job is the changelog-backed tables only, and would silently
+overwrite a decisions table an operator had a reason to leave alone.
+
+VERIFIED by A/B on a byte-for-byte copy of this vault (not the live one),
+before and after the fix, reproducing this ticket''s own repro steps exactly
+(`rm .pql/pql.db && pql plan rebuild`):
+
+  BEFORE (unmodified binary):  44 -> 0, exit 0, no diagnostic, tables_cleared
+                                names 5 tables on an already-empty db.
+  AFTER  (this fix):           44 -> 44. decisions_synced: {"synced":44,
+                                "refs":69,"broken":0} — same numbers this
+                                ticket''s own live-vault verification reported.
+                                stderr carries pql.plan.rebuild_decisions_synced
+                                naming the count and the DQR root. A second,
+                                idempotent rebuild against the now-populated
+                                table emits no warning and no decisions_synced
+                                key — confirmed the condition does not
+                                re-fire once decisions is populated.
+
+`plan status` after the fixed rebuild reports decisions.total: 44, not 0.
+
+Also verified: `tables_cleared` still lists only the five changelog-backed
+tables (unchanged) — the receipt now additionally and honestly reports the
+decisions-side recovery under its own key instead of implying it via a list
+that never named decisions in the first place.
+
+Three integration tests added in `internal/cli/integration_test.go`:
+TestIntegration_Rebuild_RecoversDecisionsWhenEmpty,
+TestIntegration_Rebuild_NoSyncWarningWhenDecisionsNonEmpty (guards the
+narrow-condition judgement call above), and one shared with T-107
+(TestIntegration_Rebuild_NextMutationEmitsOnlyNewRows). All three pass;
+full suite 503 unit + 149 integration, make pre-push green.
+
+NOT DONE: direction (b), `plan status` narrating an empty-vs-destroyed
+distinction. Closing this via (a) means (b)''s failure mode (reaching
+`plan status` with a genuinely-empty, never-rebuilt db) is no longer the
+one this ticket observed — it would need its own repro to justify, and
+none was found during this round. Left open as a possible follow-up, not
+filed as a new ticket, per the round''s scope boundary.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-11 20:17:05.423', '2026-08-11 20:35:19.346', NULL, '99744c3cfc019da6f23e10bfebd750b0', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4ZHPF771CM1RNT3NS4KBC0', 'bug', NULL, 'plan rebuild does not advance the export marker, so the next mutation re-emits', 'After `plan rebuild`, the next ticket mutation re-appends rows that were already exported and already committed.
+
+OBSERVED 2026-08-11. Filing one ticket appended 52 lines across three changelog files: 30 genuinely new for that ticket, and 22 byte-identical to lines already present at HEAD, belonging to three unrelated tickets created earlier the same day.
+
+MECHANISM. `meta` holds `last_import_marker` and `last_export_marker`. A rebuild replays the changelog into the database and sets the import marker, but does not advance the export marker past the content it just imported. Every replayed row therefore has `updated_at` newer than the export marker, and the next export emits all of them again.
+
+  last_import_marker  2026-08-11 19:12:02   the rebuild
+  last_export_marker  2026-08-11 20:17:05   the next mutation, which re-emitted
+
+HARM IS NOT CORRUPTION. Every statement is `INSERT ... ON CONFLICT(record_id) DO UPDATE ... WHERE excluded.updated_at >= tickets.updated_at`, so replaying a duplicate is a no-op. Verified on a copy: rebuild over the duplicated changelog ran 640 statements cleanly and produced the correct ticket count. Nothing is lost and nothing is wrong in the database.
+
+HARM IS LEGIBILITY, and that is why this is filed rather than tolerated. A person diffing the changelog to see what a mutation did now reads 22 lines of noise around 30 lines of signal. That is exactly the condition under which a re-published value gets missed — which is T-105, observed for real, and caught that day only because someone diffed the export before staging. Growth is the lesser cost; a diff nobody trusts is the real one.
+
+DIRECTION, not a prescription: on rebuild, set the export marker to the maximum `updated_at` among replayed rows, or to the rebuild timestamp. The replayed content came FROM the changelog, so by definition it has already been exported; treating it as pending inverts that.
+
+FAMILY. Same root as T-106 — `plan rebuild` leaves the database in a state that is not quite the one it reports having restored. T-106 is the half it does not restore; this is the bookkeeping it does not carry forward. Worth fixing together, and T-105''s prescription needs correcting in the same pass.
+
+CORRECTED, not fixed — this ticket''s mechanism does not reproduce. Traced rather
+than trusted, per the round''s brief.
+
+`internal/planning/changelog/importer.go:130-148` already advances BOTH
+last_import_marker and last_export_marker to the same wall-clock `now` at the
+end of every successful `Import` — and `Rebuild` (`rebuild.go:73`) calls
+`Import` to repopulate after truncating, so it inherits this for free. This was
+added by commit 6a718bc "advance last_export_marker after changelog replay
+(T-26)" on 2026-05-10 — three months before this ticket was filed
+(2026-08-11) — for exactly the symptom this ticket describes ("~5KB of
+unchanged-content INSERTs per no-op commit"). There is a standing unit test
+pinning it: TestImport_AdvancesExportMarker in
+internal/planning/changelog/importer_test.go.
+
+REPRODUCED THIS TICKET''S OWN STEPS AND GOT A DIFFERENT RESULT. `rm .pql/pql.db
+&& pql plan rebuild` on a byte-for-byte copy of this vault (44 decisions, full
+changelog), then one `pql ticket new`: the changelog grew by exactly 2 lines
+(one `tickets` row, one `ticket_idmap` row — what a single new ticket
+produces), zero re-emitted lines, confirmed by diffing before/after line
+counts per file. Added an integration test that pins this:
+TestIntegration_Rebuild_NextMutationEmitsOnlyNewRows in
+internal/cli/integration_test.go — reproduces this exact sequence and fails if
+a future change reintroduces re-emission.
+
+WHERE THIS TICKET''S EVIDENCE ACTUALLY CAME FROM. The "52 lines / 22
+byte-identical" observation cited here is real, but traced to
+commit 90ae3d0 ("file three proposals against the planning read surface"),
+whose own body already describes it: "That row sat exactly on
+last_export_marker, so the boundary is inclusive and the row came back."
+That is T-105''s mechanism — the inclusive export boundary re-emitting a
+row that was hand-scrubbed in the changelog file while pql.db still held the
+original — observed during an ordinary `ticket new` write-through export, not
+during or after a `plan rebuild`. No commit in this repo''s history between
+T-105''s filing (19:13:08) and T-107''s filing (20:23:05) runs `plan rebuild`
+against the live vault and stages the result; the live vault''s own
+last_import_marker (19:12:02) predates both filings, consistent with the one
+rebuild run during the T-106 investigation, and last_export_marker (20:23:05)
+matches T-107''s own filing timestamp exactly — i.e. it advanced normally
+across the T-105/T-106/T-107 filing writes that came after that rebuild, which
+is what correct behaviour looks like, not what the bug this ticket describes
+would produce.
+
+FAMILY note revised: this is not the bookkeeping half of T-106''s defect. The
+two tickets share only a filing session, not a mechanism — T-106 is real, this
+one restates T-105''s already-real mechanism under an incorrect theory (a
+rebuild-side marker bug) that a direct trace and a live reproduction both
+rule out.
+
+Closing rather than leaving open: the round''s verification bar (A/B on a
+vault copy, counts not impressions) was met and returned a clean result.
+Re-open with a fresh repro if the marker-not-advancing behavior is ever
+observed directly against a `plan rebuild` run, with the changelog diff
+attached — this correction does not rule out every path to a stale export
+marker, only the one this ticket named.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-11 20:23:05.593', '2026-08-11 20:35:42.582', NULL, '3f766b5e7cfb52c44932bdfa5dff7598', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4ZHPF771CM1RNT3NS4KBC0', 'bug', NULL, 'plan rebuild does not advance the export marker, so the next mutation re-emits', 'After `plan rebuild`, the next ticket mutation re-appends rows that were already exported and already committed.
+
+OBSERVED 2026-08-11. Filing one ticket appended 52 lines across three changelog files: 30 genuinely new for that ticket, and 22 byte-identical to lines already present at HEAD, belonging to three unrelated tickets created earlier the same day.
+
+MECHANISM. `meta` holds `last_import_marker` and `last_export_marker`. A rebuild replays the changelog into the database and sets the import marker, but does not advance the export marker past the content it just imported. Every replayed row therefore has `updated_at` newer than the export marker, and the next export emits all of them again.
+
+  last_import_marker  2026-08-11 19:12:02   the rebuild
+  last_export_marker  2026-08-11 20:17:05   the next mutation, which re-emitted
+
+HARM IS NOT CORRUPTION. Every statement is `INSERT ... ON CONFLICT(record_id) DO UPDATE ... WHERE excluded.updated_at >= tickets.updated_at`, so replaying a duplicate is a no-op. Verified on a copy: rebuild over the duplicated changelog ran 640 statements cleanly and produced the correct ticket count. Nothing is lost and nothing is wrong in the database.
+
+HARM IS LEGIBILITY, and that is why this is filed rather than tolerated. A person diffing the changelog to see what a mutation did now reads 22 lines of noise around 30 lines of signal. That is exactly the condition under which a re-published value gets missed — which is T-105, observed for real, and caught that day only because someone diffed the export before staging. Growth is the lesser cost; a diff nobody trusts is the real one.
+
+DIRECTION, not a prescription: on rebuild, set the export marker to the maximum `updated_at` among replayed rows, or to the rebuild timestamp. The replayed content came FROM the changelog, so by definition it has already been exported; treating it as pending inverts that.
+
+FAMILY. Same root as T-106 — `plan rebuild` leaves the database in a state that is not quite the one it reports having restored. T-106 is the half it does not restore; this is the bookkeeping it does not carry forward. Worth fixing together, and T-105''s prescription needs correcting in the same pass.
+
+CORRECTED, not fixed — this ticket''s mechanism does not reproduce. Traced rather
+than trusted, per the round''s brief.
+
+`internal/planning/changelog/importer.go:130-148` already advances BOTH
+last_import_marker and last_export_marker to the same wall-clock `now` at the
+end of every successful `Import` — and `Rebuild` (`rebuild.go:73`) calls
+`Import` to repopulate after truncating, so it inherits this for free. This was
+added by commit 6a718bc "advance last_export_marker after changelog replay
+(T-26)" on 2026-05-10 — three months before this ticket was filed
+(2026-08-11) — for exactly the symptom this ticket describes ("~5KB of
+unchanged-content INSERTs per no-op commit"). There is a standing unit test
+pinning it: TestImport_AdvancesExportMarker in
+internal/planning/changelog/importer_test.go.
+
+REPRODUCED THIS TICKET''S OWN STEPS AND GOT A DIFFERENT RESULT. `rm .pql/pql.db
+&& pql plan rebuild` on a byte-for-byte copy of this vault (44 decisions, full
+changelog), then one `pql ticket new`: the changelog grew by exactly 2 lines
+(one `tickets` row, one `ticket_idmap` row — what a single new ticket
+produces), zero re-emitted lines, confirmed by diffing before/after line
+counts per file. Added an integration test that pins this:
+TestIntegration_Rebuild_NextMutationEmitsOnlyNewRows in
+internal/cli/integration_test.go — reproduces this exact sequence and fails if
+a future change reintroduces re-emission.
+
+WHERE THIS TICKET''S EVIDENCE ACTUALLY CAME FROM. The "52 lines / 22
+byte-identical" observation cited here is real, but traced to
+commit 90ae3d0 ("file three proposals against the planning read surface"),
+whose own body already describes it: "That row sat exactly on
+last_export_marker, so the boundary is inclusive and the row came back."
+That is T-105''s mechanism — the inclusive export boundary re-emitting a
+row that was hand-scrubbed in the changelog file while pql.db still held the
+original — observed during an ordinary `ticket new` write-through export, not
+during or after a `plan rebuild`. No commit in this repo''s history between
+T-105''s filing (19:13:08) and T-107''s filing (20:23:05) runs `plan rebuild`
+against the live vault and stages the result; the live vault''s own
+last_import_marker (19:12:02) predates both filings, consistent with the one
+rebuild run during the T-106 investigation, and last_export_marker (20:23:05)
+matches T-107''s own filing timestamp exactly — i.e. it advanced normally
+across the T-105/T-106/T-107 filing writes that came after that rebuild, which
+is what correct behaviour looks like, not what the bug this ticket describes
+would produce.
+
+FAMILY note revised: this is not the bookkeeping half of T-106''s defect. The
+two tickets share only a filing session, not a mechanism — T-106 is real, this
+one restates T-105''s already-real mechanism under an incorrect theory (a
+rebuild-side marker bug) that a direct trace and a live reproduction both
+rule out.
+
+Closing rather than leaving open: the round''s verification bar (A/B on a
+vault copy, counts not impressions) was met and returned a clean result.
+Re-open with a fresh repro if the marker-not-advancing behavior is ever
+observed directly against a `plan rebuild` run, with the changelog diff
+attached — this correction does not rule out every path to a stale export
+marker, only the one this ticket named.', 'cancelled', 'medium', NULL, NULL, NULL, '2026-08-11 20:23:05.593', '2026-08-11 20:36:11.735', NULL, 'a6f82e8b696396c0350ff8f058422a6e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4Y5QHW0KE654MRTF869XF8', 'bug', NULL, 'The documented pql.db recovery restores only the changelog-backed half, and nothing says so', '`rm .pql/pql.db && pql plan rebuild` is prescribed as THE recovery in three places: CLAUDE.md, `schemaRecoveryHint` at internal/planning/schema_migrate.go:223, and T-105''s body. `plan rebuild` restores only the replicated tables. Decisions and decision_refs are markdown-sourced (D-8) and are not in the changelog, so the `rm` destroys them and the rebuild does not bring them back. Anyone following any of the three lands with an empty decisions index and no indication of it.
+
+VERIFIED 2026-08-11 by A/B on a byte-for-byte copy of this vault, not by reading the code:
+
+  plan rebuild alone            44 -> 44
+  rm .pql/pql.db, then rebuild  44 -> 0, exit 0, no diagnostic
+
+Reproduced in the live vault, where the count sat at 0 until a manual `decisions sync` returned {"synced":44,"refs":69,"broken":0}.
+
+TWO AGGRAVATORS, and they are why this is filed high rather than as a doc fix.
+
+The receipt actively misleads. After the `rm`, rebuild still reports `tables_cleared` naming five tables — on a database created empty milliseconds earlier. It reads as "cleared and restored everything" on a run that restored half.
+
+`plan status` then reports `decisions.total: 0` at exit 0, as an answer. Nothing on stdout or stderr observes that the markdown on disk holds 44 records the database does not. A reader has no way to tell an empty vault from a destroyed index.
+
+rebuild.go:47-51 already knows a follow-up sync is needed and frames it as "after a branch switch that changed decisions/*.md". That framing does not cover recovery-from-nothing, which is precisely the case where the loss is total rather than stale.
+
+DIRECTIONS, not a prescription:
+  (a) have `plan rebuild` detect an empty decisions table against a populated DQR tree, and either sync or warn loudly
+  (b) have `plan status` say so rather than reporting 0 as an answer
+  (c) at minimum, add `pql decisions sync` to the recovery hint in all three places — the hint is a single string constant and is the cheapest of the three
+
+The recovery as written in T-105 and T-96 is incomplete for the same reason; both should cite this once it is settled.
+
+Found during pql-survey-001. The lead triggered the loss while completing a leak scrub, which is how it surfaced — but the defect is in the documented procedure, not in that use of it.
+
+FIXED 2026-08-11. Direction (a) chosen — `plan rebuild` now detects the gap and
+syncs — combined with (c)''s cheapest half (the recovery hint corrected in all
+three places this ticket named). Direction (b) (`plan status` narrating absence)
+was not needed once (a) closes the gap at its source; revisit only if a caller
+reaches `plan status` without ever having run `plan rebuild` against an empty db.
+
+CHOICE AND WHY, since the ticket offered three directions and none was picked
+for me. (a) lives in `internal/cli/plan.go` (`syncDecisionsIfEmpty`), not inside
+`changelog.Rebuild` itself. `internal/planning/changelog` is consumer-agnostic
+core (CLAUDE.md''s architecture invariants: "must not import internal/cli") and
+has no access to `cfg.DQRDir`/the vault-relative decisions path resolution that
+lives in `internal/cli/decisions.go`''s `decisionsDir()`. Duplicating that
+resolution into the core package to make `changelog.Rebuild` self-sufficient
+would have meant two copies of a fallback (`governance/` vs legacy `decisions/`)
+that must never drift. Doing it at the CLI layer, after `changelog.Rebuild`
+returns, keeps the core package exactly as narrow as its own doc comment already
+claims ("Decisions and decision_refs are NOT touched") while still making the
+CLI verb whole. `TestRebuild_LeavesDecisionsUntouched` in
+`internal/planning/changelog/rebuild_test.go` — which predates this ticket and
+asserts exactly that narrowness at the core-package level — was left
+unmodified and still passes; the fix adds a layer on top of it rather than
+changing what it asserts.
+
+CONDITION, deliberately narrow: fires only when decisions is EMPTY against a
+non-empty DQR tree. A rebuild that finds decisions non-empty (e.g. after a
+branch switch that edited existing records'' bodies without adding or removing
+any) does not auto-sync — that case still needs an explicit `pql decisions
+sync`, unchanged from before this fix, and is now stated as such in
+CLAUDE.md:79 and the `rebuild` command''s own --help text. Considered and
+rejected: auto-syncing unconditionally on every rebuild. That would run a
+write the operator did not ask for as a side effect of a command whose
+documented job is the changelog-backed tables only, and would silently
+overwrite a decisions table an operator had a reason to leave alone.
+
+VERIFIED by A/B on a byte-for-byte copy of this vault (not the live one),
+before and after the fix, reproducing this ticket''s own repro steps exactly
+(`rm .pql/pql.db && pql plan rebuild`):
+
+  BEFORE (unmodified binary):  44 -> 0, exit 0, no diagnostic, tables_cleared
+                                names 5 tables on an already-empty db.
+  AFTER  (this fix):           44 -> 44. decisions_synced: {"synced":44,
+                                "refs":69,"broken":0} — same numbers this
+                                ticket''s own live-vault verification reported.
+                                stderr carries pql.plan.rebuild_decisions_synced
+                                naming the count and the DQR root. A second,
+                                idempotent rebuild against the now-populated
+                                table emits no warning and no decisions_synced
+                                key — confirmed the condition does not
+                                re-fire once decisions is populated.
+
+`plan status` after the fixed rebuild reports decisions.total: 44, not 0.
+
+Also verified: `tables_cleared` still lists only the five changelog-backed
+tables (unchanged) — the receipt now additionally and honestly reports the
+decisions-side recovery under its own key instead of implying it via a list
+that never named decisions in the first place.
+
+Three integration tests added in `internal/cli/integration_test.go`:
+TestIntegration_Rebuild_RecoversDecisionsWhenEmpty,
+TestIntegration_Rebuild_NoSyncWarningWhenDecisionsNonEmpty (guards the
+narrow-condition judgement call above), and one shared with T-107
+(TestIntegration_Rebuild_NextMutationEmitsOnlyNewRows). All three pass;
+full suite 503 unit + 149 integration, make pre-push green.
+
+NOT DONE: direction (b), `plan status` narrating an empty-vs-destroyed
+distinction. Closing this via (a) means (b)''s failure mode (reaching
+`plan status` with a genuinely-empty, never-rebuilt db) is no longer the
+one this ticket observed — it would need its own repro to justify, and
+none was found during this round. Left open as a possible follow-up, not
+filed as a new ticket, per the round''s scope boundary.', 'done', 'high', NULL, NULL, NULL, '2026-08-11 20:17:05.423', '2026-08-11 20:36:11.898', NULL, 'c72931004a754075327e80bb5747d2fa', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
