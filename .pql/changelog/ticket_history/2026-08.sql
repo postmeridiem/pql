@@ -1844,3 +1844,25 @@ It may be a flag on `whatsnext` rather than a verb. The difference is not cosmet
 And it is a deliberately fat payload in a repo that spent 2.1.0 making payloads thinner, down to a ranked verb spending sixteen bytes of provenance per byte of answer. That is not a contradiction: a briefing''s reader is exactly the caller who *did* ask for the provenance. But it does fix the direction — the thin shape stays the default and the briefing is the opt-in, never the reverse.
 
 Re-evaluate after the workflow has actually been run several times. If the friction turns out to sit somewhere else — if a cold worker''s real problem is knowing which vault to look in rather than what is inside it — then this is the wrong primitive and the right move is to close it rather than adapt it.', NULL, '2026-08-11 19:02:35', '2026-08-11 19:02:35.147', '2026-08-11 19:02:35.147', NULL, 'd5694e92e25b52225a685b466fb28a66', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4FHC4YQRSRC071QNEWM64G', 'description', NULL, 'A value removed from a committed changelog file is re-published by the next ticket mutation, because pql.db still holds the original row and the write-through export (D-23) re-derives the file from it.
+
+OBSERVED 2026-08-11. A ticket_history row had been scrubbed by hand — one line edited — before the commit that introduced it. Creating an unrelated ticket months later triggered the export, which re-appended that same row: byte-identical to the committed one apart from the scrubbed line, which came back in full. Same content hash on both. It was caught in review and removed from the working tree before staging, so nothing was published, but only because someone happened to diff the export before committing it.
+
+TWO MECHANISMS COMPOUND, and either alone would be survivable.
+
+1. The export boundary appears to be inclusive. The re-appended row''s updated_at equalled last_export_marker exactly, so a row already exported was exported again. A row that has not changed since the last export has nothing new to say, and re-emitting it is what turned a stale row into a live one.
+
+2. The changelog is derived, and a scrub edits only the derivation. pql.db is the source the export reads. Editing the artefact leaves the source untouched, so the edit survives exactly until the next write — which is the least intuitive moment for it to be undone, because nothing about creating an unrelated ticket suggests it will rewrite history.
+
+WHY THIS MATTERS MORE THAN IT LOOKS. This repo''s own CLAUDE.md states that everything committed here is published and indexed, that ticket prose is published prose, and that the changelog is committed by design so tickets travel with a clone. It also documents that history already carries findings resolved by untracking a file rather than rewriting the past. So scrubbing-before-commit is an established practice here, and this makes that practice unreliable in a way its user cannot see.
+
+The pre-push gate scans the outgoing range, so it can catch a re-published value — but only for patterns its ruleset knows. A consuming repo''s name, a project path, or anything else specific to an operator''s environment is not a secret by any default ruleset, and those are precisely what the scrub-before-commit habit exists to remove.
+
+WHAT ACTUALLY WORKED, and is worth documenting either way: `rm .pql/pql.db && pql plan rebuild` rebuilt the database from the scrubbed changelog and dropped the row. The repo''s documented recovery path is also its scrub-completion path, which is not obvious from either description. Verified: the row was present before the rebuild and absent after, with no ticket lost.
+
+DIRECTIONS, not a prescription:
+  - Make the export boundary exclusive, so an unchanged row is not re-emitted. Necessary, not sufficient: it fixes recurrence, not the divergence.
+  - Treat a changelog edit as a database edit, or refuse it — the artefact and its source must not be independently editable if one regenerates the other.
+  - At minimum, document that a scrub is incomplete until the database is rebuilt from the scrubbed file, and say so where the scrub-before-commit practice is described rather than only under recovery.
+
+Distinct from T-96, which is about a mutation against a populated changelog with an empty database. This is the reverse: a populated database re-deriving over an edited changelog.', NULL, '2026-08-11 19:13:08', '2026-08-11 19:13:08.785', '2026-08-11 19:13:08.785', NULL, 'e4daa36caa5c89f3ed652eb5e2a2aa21', 2) ON CONFLICT(hash) DO NOTHING;
