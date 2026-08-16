@@ -3929,3 +3929,54 @@ TWO DECISIONS, and the second is the one that makes this more than a one-line Ma
 **What happens to doc comments that must contain those digraphs?** This matters because a lexer and a markdown extractor have a legitimate need to write them. gofmt does not convert inside an indented block within a doc comment, so that form survives — but it changes how the comment reads, and whether it is worth it differs per comment.
 
 Adding the check without settling the second leaves the repo unable to state its own escaping rules in a doc comment, and a normalizing commit made in ignorance of it would bake the false statements in permanently rather than fixing them. Order matters here: decide the comment form, correct the three, then gate.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-16 11:42:52.797', '2026-08-16 11:42:52.797', NULL, '2d7902ed97b87600079a2019d48f80d3', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G0PTE1PB7FT6FMJ0GWXSJ924', 'bug', NULL, 'The pre-commit hook pql init writes exports whatever vault the environment names', '`pql init` writes a pre-commit hook that invokes `pql plan export --stage` with no
+`--vault`, so in any environment where `PQL_VAULT` names a different vault than
+the repo being committed in, the hook exports the wrong one.
+
+    ''/abs/path/to/pql'' plan export --stage 2>/dev/null || true
+    git add -A .pql/changelog 2>/dev/null || true
+
+Committing in the repo therefore rewrites the changelog of an UNRELATED vault,
+and leaves modified files in that other repository attributable to a commit
+somebody made somewhere else. Observed across seven repos in one workspace, every
+one carrying the same generated hook and not one passing a vault.
+
+WHY IT IS INVISIBLE, which is the part that matters more than the misdirection.
+Three properties compound:
+
+  - `2>/dev/null` discards the diagnostic, so a wrong-vault export and a correct
+    one produce identical silence.
+  - `|| true` guarantees exit 0, so the hook cannot fail the commit it is part
+    of even when it did nothing it intended.
+  - `git add -A .pql/changelog` stages a path that, in the wrong-vault case,
+    holds nothing the export touched — so the commit looks clean and the churn
+    surfaces in a repository nobody was looking at.
+
+The result is a write that succeeds at being quiet rather than at being right.
+It was found only because an operator committing in one repo happened to check
+the status of another and reported it rather than tidying it away.
+
+The content itself is benign — an idempotent INSERT ... ON CONFLICT DO UPDATE
+re-export of records already present in the target vault, no deletions. Nothing
+was corrupted. The defect is that the write happens at all, without attribution
+and without any way to notice.
+
+SUGGESTED SHAPE, though the maintainer knows the constraints better:
+
+  - bake the vault into the hook at `pql init` time, the same way the absolute
+    binary path already is. The generator knows which vault it is initialising;
+    the hook should not have to infer it from an environment that may name
+    another.
+  - drop `2>/dev/null`, or route it somewhere a reader can find. A hook that
+    cannot report a failure is indistinguishable from one that had none.
+  - `|| true` is defensible on its own — a changelog export should probably not
+    block a commit — but combined with a silenced stderr it removes the last
+    signal. Keep one or the other.
+  - `git add -A` on a path is narrower than the bare form and still surprising
+    in a hook. An explicit list of the files the export wrote would say what it
+    means.
+
+A NOTE ON SCOPE. This is filed because it is an upstream defect an unrelated
+project actually hit, not as backlog grooming. Any environment that pins a vault
+by environment variable and works across more than one repository will hit it the
+same way, and the pinning is a documented pattern rather than an unusual setup.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-16 16:31:15.378', '2026-08-16 16:31:15.378', NULL, '8ad2510e8c8523f6c35efa5eb83f16c7', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
