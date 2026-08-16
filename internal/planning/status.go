@@ -66,9 +66,10 @@ func NewStatusSet(in []StatusDef) StatusSet {
 // DefaultStatusSet is the built-in vocabulary used when a vault does not
 // configure ticket_statuses. It reproduces pql's historical behaviour.
 //
-//nolint:goconst // the default status names are a one-off literal table here;
 // hoisting them to constants would obscure the vocabulary, matching the
 // inline-schema-enum convention in internal/planning/repo.
+//
+//nolint:goconst // the default status names are a one-off literal table here;
 func DefaultStatusSet() StatusSet {
 	return NewStatusSet([]StatusDef{
 		{Name: "backlog", Class: StatusClassInitial, IsDefault: true},

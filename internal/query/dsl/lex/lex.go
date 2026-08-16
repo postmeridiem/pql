@@ -187,8 +187,12 @@ func init() {
 
 // Token is one lexed unit. Value is the raw lexeme (case preserved for
 // identifiers and string contents); for STRING the surrounding quotes
-// are stripped and `''` un-escaped to `'`. Line and Col are 1-based and
-// point at the first character of the token.
+// are stripped and the doubled-quote escape
+//
+//	''
+//
+// is un-escaped to a single '. Line and Col are 1-based and point at
+// the first character of the token.
 type Token struct {
 	Kind  Kind
 	Value string

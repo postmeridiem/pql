@@ -14,15 +14,15 @@ import (
 )
 
 var (
-	headingRe     = regexp.MustCompile(`^###\s+([DQR]-\d+):\s+(.+)$`)
-	dateRe        = regexp.MustCompile(`^\s*-\s+\*\*(?:Date|Rejected):\*\*\s+(\d{4}-\d{2}-\d{2})`)
-	statusRe      = regexp.MustCompile(`^\s*-\s+\*\*Status:\*\*\s+(.+)`)
-	supersedesRe  = regexp.MustCompile(`(?i)^\s*-\s+\*\*Supersedes:\*\*`)
-	supersededRe  = regexp.MustCompile(`(?i)^\s*-\s+\*\*Superseded\s+by:\*\*`)
-	resolvesRe    = regexp.MustCompile(`(?i)^\s*-\s+\*\*Resolves:\*\*`)
-	dependsRe     = regexp.MustCompile(`(?i)^\s*-\s+\*\*Depends\s+on:\*\*`)
-	amendsRe      = regexp.MustCompile(`(?i)^\s*\*\*Amendment\s*\(`)
-	refIDRe       = regexp.MustCompile(`\b[DQRT]-\d+\b`)
+	headingRe    = regexp.MustCompile(`^###\s+([DQR]-\d+):\s+(.+)$`)
+	dateRe       = regexp.MustCompile(`^\s*-\s+\*\*(?:Date|Rejected):\*\*\s+(\d{4}-\d{2}-\d{2})`)
+	statusRe     = regexp.MustCompile(`^\s*-\s+\*\*Status:\*\*\s+(.+)`)
+	supersedesRe = regexp.MustCompile(`(?i)^\s*-\s+\*\*Supersedes:\*\*`)
+	supersededRe = regexp.MustCompile(`(?i)^\s*-\s+\*\*Superseded\s+by:\*\*`)
+	resolvesRe   = regexp.MustCompile(`(?i)^\s*-\s+\*\*Resolves:\*\*`)
+	dependsRe    = regexp.MustCompile(`(?i)^\s*-\s+\*\*Depends\s+on:\*\*`)
+	amendsRe     = regexp.MustCompile(`(?i)^\s*\*\*Amendment\s*\(`)
+	refIDRe      = regexp.MustCompile(`\b[DQRT]-\d+\b`)
 )
 
 // Canonical record-type values. Repeated across inferStatus,

@@ -21,9 +21,9 @@ import (
 
 // doctorReport is the JSON shape `pql doctor` emits on stdout.
 type doctorReport struct {
-	Vault   doctorVault       `json:"vault"`
-	Config  doctorConfig      `json:"config"`
-	DB      doctorDB          `json:"db"`
+	Vault  doctorVault  `json:"vault"`
+	Config doctorConfig `json:"config"`
+	DB     doctorDB     `json:"db"`
 	// Index is absent, not null, when there is no DB to count rows in —
 	// the omitted-not-null rule the output contract states (T-75). doctor
 	// is what a caller runs when something is already wrong, so it is the
@@ -73,11 +73,11 @@ type doctorIndex struct {
 // report. Reports both scopes so drift between user-level and
 // project-level installs stays visible.
 type doctorSkill struct {
-	Name    string             `json:"name"`
-	User    *doctorSkillScope  `json:"user,omitempty"`
-	Project *doctorSkillScope  `json:"project,omitempty"`
-	EmbeddedHash    string `json:"embedded_hash"`
-	EmbeddedVersion string `json:"embedded_version"`
+	Name            string            `json:"name"`
+	User            *doctorSkillScope `json:"user,omitempty"`
+	Project         *doctorSkillScope `json:"project,omitempty"`
+	EmbeddedHash    string            `json:"embedded_hash"`
+	EmbeddedVersion string            `json:"embedded_version"`
 }
 
 type doctorSkillScope struct {

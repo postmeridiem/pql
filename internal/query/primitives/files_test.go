@@ -57,8 +57,8 @@ func TestFiles_NameDerivedFromPath(t *testing.T) {
 		t.Fatalf("Files: %v", err)
 	}
 	wantNames := map[string]string{
-		"README.md":                  "README",
-		"members/vaasa/persona.md":   "persona",
+		"README.md":                "README",
+		"members/vaasa/persona.md": "persona",
 	}
 	for _, f := range got {
 		if want, ok := wantNames[f.Path]; ok && f.Name != want {

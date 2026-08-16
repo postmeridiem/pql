@@ -30,20 +30,20 @@ import (
 // initResult is the JSON shape `pql init` emits on stdout. Each sub-stat
 // describes one of the project-state fixers init runs through.
 type initResult struct {
-	Directory         string             `json:"directory"`
-	Config            initConfigStat     `json:"config"`
-	Gitignore         initGitignore      `json:"gitignore"`
-	Skills            []initSkillStat    `json:"skills"`
-	Permissions       initPermissions    `json:"permissions"`
-	DQR               initDQRStruct      `json:"dqr"`
-	PlanImport        initPlanImport     `json:"plan_import"`
-	DecisionsSync     initDecisionsSync  `json:"decisions_sync"`
-	Changelog         initChangelogStat  `json:"changelog"`
-	GitAttributes     initGitAttribute   `json:"gitattributes"`
-	Hook              initHookStat       `json:"hook"`
-	PostMergeHook     initHookStat       `json:"post_merge_hook"`
-	PostCheckoutHook  initHookStat       `json:"post_checkout_hook"`
-	PostRewriteHook   initHookStat       `json:"post_rewrite_hook"`
+	Directory        string            `json:"directory"`
+	Config           initConfigStat    `json:"config"`
+	Gitignore        initGitignore     `json:"gitignore"`
+	Skills           []initSkillStat   `json:"skills"`
+	Permissions      initPermissions   `json:"permissions"`
+	DQR              initDQRStruct     `json:"dqr"`
+	PlanImport       initPlanImport    `json:"plan_import"`
+	DecisionsSync    initDecisionsSync `json:"decisions_sync"`
+	Changelog        initChangelogStat `json:"changelog"`
+	GitAttributes    initGitAttribute  `json:"gitattributes"`
+	Hook             initHookStat      `json:"hook"`
+	PostMergeHook    initHookStat      `json:"post_merge_hook"`
+	PostCheckoutHook initHookStat      `json:"post_checkout_hook"`
+	PostRewriteHook  initHookStat      `json:"post_rewrite_hook"`
 }
 
 // initDecisionsSync mirrors repo.SyncResult for the init JSON
@@ -70,10 +70,10 @@ type initGitAttribute struct {
 }
 
 type initHookStat struct {
-	Path     string `json:"path,omitempty"`
-	Installed bool  `json:"installed"`
-	Existed   bool  `json:"existed"`
-	Skipped  string `json:"skipped,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Installed bool   `json:"installed"`
+	Existed   bool   `json:"existed"`
+	Skipped   string `json:"skipped,omitempty"`
 }
 
 type initPlanImport struct {
@@ -355,7 +355,7 @@ func ensureGitignoreEntry(path, entry string) (initGitignore, error) {
 }
 
 const (
-	pqlDirIgnore = ".pql/"
+	pqlDirIgnore  = ".pql/"
 	pqlGlobIgnore = ".pql/*"
 )
 
@@ -543,7 +543,10 @@ echo "pql: rebuilding planning database after rewrite..." >&2
 
 // shellQuote single-quotes a path for safe inclusion in a /bin/sh
 // script. Single quotes inside the path are escaped via the standard
-// `'\''` sequence.
+//
+//	'\''
+//
+// sequence.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

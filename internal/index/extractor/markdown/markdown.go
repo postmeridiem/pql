@@ -107,9 +107,9 @@ func Extract(raw []byte, opts ExtractOpts) (Result, error) {
 // Recognises both ``` and ~~~ fences with optional infostrings. The opening
 // marker's character and length must match exactly to close (per CommonMark).
 type fenceState struct {
-	open    bool
-	marker  byte // '`' or '~'
-	minRun  int  // length of the opening fence; closer must match or exceed
+	open   bool
+	marker byte // '`' or '~'
+	minRun int  // length of the opening fence; closer must match or exceed
 }
 
 // step advances the state for a single body line. Returns whether the line
@@ -138,7 +138,7 @@ func (f *fenceState) step(line string) (insideFence bool) {
 }
 
 // parseFenceMarker reports whether trimmed begins with a CommonMark code
-// fence (≥3 of the same char `\`` or `~`).
+// fence (≥3 of the same char, backtick or `~`).
 func parseFenceMarker(trimmed string) (marker byte, run int, ok bool) {
 	if len(trimmed) < 3 {
 		return 0, 0, false

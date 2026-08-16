@@ -21,9 +21,9 @@ import (
 
 // File is the top-level YAML shape of an Obsidian .base file.
 type File struct {
-	Filters    *FilterGroup          `yaml:"filters"`
-	Properties map[string]Property   `yaml:"properties"`
-	Views      []View                `yaml:"views"`
+	Filters    *FilterGroup        `yaml:"filters"`
+	Properties map[string]Property `yaml:"properties"`
+	Views      []View              `yaml:"views"`
 }
 
 // Property is the metadata for one column.
@@ -146,7 +146,7 @@ func fieldToRef(name string) parse.Expr {
 // either a file-level column or a property with a "note." prefix.
 func colToRef(col string, props map[string]Property) parse.Expr {
 	if strings.HasPrefix(col, "file.") {
-		return &parse.Ref{Parts: []parse.RefPart{{Name: col[len("file."):]}} }
+		return &parse.Ref{Parts: []parse.RefPart{{Name: col[len("file."):]}}}
 	}
 	if _, ok := props["note."+col]; ok {
 		return &parse.Ref{Parts: []parse.RefPart{{Name: "fm"}, {Name: col}}}
@@ -258,7 +258,7 @@ func parseRef(s string) parse.Expr {
 	case strings.HasPrefix(s, "note."):
 		return fieldToRef(s[len("note."):])
 	case strings.HasPrefix(s, "file."):
-		return &parse.Ref{Parts: []parse.RefPart{{Name: s[len("file."):]}} }
+		return &parse.Ref{Parts: []parse.RefPart{{Name: s[len("file."):]}}}
 	default:
 		return fieldToRef(s)
 	}

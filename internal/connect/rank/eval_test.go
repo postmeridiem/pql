@@ -20,12 +20,12 @@ import (
 )
 
 type goldenCase struct {
-	Query       string   `json:"query"`
-	Intent      string   `json:"intent"`
-	TargetPath  string   `json:"target_path"`
+	Query        string   `json:"query"`
+	Intent       string   `json:"intent"`
+	TargetPath   string   `json:"target_path"`
 	ExpectedTopK []string `json:"expected_top_k"`
-	K           int      `json:"k"`
-	Notes       string   `json:"notes"`
+	K            int      `json:"k"`
+	Notes        string   `json:"notes"`
 }
 
 func TestEval_Council(t *testing.T) {

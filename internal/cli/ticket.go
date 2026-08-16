@@ -147,6 +147,7 @@ func collectDecisionRefs(t *repo.Ticket, ancestors []repo.Ticket) []string {
 //
 //	"T-001"             → ["T-001"]
 //	"T-001,T-002,T-003" → ["T-001", "T-002", "T-003"]
+//
 // isAbsenceSpelling reports whether a filter value is one of the words a
 // caller reaches for when they want the negative of a filter. None of them
 // is a supported value, and all of them would otherwise match nothing and

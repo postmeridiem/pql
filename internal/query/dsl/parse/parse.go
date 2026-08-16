@@ -47,8 +47,8 @@ type parser struct {
 	pos    int
 }
 
-func (p *parser) peek() lex.Token              { return p.tokens[p.pos] }
-func (p *parser) peekAt(offset int) lex.Token  { return p.tokens[p.pos+offset] }
+func (p *parser) peek() lex.Token             { return p.tokens[p.pos] }
+func (p *parser) peekAt(offset int) lex.Token { return p.tokens[p.pos+offset] }
 func (p *parser) advance() lex.Token {
 	t := p.tokens[p.pos]
 	if t.Kind != lex.EOF {

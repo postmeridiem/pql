@@ -202,8 +202,8 @@ func GetDecision(ctx context.Context, db *sql.DB, id string) (*Decision, error) 
 // DecisionDetail is a Decision with its full markdown body.
 type DecisionDetail struct {
 	Decision
-	Body     string            `json:"body"`
-	Headings []parser.Heading  `json:"headings,omitempty"`
+	Body     string           `json:"body"`
+	Headings []parser.Heading `json:"headings,omitempty"`
 }
 
 // ReadDecision returns a decision with its full markdown body

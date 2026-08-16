@@ -7,9 +7,9 @@
 // root: <root>/<skill-name>/. The subdirectory holds the SKILL.md,
 // any reference files (references/*), and a small lock file:
 //
-//   SKILL.md            — primary skill content
-//   references/...      — optional bundled reference docs
-//   .pql-install.json   — lock file recording version + bundle hash
+//	SKILL.md            — primary skill content
+//	references/...      — optional bundled reference docs
+//	.pql-install.json   — lock file recording version + bundle hash
 //
 // The lock pairs with the on-disk hash to distinguish pristine-but-
 // stale installs from hand-edited ones — the only reason the State
@@ -406,7 +406,6 @@ func (e *ErrRefusedOverwrite) Error() string {
 	return fmt.Sprintf("skill %q: refusing to overwrite (%s): %s; pass force=true to overwrite",
 		e.Name, e.State, e.Reason)
 }
-
 
 // hashBundle hashes the bundle as a deterministic concatenation of
 // sorted "path\x00content\x00" pairs. Stable across Go versions; not

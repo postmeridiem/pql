@@ -10,9 +10,9 @@ import (
 
 // Context carries the query parameters signals need to compute scores.
 type Context struct {
-	Query      string   // the user's query text or intent input
-	TargetPath string   // for path-centric intents (e.g. "related <path>")
-	DB         *sql.DB  // the index.db connection
+	Query      string  // the user's query text or intent input
+	TargetPath string  // for path-centric intents (e.g. "related <path>")
+	DB         *sql.DB // the index.db connection
 	Ctx        context.Context
 }
 

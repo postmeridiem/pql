@@ -49,7 +49,7 @@ func TestWalk_BuiltinExcludeIsOnlyGit(t *testing.T) {
 	mkfile(t, vault, "keep.md", "# keep")
 	mkfile(t, vault, ".git/HEAD", "ref: refs/heads/main")
 	mkfile(t, vault, ".git/notes.md", "should be skipped: inside .git/")
-	mkfile(t, vault, "data.sqlite", "binary")    // not .md → skipped by extension filter
+	mkfile(t, vault, "data.sqlite", "binary")     // not .md → skipped by extension filter
 	mkfile(t, vault, "data.sqlite-wal", "binary") // ditto
 
 	got, err := Walk(WalkOpts{VaultPath: vault})

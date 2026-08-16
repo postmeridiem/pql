@@ -650,10 +650,10 @@ func buildSampleTree(ctx context.Context, t *testing.T, db *sql.DB) {
 		}
 		return id
 	}
-	mk("epic", "root", "")     // T-1
-	mk("story", "branch", "T-1") // T-2
-	mk("task", "leaf-b", "T-1")  // T-3
-	mk("task", "mid", "T-2")     // T-4
+	mk("epic", "root", "")         // T-1
+	mk("story", "branch", "T-1")   // T-2
+	mk("task", "leaf-b", "T-1")    // T-3
+	mk("task", "mid", "T-2")       // T-4
 	mk("task", "leaf-deep", "T-4") // T-5
 }
 

@@ -20,12 +20,12 @@ func DefaultSignals() []signal.Signal {
 
 // BundleOpts configures an enrichment pass.
 type BundleOpts struct {
-	Query          string
-	TargetPath     string
-	Candidates     []string
-	Weights        WeightProfile
-	Limit          int
-	NeighborhoodN  int
+	Query         string
+	TargetPath    string
+	Candidates    []string
+	Weights       WeightProfile
+	Limit         int
+	NeighborhoodN int
 }
 
 // Bundle runs the full enrichment pipeline: score → rank → neighborhood.
