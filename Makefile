@@ -17,6 +17,32 @@ endif
 ifneq ($(wildcard $(HOME)/.local/bin),)
   export PATH := $(HOME)/.local/bin:$(PATH)
 endif
+# And the third directory, which is where the tools this Makefile needs most
+# actually land on a machine without Homebrew. `go install` puts binaries in
+# GOBIN, defaulting to ~/go/bin, so a golangci-lint or goreleaser installed the
+# way the Go toolchain itself recommends is invisible to exactly the callers the
+# block above was written for. The comment there says the hook failed on a
+# missing golangci-lint; on such a machine it still did, because only the
+# Homebrew and ~/.local/bin cases were covered.
+#
+# GOBIN wins where it is set, since `go install` honours it over the default.
+GO_BIN_DIR := $(if $(shell go env GOBIN 2>/dev/null),$(shell go env GOBIN),$(HOME)/go/bin)
+ifneq ($(wildcard $(GO_BIN_DIR)),)
+  export PATH := $(GO_BIN_DIR):$(PATH)
+endif
+# The toolchain itself, for the same reason once more. /usr/local/go/bin is
+# where go.dev/doc/install tells you to put it, and it reaches PATH through
+# /etc/profile.d — which is the exact file a non-login shell skips. Resolving
+# golangci-lint without resolving Go only moves the failure: the linter starts
+# and then dies on `exec: "go": executable file not found`, four lines of
+# internal error for one missing directory.
+#
+# Only the documented location. A toolchain installed somewhere else is a local
+# choice, and this file is published — see CLAUDE.md, "keep the environment out
+# of it". Where Go lives elsewhere, export it in the calling shell.
+ifneq ($(wildcard /usr/local/go/bin),)
+  export PATH := /usr/local/go/bin:$(PATH)
+endif
 
 GO       ?= go
 BIN_DIR  ?= bin
