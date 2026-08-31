@@ -2827,3 +2827,218 @@ RELATED
 T-99  - the resolve verb this extends.
 D-29  - an argument that names a thing is validated; both ids here are names,
         which is why the refusal is correct even though the rule is too narrow.', NULL, '2026-08-31 17:57:16', '2026-08-31 17:57:16.178', '2026-08-31 17:57:16.178', NULL, 'bdc47d9280b9dfc3ca3d320c0d528527', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5HXSMTZDG68R0WRV0V4S25M', 'title', 'decisions resolve only accepts a D, so a question absorbed by another question cannot be closed', 'Rename decisions resolve to close, widen its targets, and cover decision supersession', NULL, '2026-08-31 18:10:45', '2026-08-31 18:10:45.010', '2026-08-31 18:10:45.010', NULL, '97a2c6a452de0fc310656be4e891fce2', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5HXSMTZDG68R0WRV0V4S25M', 'description', '`pql decisions resolve <Q-N> --into <D-N>` (T-99) requires the target to be a
+confirmed record. That covers the common case and misses the one this vault
+actually has.
+
+EVIDENCE
+
+Surveying the twelve open questions right after T-99 shipped, exactly one had a
+stated disposition, and it was the shape the new verb cannot express. Q-9''s body
+records:
+
+  **Converged direction:** the issue-tracker-as-referee variant is developed in
+  [Q-13](#q-13-githubgitea-issue-backend-for-id-claiming-and-one-way-mirror).
+
+Q-9 is not answered by a decision. It was absorbed by a more developed question.
+The verb refuses that with "Q-13 is a question record, not a confirmed", which
+is a correct message for a rule that is too narrow.
+
+So the survey found eleven genuinely-open questions and one closable one, and
+the closable one is the only one the tooling cannot touch.
+
+THE DATA MODEL ALREADY ALLOWS IT
+
+This is a gap in the verb, not in the schema. inferStatus checks for a
+`- **Superseded by:**` line BEFORE it branches on record type, so the check is
+type-agnostic and a question carrying that field already parses as status
+`superseded`. The vocabulary, the field and the status all exist; nothing
+writes them.
+
+Worth confirming that `superseded` is the right resting state for Q-9 rather
+than `resolved`. It reads correctly - the question was not answered, it was
+replaced by a better statement of itself - and it keeps the open-question count
+honest either way, since neither status is open.
+
+A SECOND MISSING TARGET, SAME ROOT
+
+A question can also be closed by a REJECTION. "Should we do X?" answered by an
+R record saying X was considered and rejected is a real disposition, and
+`--into R-N` is refused for the same reason. Both cases are the verb hardcoding
+one of the three record types as the only legal target.
+
+SUGGESTED SHAPE
+
+Two options, and the second is probably better.
+
+(a) Widen `--into` to accept D, Q or R, varying the wording written into the
+    Status line: "Resolved →" for a decision or a rejection, "Superseded by" for
+    a question. One verb, but its name stops matching half of what it does -
+    "resolve Q-9 into Q-13" is not what happened to Q-9.
+
+(b) Add a sibling verb for the supersession relation:
+
+      pql decisions supersede Q-9 --by Q-13
+
+    and leave `resolve` meaning "a question was answered", widened only to
+    accept an R alongside a D. This reads correctly at the call site, and it
+    generalises past questions: DECISIONS supersede each other constantly in
+    this tree - D-15 supersedes D-13, D-14 supersedes D-10 - and every one of
+    those `**Supersedes:**` / `**Superseded by:**` pairs was hand-written today.
+    A supersede verb would maintain both sides of that pair the way T-99''s
+    resolve maintains the question side of a resolution.
+
+Option (b) turns a narrow fix into the missing half of the authoring surface,
+which is the argument for it. It is also more work, so the call is the
+maintainer''s.
+
+SCOPE NOTE
+
+Whatever ships should keep T-99''s two rules, which were load-bearing there and
+are load-bearing here: write the markdown, because the DQR tree is the source of
+truth (D-8) and a status written only to pql.db is reverted by the next sync;
+and do not overwrite prose that already exists in the target field - add when
+absent, report when present, never clobber.
+
+RELATED
+
+T-99  - the resolve verb this extends.
+D-29  - an argument that names a thing is validated; both ids here are names,
+        which is why the refusal is correct even though the rule is too narrow.', '`pql decisions resolve <Q-N> --into <D-N>` (T-99) hardcodes one legal target
+type and carries a name that fits only that case. Both should widen.
+
+WHAT `close` MEANS
+
+One verb, one flag. The relation follows from the pair of record types, so the
+caller never has to name it and pql owns the vocabulary:
+
+  pql decisions close Q-2  --into D-23    question answered          -> resolved
+  pql decisions close Q-4  --into R-1     answered "no"              -> resolved
+  pql decisions close D-13 --into D-15    replaced by a newer record -> superseded
+
+D -> Q is rejected: a decision does not go into a question.
+
+`resolve` is accurate for Q -> D and inaccurate for everything else, which is
+the whole argument for the rename. `close` is honest across every terminal
+disposition a record can reach.
+
+RENAME NOW, IT IS ONLY FREE NOW
+
+`resolve` shipped in 2.3.0, which is unreleased. Renaming before that release
+costs nothing. After it, the choice is a compatibility break for no functional
+gain, or carrying two verbs that perform the same file surgery under names only
+one of them fits. This is the cheap half of the ticket and can land alone.
+
+THE SUBSTANTIVE HALF IS DECISION -> DECISION
+
+This is the case with real evidence behind it. Decisions supersede each other
+routinely in this tree and every instance is hand-maintained today:
+
+  D-15 supersedes D-13
+  D-14 supersedes D-10
+
+The relation is genuinely different from a resolution, not a rewording of it:
+
+  - It writes a PAIR of fields across TWO records - `**Supersedes:**` on the
+    new record and `**Superseded by:**` on the old one - where Q -> D writes
+    one line on the question and optionally one on the decision.
+  - Both sides must agree. A half-written pair is worse than none, because
+    `decisions list --status active` would still show a superseded record as
+    live while the other file says otherwise.
+  - The resulting status is `superseded`, not `resolved`, and it is inferred
+    from the `**Superseded by:**` line rather than from `**Status:**`.
+
+So the file surgery is not a widened branch of the existing one. Encapsulating
+that difference is the point of the verb.
+
+QUESTION -> REJECTION
+
+Legitimate and cheap: "should we do X?" closed by an R record recording that X
+was considered and rejected. Currently refused, for the same
+one-hardcoded-target-type reason.
+
+Worth knowing before scheduling it: there are zero instances. `governance/`
+has no `rejected/` records at all, so this branch would ship untested against
+real data and unexercised in practice. Do it because it completes the type
+matrix, not because anything is waiting on it.
+
+CLOSING WITHOUT A TARGET
+
+A question can stop mattering without being answered - the subsystem it asked
+about was removed, the constraint that raised it lifted, the framing turned out
+to be wrong. There is nothing to point `--into` at, and inventing a D record to
+absorb it would be manufacturing a decision nobody made.
+
+  pql decisions close Q-7 --obsolete
+
+Open point, and it is a real one: the status vocabulary has no value for this.
+`inferStatus` returns `resolved` only when the `**Status:**` line begins with
+"resolved", so a line reading "Obsolete" falls through to `open` and the record
+never leaves the open count - the exact failure T-99 set out to fix, arriving
+by a different door. Either the written wording starts with "Resolved" and says
+obsolete afterwards, or the parser learns a fifth status. The first is cheaper
+and needs no schema change; the second is more honest, since "resolved" claims
+an answer that does not exist. Decide before implementing.
+
+THE REJECTION MESSAGE IS PART OF THE FEATURE
+
+An unsupported pair must not simply be refused. The three routes out are not
+guessable from a bare "invalid target", and a caller who reaches for Q -> Q has
+a real disposition in mind and needs to be told which of the legal ones it is.
+So the error names the whole set:
+
+  error: Q-13 is a question; a question cannot close into another question
+    a question is closed by what ANSWERS it, or not at all:
+      --into D-N      a decision that answers it
+      --into R-N      a rejection that answers it "no"
+      --obsolete      it stopped mattering; nothing answered it
+    if Q-13 merely develops or narrows Q-9, that is a cross-reference and
+    already recorded — leave Q-9 open
+
+That last line matters most, because it is the case that produced this ticket''s
+original mistake, and the error is the right place to stop the next person
+making it. Same principle as T-112: the program knows the accepted set at the
+moment it rejects the input, so it should print it.
+
+CORRECTION TO THIS TICKET''S ORIGINAL PREMISE
+
+Filed originally on the claim that Q-9 could not be closed because it is
+absorbed by Q-13, and that this was a supersession the verb could not express.
+That was a misreading, corrected by the maintainer, and the original framing is
+recorded here rather than quietly dropped because the mistake is instructive.
+
+Q-9 says its converged direction "is developed in" Q-13, and Q-13 calls itself
+"a concrete instantiation of Q-9". Q-13 narrows one branch of Q-9. It does not
+replace it and does not render it obsolete, which is what supersession means.
+Q-9 asks how multiple contributors mint ticket ids without collisions, and that
+is still undecided - when Q-13 lands as a decision, that D resolves both. The
+pointer between them is a see-also, and the tree already records it as a ref.
+
+Two things follow. There is no Q -> Q case to support, so it is deliberately
+absent from the matrix above. And the survey that produced this ticket reported
+"one closable question" - that was wrong. All twelve open questions are open,
+and the count remains accurate for the reason T-99 wanted to establish.
+
+SCOPE NOTE
+
+Whatever ships keeps T-99''s two rules, load-bearing there and here:
+
+  - Write the markdown. The DQR tree is the source of truth for decisions
+    (D-8), so a status written only to pql.db is reverted by the next sync.
+  - Never clobber prose that already exists in a target field. Add when
+    absent, report when present. The pair-writing in the D -> D case makes
+    this sharper, not softer: two files, two chances to overwrite something a
+    human wrote.
+
+Re-sync pql.db and regenerate the DQR README before returning, as T-99 does -
+the README splits questions into open and resolved buckets and would otherwise
+contradict the database.
+
+RELATED
+
+T-99  - the verb this renames and extends.
+D-29  - an argument that names a thing is validated. Both ids here are names,
+        so an unknown one, or a type the pair matrix does not allow, exits
+        non-zero naming the problem.
+', NULL, '2026-08-31 18:10:45', '2026-08-31 18:10:45.010', '2026-08-31 18:10:45.010', NULL, 'f9b0b901881350239e4f3d49f892fd9c', 2) ON CONFLICT(hash) DO NOTHING;
