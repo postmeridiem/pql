@@ -301,40 +301,29 @@ the filter-value warning under Contracts.
 
 ### Which type to reach for
 
-The type names read narrower than they are, and the surface pushes you that
-way: the command, the directory and `--decision` all say *decision*. Two rules
-recover most of the value.
-
-**A deferral is a Q, not a sentence in a D.** When you decide to decide later,
-write the question down. Left as prose inside some other record it is invisible
-to `decisions list --status open`, and nothing will ever surface it again.
-
-**A D is a home for durable documentation, not only for a choice between
-alternatives.** The type is called `confirmed` rather than `decision` precisely
-because it holds anything settled and worth keeping — an invariant, a
-convention, the shape of a subsystem — not just a fork in the road with a
-winner. If it is stable and someone will need it in six months, it is a D.
+- **Write a deferral as a Q.** "Decide later" left as prose inside another
+  record is invisible to `decisions list --status open`.
+- **A D holds any durable documentation**, not only a choice between
+  alternatives — an invariant, a convention, the shape of a subsystem. Hence
+  the type name `confirmed`.
 
 ### Closing a question
 
-`pql decisions resolve Q-2 --into D-23` marks the question resolved and records
-which decision answered it. It **edits the markdown**, because the DQR tree is
-the source of truth — a status written only to pql.db is reverted by the next
-sync — and then re-syncs so the change is queryable immediately.
+```bash
+pql decisions resolve Q-2 --into D-23
+```
 
-One line in the question's file is all it writes, and that is enough for both
-records: `decisions refs Q-2` and `decisions show D-23 --with-refs` each
-surface the link, because refs are looked up from either end. The decision also
-gets a readable `**Raised by:**` line when it has none; when it already has one
-that field is left alone, and the receipt says so.
+Marks the question resolved and links it to the decision that answered it.
+Edits the DQR markdown and re-syncs, so the result is queryable immediately —
+no follow-up `decisions sync`.
 
-Both ids are validated — an unknown id, or a `D-` where a `Q-` belongs, exits
-non-zero naming the problem rather than doing nothing quietly.
+The link then shows from both ends: `decisions refs Q-2` and
+`decisions show D-23 --with-refs`.
 
-An open question that is never formally closed stays open forever, so a vault
-reporting many open questions is ambiguous between "genuinely undecided" and
-"nobody had a cheap way to close them". Using this verb is what keeps that
-count meaningful.
+Both ids are validated: an unknown id, or a `D-` where a `Q-` belongs, exits
+non-zero naming the problem. An already-resolved question is refused, not
+re-pointed. The decision's `**Raised by:**` line is written only when absent;
+an existing one is left alone and the receipt says so.
 
 The markdown is the source of truth, so **run `pql decisions sync` before
 querying** whenever the DQR files may have changed — otherwise you are
@@ -605,19 +594,15 @@ pql ticket show T-99 --grep resolve
 pql files --grep '^governance/'
 ```
 
-**Reach for it instead of a pipe.** This is not a style preference — a pipe
-costs the caller an approval prompt every time, because the permission rules
-match the whole command string and a pipeline containing pql is not a pql
-command. `pql ticket list | grep changelog` prompts; `pql ticket list --grep
-changelog` does not. The same goes for `jq` and for `python3 -c`, and reaching
-for an interpreter to dodge the prompt is worse than the prompt: blanket-
-allowing one is an unbounded write grant.
+**Use it instead of piping to `grep`, `jq` or `python3`.** A pipeline
+containing pql matches no `pql` allow rule, so it costs an approval prompt
+every time.
 
-It filters the output buffer, so it means exactly what the pipe meant:
-`pql X --limit 5 --grep p` is `pql X --limit 5 | grep p`. `--limit` picks the
-page, `--grep` filters that page.
+It filters the output buffer: `pql X --limit 5 --grep p` means what
+`pql X --limit 5 | grep p` means. `--limit` picks the page, `--grep` filters
+that page.
 
-The rules, all of which have a reason you can predict from:
+Rules:
 
 - **Case-insensitive regex** (RE2 — alternation and anchors work,
   backreferences and lookaround do not). An unparseable pattern exits `64`
@@ -628,13 +613,11 @@ The rules, all of which have a reason you can predict from:
 - **Zero matches emits zero bytes** at exit `0`, like `--oneline`. Success, and
   still not evidence of absence.
 - **Values are matched, keys are not.** `--grep status` searches what the
-  statuses *are*; it does not match every ticket because every ticket has that
-  key. Whatever made a record match is visible in the record you get back.
-- **Anchors bind to a value, not to the line.** `--grep '^members/vale'`
-  matches paths starting with it. Through a pipe that anchor would be useless,
-  since every line starts with `{"path":`.
+  statuses *are*; it does not match every ticket for having that key.
+- **Anchors bind to a value, not to the whole line.** `--grep '^governance/'`
+  matches paths starting with it.
 - **It runs after projection.** With `--fields id,title`, `--grep` sees only
-  those two values — what you see is what was matched.
+  those two values.
 - **`--pretty` is refused** at exit `64`: an indented array cannot also be one
   record per line. `--jsonl` is accepted and redundant. `--oneline` composes,
   and there `--grep` matches the text of the emitted line.
