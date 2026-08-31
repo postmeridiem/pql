@@ -4737,3 +4737,249 @@ Constraint: the machine-readable envelope {level,code,msg} must survive, since c
 Related prior art in this repo: T-31 (verifySchema recovery message), T-49 (schema-mismatch recovery hint), T-86 (DSL column vocabulary undiscoverable).
 
 The originating repo was named here when this was filed, and was generalised before the ticket was first published. This repo is public and .pql/changelog/ is committed by design, so ticket prose is published prose; CLAUDE.md maps a private repo name to "a consuming repo". The condition is the more useful report anyway - what matters is that a downstream project paid for the gap in hand-written documentation, not which project it was.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-20 00:05:12.182', '2026-08-31 13:00:20.127', NULL, '9af4d1165e4306b89aa53a200f388f93', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5G683B9G56KMC8G8C97FWSW', 'task', NULL, 'Ticket type has no verb, so changing one means finding an undocumented JSON field', NULL, 'backlog', 'medium', NULL, NULL, 'D-30', '2026-08-31 13:53:49.402', '2026-08-31 13:53:49.402', NULL, '0aff3637c42e8c5ae33e4bce502cb212', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5G683B9G56KMC8G8C97FWSW', 'task', NULL, 'Ticket type has no verb, so changing one means finding an undocumented JSON field', 'Promoting a task to an epic is possible today, but only through a spelling a
+caller has to stumble onto:
+
+  pql ticket refine write T-5 ''{"type":"epic"}''
+
+Verified working in both directions - task -> epic -> initiative - and an
+invalid value is rejected at exit 65 with {"code":"cli.exit","msg":"repo:
+invalid type \"saga\""}. So this is not a missing capability. It is a
+capability filed under the wrong verb and documented nowhere a caller would
+look.
+
+WHY IT IS A MISFILING RATHER THAN A DOCS GAP
+
+The repo already splits the mutation surface deliberately, and refine write''s
+own help states the rule:
+
+  Status, parent, assignee, team, and labels have dedicated subcommands and
+  cannot be written here.
+
+The principle behind that split is sound: structural fields with closed
+vocabularies get their own verb, free-text gets refine write. Every field on
+the dedicated side has a fixed set of legal values or a graph meaning -
+status, parent, assignee, team, labels. Every field left in refine write is
+open text or a simple scalar - title, description, priority.
+
+`type` is on the wrong side of it. It has a closed vocabulary of five
+(initiative, epic, story, task, bug). It carries hierarchy semantics. D-20
+designates `initiative` specifically as the type that links a ticket to a
+D-record, which is a load-bearing role, not a label. It belongs with `status`,
+and instead it sits with `description`.
+
+The consequence is discoverability, and it is not theoretical. `pql ticket
+--help` lists fourteen subcommands and none of them mentions type. A caller
+looking for "how do I promote this task to an epic" scans that list, finds
+nothing, and concludes the capability does not exist - which is exactly the
+conclusion the maintainer reached before this ticket was filed. The verb
+`refine write` reads like prose editing, so it does not invite the guess, and
+the bundled SKILL.md describes it as "Patch title, description, priority or
+type from a JSON payload" without ever saying that this is the promotion
+route.
+
+SUGGESTED SHAPE
+
+  pql ticket type <id[,id,...]> <type>
+
+Batched like status, decision, assign, team and label, since a reclassification
+sweep across several tickets is the common case. Returns the changed record,
+matching the mutation receipt contract (D-30). Rejects an unknown type by
+naming the valid set, per T-112.
+
+  pql ticket typelist
+
+Mirroring `ticket statuslist`: prints the vocabulary so a UI or an agent can
+discover the five values without guessing. This is the cheaper half and could
+ship alone - it is what makes the closed set visible.
+
+DELIBERATELY NOT PROPOSED: a `get` verb
+
+Reading a ticket''s type already works as `ticket show <id> --fields type`, the
+projection surface exists for exactly this, and the repo has no `get` verbs
+anywhere. Adding one would introduce a pattern rather than follow one, and
+would give two spellings for the same read. `statuslist` is the precedent for
+exposing a vocabulary; it is not a precedent for reading a record''s value.
+
+OPEN QUESTION FOR THE MAINTAINER
+
+Should `type` then be REMOVED from refine write''s accepted payload? Symmetry
+says yes - the help text already claims the dedicated-subcommand fields
+"cannot be written here", so leaving type writable in both places makes that
+sentence false and gives two spellings for one operation. Against: it is a
+breaking change for anyone who found the JSON route, and this ticket is
+evidence that at least one caller did. A deprecation warning on the JSON path
+for one minor version is the middle road.
+
+SEPARATE DEFECT FOUND WHILE TESTING THIS
+
+Nothing validates hierarchy on a type change, in either spelling. An epic with
+children can be demoted to a task, leaving a task parenting stories, and the
+tree keeps whatever shape the demotion left behind. D-25 guards the analogous
+case for status - a ticket cannot reach a terminal status while it has open
+children - so the guard concept exists and is simply not applied here. Worth
+deciding whether the new verb enforces anything, or whether type is meant to
+stay a free reclassification and hierarchy is advisory. Filing the verb
+without settling this just moves the gap to a nicer address.', 'backlog', 'medium', NULL, NULL, 'D-30', '2026-08-31 13:53:49.402', '2026-08-31 13:55:40.420', NULL, '03145f2ecfdf63b980ccd0a16cdcf332', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5G7E6NVZG51XNZ5BHANF27M', 'bug', NULL, 'The secrets gate reports clean while checking none of the rules it was added for', NULL, 'backlog', 'high', NULL, NULL, 'D-22', '2026-08-31 13:59:01.550', '2026-08-31 13:59:01.550', NULL, '9502c0d3e9b04310299ce0dce1b4222a', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5G7E6NVZG51XNZ5BHANF27M', 'bug', NULL, 'The secrets gate reports clean while checking none of the rules it was added for', '`make secrets` passes and has been passing, while checking none of the rules it
+exists for. Found on 2026-08-31 while preparing a push; the leak it missed was
+caught by a hand-written grep, not by the gate.
+
+WHAT IS ACTUALLY BROKEN
+
+CLAUDE.md states that rules beyond the gitleaks defaults live in an untracked
+.gitleaks.toml, "see .git/info/exclude". Both halves are false in a fresh
+clone:
+
+  - .gitleaks.toml does not exist.
+  - .git/info/exclude has no entries at all.
+
+So every run has been a default-ruleset scan. CLAUDE.md is explicit about what
+that means, and measured it: "The defaults alone will not catch any of this -
+verified 2026-08-09 that a Visa number, an Amex number, an IBAN, a BSN and a US
+SSN all pass a default scan untouched. The default ruleset is a secrets scanner
+- API keys, tokens, private keys - not a PII scanner."
+
+The gate therefore reports success for a question it never asked. That is this
+repo''s own T-114 pattern, form 2, in the one place where the failure cannot be
+undone afterwards: a pushed leak is cached and indexed whether or not it is
+later deleted.
+
+Evidence it is not theoretical: a private sibling repo name reached a commit on
+2026-08-31 and was caught only because the outgoing diff was grepped by hand
+before pushing. The gate had already returned "no leaks found" on the same
+range.
+
+WHY THE UNTRACKED-FILE DESIGN CANNOT WORK
+
+The original reasoning is sound as far as it goes: a rule must contain the
+literal string it matches, so a rule naming this environment''s hosts cannot be
+committed to a public repo without publishing exactly what it guards. A curated
+list is worse than an incidental mention - it is an authoritative, deduplicated
+inventory rather than one host in one sentence.
+
+But "untracked file in the working tree" fails for a structural reason, not
+through carelessness: any file that is required and untracked is missing on the
+next clone. This repo is the proof - the file has never existed here. Moving it
+to ~/.config and pointing an env var at it relocates the problem without
+solving it, since the new machine lacks the file just the same.
+
+Putting the VALUES in environment variables does not work either. Verified:
+gitleaks does not interpolate env vars in its config - a rule with
+regex = ''''''${PQL_TEST_HOST}'''''' matched nothing with that variable set, while
+the same config with the literal substituted matched immediately. And even
+generating the config at runtime would not help, because whatever sets the
+variable is exactly as untracked as the file was, while additionally exposing
+the values through process listings, `env` dumps in CI logs, and inheritance by
+every child process.
+
+THE FIX: AN OVERCLASS, PLUS A FAIL-CLOSED DEFAULT
+
+Two independent changes. The first makes the rules present; the second stops a
+future absence from being silent. Neither is sufficient alone.
+
+1. LAYER THE CONFIG.
+
+   pql/.gitleaks.toml - COMMITTED, public. Every rule describes a shape, never
+   a value, so publishing it reveals nothing: absolute home-directory paths,
+   absolute sibling-checkout paths, RFC1918 addresses, IBAN, payment cards, US
+   SSN, Dutch BSN, personal email. CI and any contributor get these
+   automatically, which is strictly more than the zero they get today.
+
+   The environment rules - this host set and the private sibling repo names -
+   move to the private ops repo one level up, which the multi-repo CLAUDE.md
+   already designates as the home for cross-repo material. The hostname list is
+   cross-repo by definition; it names shared infrastructure rather than
+   anything of pql''s, and the other public repos in that tree carry the
+   identical exposure.
+
+   There they are COMMITTED rather than untracked, so they arrive by git clone
+   on any machine where work happens, with no setup step to forget. That is the
+   whole point: the file travels in a repo you will certainly have.
+
+   Discovery needs no environment variable. ci/secrets.sh already cds to the
+   repo root, so a sibling path resolves directly, and the overlay declares
+   [extend] path = ".gitleaks.toml" - which is CWD-relative, verified - so the
+   same overlay file composes with whichever public repo invokes it, each
+   supplying its own shape rules.
+
+2. INVERT THE DEFAULT.
+
+   Layering alone still degrades silently when the overlay is absent. So:
+
+     overlay found                      -> run with it
+     sibling ops repo present, overlay
+       missing or unreadable            -> FAIL. This machine has those names;
+                                           the overlay should be here.
+     sibling ops repo absent            -> announce, continue with shape rules
+                                           only. A contributor who has never
+                                           seen those hostnames cannot leak
+                                           them.
+
+   And print which configuration actually ran, every time. The script already
+   holds this instinct for the missing-binary case and says why: "The skip is
+   printed rather than silent - an unannounced skip reads as a clean scan,
+   which is the failure this whole check exists to prevent." The reasoning was
+   right and was applied to exactly one of the ways this check can quietly do
+   nothing.
+
+   Keep the existing skip-on-missing-gitleaks behaviour. That reasoning is
+   separate and still sound - it is about not blocking a contributor over a
+   tool they never agreed to install, which does not extend to this machine
+   missing its own overlay.
+
+SCOPE OF THIS TICKET (pql only)
+
+  - add the committed .gitleaks.toml
+  - rewrite ci/secrets.sh for sibling resolution, the fail-closed rule, and
+    the announcement
+  - correct the CLAUDE.md section describing the untracked file and the
+    .git/info/exclude entry, neither of which exists
+
+OUTSIDE THIS REPO, TRACKED WHERE IT BELONGS
+
+Creating configs/gitleaks-overlay.toml in the ops repo, and rolling the same
+ci/secrets.sh into the other public repos in the tree, are that repo''s work and
+belong in its own planning store - it has one at .pql/. Until those repos look
+for the overlay it is worth nothing to them, and each carries the same
+environment in its own prose.
+
+VALIDATION ALREADY DONE
+
+A candidate ruleset was written and tested against a fixture of 13 planted
+positives and 7 negative controls: all 13 caught, all 7 correctly suppressed
+(/home/linuxbrew/, /home/runner/, noreply@ trailers, an example.com address, a
+ULID, an MD5 hash, and the documentation IP 192.168.1.1). Three defects
+surfaced only because it was tested rather than reasoned about, and each would
+have shipped as a rule that silently checks nothing:
+
+  - RE2 has no lookahead. Three rules used (?!...) and gitleaks panicked on
+    load. Loud, at least.
+  - regexTarget = "match" is mandatory on every rule-level allowlist. Without
+    it one exempt string anywhere nearby suppresses every finding for that
+    rule - the home-path rule reported clean because a /home/linuxbrew/ line
+    sat two lines below a real hit.
+  - useDefault = true discards any finding whose secret contains a default
+    stopword, and "home" is one. The home-path rule matched and was dropped; an
+    identical control rule on a different prefix fired. Fixed with a capture
+    group plus secretGroup = 1 so the secret is the username rather than the
+    path.
+
+The last two are silent, and are themselves instances of T-114 form 2. Any
+reimplementation needs to keep the fixture, or it will reintroduce them.
+
+A further refinement not yet applied: project.yaml and LICENSE carry the
+maintainer''s name and email deliberately, so the personal-email rule needs a
+path-based allowlist for those two files. Path exemptions are committable;
+value exemptions are not, which is why it must be done that way round.
+
+RELATED
+
+T-114 - the optimistic-defaults sweep; this is the highest-consequence
+        instance of it found so far.
+T-111 - the generated pre-commit hook, which stages the changelog tree whole
+        and is how the sibling repo name reached a commit unnoticed.
+T-105 - scrubbing a changelog file does not survive the next mutation.
+', 'backlog', 'high', NULL, NULL, 'D-22', '2026-08-31 13:59:01.550', '2026-08-31 14:42:52.578', NULL, '57f4b8550370c378b52796fd7671f0d4', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

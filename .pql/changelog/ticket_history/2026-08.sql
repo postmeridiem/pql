@@ -2659,3 +2659,87 @@ RELATED
 
 T-114 - the code sweep this survey was filed alongside.
 T-70  - ci/release.sh is dead code (finding 4).', NULL, '2026-08-31 12:35:22', '2026-08-31 12:35:22.145', '2026-08-31 12:35:22.145', NULL, 'f36839de2140b0b08985c080bca516f1', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5G683B9G56KMC8G8C97FWSW', 'description', NULL, 'Promoting a task to an epic is possible today, but only through a spelling a
+caller has to stumble onto:
+
+  pql ticket refine write T-5 ''{"type":"epic"}''
+
+Verified working in both directions - task -> epic -> initiative - and an
+invalid value is rejected at exit 65 with {"code":"cli.exit","msg":"repo:
+invalid type \"saga\""}. So this is not a missing capability. It is a
+capability filed under the wrong verb and documented nowhere a caller would
+look.
+
+WHY IT IS A MISFILING RATHER THAN A DOCS GAP
+
+The repo already splits the mutation surface deliberately, and refine write''s
+own help states the rule:
+
+  Status, parent, assignee, team, and labels have dedicated subcommands and
+  cannot be written here.
+
+The principle behind that split is sound: structural fields with closed
+vocabularies get their own verb, free-text gets refine write. Every field on
+the dedicated side has a fixed set of legal values or a graph meaning -
+status, parent, assignee, team, labels. Every field left in refine write is
+open text or a simple scalar - title, description, priority.
+
+`type` is on the wrong side of it. It has a closed vocabulary of five
+(initiative, epic, story, task, bug). It carries hierarchy semantics. D-20
+designates `initiative` specifically as the type that links a ticket to a
+D-record, which is a load-bearing role, not a label. It belongs with `status`,
+and instead it sits with `description`.
+
+The consequence is discoverability, and it is not theoretical. `pql ticket
+--help` lists fourteen subcommands and none of them mentions type. A caller
+looking for "how do I promote this task to an epic" scans that list, finds
+nothing, and concludes the capability does not exist - which is exactly the
+conclusion the maintainer reached before this ticket was filed. The verb
+`refine write` reads like prose editing, so it does not invite the guess, and
+the bundled SKILL.md describes it as "Patch title, description, priority or
+type from a JSON payload" without ever saying that this is the promotion
+route.
+
+SUGGESTED SHAPE
+
+  pql ticket type <id[,id,...]> <type>
+
+Batched like status, decision, assign, team and label, since a reclassification
+sweep across several tickets is the common case. Returns the changed record,
+matching the mutation receipt contract (D-30). Rejects an unknown type by
+naming the valid set, per T-112.
+
+  pql ticket typelist
+
+Mirroring `ticket statuslist`: prints the vocabulary so a UI or an agent can
+discover the five values without guessing. This is the cheaper half and could
+ship alone - it is what makes the closed set visible.
+
+DELIBERATELY NOT PROPOSED: a `get` verb
+
+Reading a ticket''s type already works as `ticket show <id> --fields type`, the
+projection surface exists for exactly this, and the repo has no `get` verbs
+anywhere. Adding one would introduce a pattern rather than follow one, and
+would give two spellings for the same read. `statuslist` is the precedent for
+exposing a vocabulary; it is not a precedent for reading a record''s value.
+
+OPEN QUESTION FOR THE MAINTAINER
+
+Should `type` then be REMOVED from refine write''s accepted payload? Symmetry
+says yes - the help text already claims the dedicated-subcommand fields
+"cannot be written here", so leaving type writable in both places makes that
+sentence false and gives two spellings for one operation. Against: it is a
+breaking change for anyone who found the JSON route, and this ticket is
+evidence that at least one caller did. A deprecation warning on the JSON path
+for one minor version is the middle road.
+
+SEPARATE DEFECT FOUND WHILE TESTING THIS
+
+Nothing validates hierarchy on a type change, in either spelling. An epic with
+children can be demoted to a task, leaving a task parenting stories, and the
+tree keeps whatever shape the demotion left behind. D-25 guards the analogous
+case for status - a ticket cannot reach a terminal status while it has open
+children - so the guard concept exists and is simply not applied here. Worth
+deciding whether the new verb enforces anything, or whether type is meant to
+stay a free reclassification and hierarchy is advisory. Filing the verb
+without settling this just moves the gap to a nicer address.', NULL, '2026-08-31 13:55:40', '2026-08-31 13:55:40.420', '2026-08-31 13:55:40.420', NULL, 'd05f3c4337ab3e7c8438f66c8ce7265b', 2) ON CONFLICT(hash) DO NOTHING;
