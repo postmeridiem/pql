@@ -3,9 +3,9 @@
 ---
 
 ### Q-1: Markdown mirror for tickets
-- **Status:** Open
-- **Question:** When does `pql ticket export` become automatic? On every mutation, or on explicit command only?
-- **Context:** Ticket source of truth is SQLite for now. Markdown mirror (`tickets/T-NNN.md` auto-written) is the long-term answer but the merge-conflict story isn't solved.
+- **Status:** Partially resolved by [D-23](../decisions/architecture.md#d-23-write-through-ticket-mutations-to-the-changelog); the mirror itself is still open
+- **Question:** Should tickets gain an auto-written markdown mirror (`tickets/T-NNN.md`), and if so, how do two clones that edited the same ticket reconcile?
+- **Context:** Ticket source of truth is SQLite (D-8); replication runs through the changelog (D-15/D-16), where row hashes and an LWW guard settle concurrent edits with no human in the loop. A markdown mirror would make tickets readable and greppable without pql installed, but reintroduces exactly the text-level merge conflict the changelog exists to avoid — that is the unsolved part, and why this stays open. This record also used to ask *when `pql ticket export` becomes automatic, on every mutation or on explicit command only*; D-23 answered that half — every mutation writes through synchronously and `plan export` became a manual catch-up — so only the mirror question remains.
 
 ### Q-2: FTS for ticket/decision search
 - **Status:** Open
