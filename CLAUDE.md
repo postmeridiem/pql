@@ -81,7 +81,9 @@ These are load-bearing — preserve them when implementing. Full rationale in th
 
 ## Build & test
 
-Go 1.25+ is installed on the dev machine (`go.mod` declares the floor); `make build`, `make test`, and the rest of the targets below run locally.
+Go 1.25+ is installed on the dev machine (`go.mod`'s `go` directive declares the language floor); `make build`, `make test`, and the rest of the targets below run locally.
+
+`go.mod` also carries a `toolchain` directive pinning the **build** toolchain, currently `go1.26.6`. It is there for security, not features: four reachable stdlib advisories were fixed in that release, and CI resolves its Go version from `go.mod`, so the pin covers local and CI together. Raise it when `make vuln` reports a stdlib advisory — `go get toolchain@goX.Y.Z` — and leave the `go` directive alone unless the code actually needs newer language features, since that one is the floor consumers must meet.
 
 | Command | Does |
 |---|---|

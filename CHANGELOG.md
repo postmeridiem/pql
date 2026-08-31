@@ -13,6 +13,27 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 
 ## [2.3.0]
 
+### Security
+
+- **Builds now pin the Go toolchain to 1.26.6**, clearing four standard-library
+  advisories that `govulncheck` reported as reachable from this code:
+  GO-2026-6218 (`net/url`), GO-2026-6090 (`crypto/tls`), GO-2026-5972
+  (`encoding/asn1`) and GO-2026-5026 (`net/http`). All four are fixed in
+  1.26.6; the toolchain in use was 1.26.5.
+
+  The pin is a `toolchain` directive in `go.mod` rather than a bump to the `go`
+  directive, so the supported language floor stays at 1.25.12 and only the
+  build toolchain moves. CI resolves its Go version from `go.mod`, so the same
+  line covers local builds and CI — which previously had no toolchain
+  constraint at all and would have built against something older still.
+
+- **`golang.org/x/sys` bumped to v0.44.0**, clearing GO-2026-5024 (integer
+  overflow in `NewNTUnicodeString`). Windows-only and not reachable from this
+  code, but pql ships a Windows binary, so it is worth not carrying.
+
+`make vuln` and the `govulncheck` stage of `make lint` now report no
+vulnerabilities at any level.
+
 ### Added
 
 - **`--grep <regex>` on every read verb** (T-113), filtering results by content

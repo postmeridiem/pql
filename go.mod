@@ -2,6 +2,8 @@ module github.com/postmeridiem/pql
 
 go 1.25.12
 
+toolchain go1.26.6
+
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/fsnotify/fsnotify v1.9.0
@@ -212,7 +214,7 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358 // indirect
 	golang.org/x/mod v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
