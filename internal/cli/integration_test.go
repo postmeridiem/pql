@@ -2604,3 +2604,108 @@ func jsonlLines(t *testing.T, out string) []string {
 	}
 	return lines
 }
+
+// --- decisions resolve (T-99) ---------------------------------------------
+
+// dqrVault writes a minimal DQR tree and returns the vault root. The verb edits
+// markdown, so the fixture has to be disposable.
+func dqrVault(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	files := map[string]string{
+		"governance/questions/architecture.md": "# Open Questions\n\n" +
+			"### Q-1: First question\n- **Status:** Open\n- **Question:** One?\n\n" +
+			"### Q-2: Second question\n- **Status:** Open\n- **Question:** Two?\n",
+		"governance/decisions/architecture.md": "# Decisions\n\n" +
+			"### D-1: First decision\n- **Date:** 2026-08-31\n- **Decision:** Yes.\n",
+	}
+	for rel, body := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+	return root
+}
+
+func TestIntegration_DecisionsResolve(t *testing.T) {
+	vault := dqrVault(t)
+
+	out := pqlIT(t, vault, "decisions", "resolve", "Q-1", "--into", "D-1")
+	var res struct {
+		QuestionID string `json:"question_id"`
+		DecisionID string `json:"decision_id"`
+		Status     string `json:"status"`
+		StatusLine string `json:"status_line"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if res.QuestionID != "Q-1" || res.DecisionID != "D-1" || res.Status != "resolved" {
+		t.Errorf("receipt = %+v, want Q-1/D-1/resolved", res)
+	}
+	// The receipt quotes the line it wrote, so the caller can verify the edit
+	// without re-reading the file.
+	if !strings.Contains(res.StatusLine, "[D-1](../decisions/architecture.md#d-1-first-decision)") {
+		t.Errorf("status_line = %q, want a relative anchor link to D-1", res.StatusLine)
+	}
+
+	// Resolved in pql.db, and only the record asked for.
+	states := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(
+		pqlIT(t, vault, "decisions", "list", "--type", "question", "--oneline")), "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) >= 2 {
+			states[f[0]] = f[1]
+		}
+	}
+	if states["Q-1"] != "resolved" {
+		t.Errorf("Q-1 = %q, want resolved", states["Q-1"])
+	}
+	if states["Q-2"] != "open" {
+		t.Errorf("Q-2 = %q, want open — an unrelated question was touched", states["Q-2"])
+	}
+
+	// The single rewritten line has to serve both records.
+	if !strings.Contains(pqlIT(t, vault, "decisions", "refs", "Q-1"), "D-1") {
+		t.Error("refs Q-1 does not show the decision")
+	}
+	if !strings.Contains(pqlIT(t, vault, "decisions", "show", "D-1", "--with-refs"), "Q-1") {
+		t.Error("show D-1 --with-refs does not show the question")
+	}
+}
+
+func TestIntegration_DecisionsResolveRejections(t *testing.T) {
+	vault := dqrVault(t)
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"missing --into", []string{"decisions", "resolve", "Q-1"}, 64},
+		{"unknown question", []string{"decisions", "resolve", "Q-99", "--into", "D-1"}, 66},
+		{"unknown decision", []string{"decisions", "resolve", "Q-1", "--into", "D-99"}, 66},
+		{"question id is a decision", []string{"decisions", "resolve", "D-1", "--into", "D-1"}, 64},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stderr, code := run(t, vault, tc.args...)
+			if code != tc.want {
+				t.Errorf("exit=%d, want %d\nstderr: %s", code, tc.want, stderr)
+			}
+			if len(bytes.TrimSpace(stderr)) == 0 {
+				t.Error("a refusal must say why on stderr")
+			}
+		})
+	}
+
+	// Resolving twice is refused rather than silently rewriting the link.
+	pqlIT(t, vault, "decisions", "resolve", "Q-1", "--into", "D-1")
+	_, _, code := run(t, vault, "decisions", "resolve", "Q-1", "--into", "D-1")
+	if code == 0 {
+		t.Error("resolving an already-resolved question should be refused")
+	}
+}

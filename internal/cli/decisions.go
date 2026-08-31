@@ -34,6 +34,9 @@ in a decisions/ directory at the vault root and are indexed into
 	cmd.AddCommand(sync)
 	cmd.AddCommand(newDecisionsValidateCmd())
 	cmd.AddCommand(newDecisionsClaimCmd())
+	resolve := newDecisionsResolveCmd()
+	markMutation(resolve) // writes markdown and re-syncs; the receipt names both
+	cmd.AddCommand(resolve)
 	cmd.AddCommand(newDecisionsListCmd())
 	cmd.AddCommand(newDecisionsShowCmd())
 	cmd.AddCommand(newDecisionsReadCmd())

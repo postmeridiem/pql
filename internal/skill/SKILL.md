@@ -292,11 +292,49 @@ they live in SQLite and travel via the changelog described below.
 | `pql decisions read <id>` | The record's full markdown body |
 | `pql decisions refs <id>` | Cross-references involving a record |
 | `pql decisions claim <D\|Q\|R> <domain> "title"` | Print the next free id. No side effects |
+| `pql decisions resolve <Q-N> --into <D-N>` | Close a question into the decision that answers it |
 
 Record type is `confirmed`, `question` or `rejected` — the D/Q/R of the tree —
 and status is `active`, `superseded`, `resolved` or `open`. Passing `--type Q`
 or `--status OPEN` is not an error; it returns an empty list at exit 0. See
 the filter-value warning under Contracts.
+
+### Which type to reach for
+
+The type names read narrower than they are, and the surface pushes you that
+way: the command, the directory and `--decision` all say *decision*. Two rules
+recover most of the value.
+
+**A deferral is a Q, not a sentence in a D.** When you decide to decide later,
+write the question down. Left as prose inside some other record it is invisible
+to `decisions list --status open`, and nothing will ever surface it again.
+
+**A D is a home for durable documentation, not only for a choice between
+alternatives.** The type is called `confirmed` rather than `decision` precisely
+because it holds anything settled and worth keeping — an invariant, a
+convention, the shape of a subsystem — not just a fork in the road with a
+winner. If it is stable and someone will need it in six months, it is a D.
+
+### Closing a question
+
+`pql decisions resolve Q-2 --into D-23` marks the question resolved and records
+which decision answered it. It **edits the markdown**, because the DQR tree is
+the source of truth — a status written only to pql.db is reverted by the next
+sync — and then re-syncs so the change is queryable immediately.
+
+One line in the question's file is all it writes, and that is enough for both
+records: `decisions refs Q-2` and `decisions show D-23 --with-refs` each
+surface the link, because refs are looked up from either end. The decision also
+gets a readable `**Raised by:**` line when it has none; when it already has one
+that field is left alone, and the receipt says so.
+
+Both ids are validated — an unknown id, or a `D-` where a `Q-` belongs, exits
+non-zero naming the problem rather than doing nothing quietly.
+
+An open question that is never formally closed stays open forever, so a vault
+reporting many open questions is ambiguous between "genuinely undecided" and
+"nobody had a cheap way to close them". Using this verb is what keeps that
+count meaningful.
 
 The markdown is the source of truth, so **run `pql decisions sync` before
 querying** whenever the DQR files may have changed — otherwise you are

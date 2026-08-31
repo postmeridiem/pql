@@ -66,6 +66,33 @@ vulnerabilities at any level.
 
 ### Added
 
+- **`pql decisions resolve <Q-N> --into <D-N>`** (T-99), closing a question into
+  the decision that answers it. pql could mint a record id with `decisions
+  claim` but had no counterpart for closing one, so every vault invented its own
+  convention for the Q → D transition and none of them were enforced or
+  queryable.
+
+  It **edits the markdown**, which is new: the DQR tree is the source of truth
+  for decisions (D-8), so a status written only to `pql.db` is reverted by the
+  next sync. `ticket relabel --fix-prose` set the precedent for writing DQR
+  prose in place. pql.db is re-synced before the command returns, so the change
+  is queryable immediately.
+
+  A single rewritten `**Status:**` line in the question's file is all it takes
+  for both records to show the link — refs are looked up from either end, so
+  `decisions refs Q-2` and `decisions show D-23 --with-refs` each surface it.
+  The decision also gains a readable `**Raised by:**` line when it has none;
+  when it already has one, that field is free prose about a record's provenance
+  and is left exactly as written, with the receipt saying so. Both ids are
+  validated, so an unknown id — or a `D-` where a `Q-` belongs — exits non-zero
+  naming the problem (D-29).
+
+  The bundled skill also now says **when** to reach for each of D/Q/R, which it
+  documented only as vocabulary before: a deferral is written as a Q rather than
+  left as prose in some other record, and a D is a home for durable
+  documentation rather than only a choice between alternatives — which is why
+  the type is called `confirmed`.
+
 - **`--grep <regex>` on every read verb** (T-113), filtering results by content
   so a caller never has to pipe. `pql ticket list --grep changelog` replaces
   `pql ticket list | grep changelog`.
