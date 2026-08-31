@@ -1,0 +1,89 @@
+# How epic and initiative tickets connect to D-records in pql's planning
+# dataset. Generated from `pql ticket list` + `pql decisions list`.
+#
+# The shape worth noticing: D-20 designates `initiative` as the ticket type
+# that carries decision_ref back to a D-record. Epics largely don't — only
+# T-69 of six touches a D-record at all.
+
+direction: right
+
+vars: {
+  d2-config: {
+    theme-id: 200
+    layout-engine: dagre
+    pad: 100
+  }
+}
+
+epics: "Epics — only T-69 of 6 reaches a D-record" {
+  style.fill: "#2f2b3a"
+
+  t69: "T-69 · done\nforward migration machinery" {
+    style.fill: "#5c4a73"
+    style.bold: true
+  }
+  t44: "T-44\npql.db forward migrations"
+  t68: "T-68\nchangelog format upgrades"
+
+  t69 -> t44: child
+  t69 -> t68: child
+}
+
+orphans: "The other 5 epics — no D-record link" {
+  style.fill: "#26232e"
+  style.stroke-dash: 4
+
+  t62: "T-62 · backlog\nrank planning dataset vs long text"
+  t71: "T-71 · done\nclose skill-audit surface defects"
+  t79: "T-79 · done\nclose 2.1.0 skill-audit findings"
+  t87: "T-87 · done\n2.2.0 skill-audit findings"
+  t89: "T-89 · done\nthe 2.1.0 skill audit"
+}
+
+inits: "Initiatives — the type D-20 designates for this link" {
+  style.fill: "#2b3340"
+
+  t32: "T-32 · done\nDQR governance layout" {
+    style.bold: true
+  }
+  t32kids: "6 children\nT-33 T-34 T-35 T-36 T-37 T-43"
+  t32 -> t32kids: children
+
+  t42: "T-42 · done\ncollapse zero-matches to exit 0"
+
+  t46: "T-46 · done\nact on live-session briefing"
+  t47: "T-47\nchild"
+  t46 -> t47: child
+
+  t38: "T-38 · done\nno D-record link" {
+    style.stroke-dash: 4
+  }
+}
+
+dec: "D-records reached from these two layers" {
+  style.fill: "#3a2b33"
+
+  d15: "D-15\nchangelog replication"
+  d19: "D-19\nno ALTER TABLE"
+  d21: "D-21\nDQR layout"
+  d22: "D-22\nexit 0 on zero matches"
+  d23: "D-23\nwrite-through mutations"
+}
+
+rest: "29 further links come from loose tasks / bugs / stories\nD-1 D-3 D-16 D-17 D-18 D-20 D-27 D-29 D-30 D-31\n(outside any epic or initiative)" {
+  shape: text
+  style.font-size: 16
+  style.italic: true
+}
+
+epics.t69 -> dec.d19: decision_ref
+epics.t44 -> dec.d19: decision_ref
+epics.t68 -> dec.d15: decision_ref
+
+inits.t32 -> dec.d21: decision_ref
+inits.t32kids -> dec.d21: "decision_ref ×6"
+inits.t42 -> dec.d22: decision_ref
+inits.t46 -> dec.d23: decision_ref
+inits.t47 -> dec.d23: decision_ref
+
+dec -> rest: {style.opacity: 0.35}
