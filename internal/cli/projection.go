@@ -81,11 +81,22 @@ func renderProjectedList[T any](cmd *cobra.Command, rows []T, p *projection, lin
 		if rOpts.Format != render.FormatJSON {
 			return &exitError{code: diag.Usage, msg: "--oneline is plain text; it cannot be combined with --pretty or --jsonl"}
 		}
+		// --oneline is already line-oriented, so --grep composes with it
+		// directly. Same ordering as render.Render: --limit picks the page,
+		// --grep filters that page, so the flag means what piping this output
+		// to grep would have meant. It matches the emitted line rather than
+		// the underlying row, because that line is the whole of what the
+		// caller sees — so a term living only in a key --oneline drops (a
+		// description, say) correctly does not match.
 		if rOpts.Limit > 0 && len(rows) > rOpts.Limit {
 			rows = rows[:rOpts.Limit]
 		}
 		for _, r := range rows {
-			if _, err := fmt.Fprintln(rOpts.Out, line(r)); err != nil {
+			l := line(r)
+			if rOpts.Grep != nil && !rOpts.Grep.MatchString(l) {
+				continue
+			}
+			if _, err := fmt.Fprintln(rOpts.Out, l); err != nil {
 				return &exitError{code: diag.Software, msg: err.Error()}
 			}
 		}

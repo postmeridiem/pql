@@ -35,10 +35,16 @@ func newPlanCmd() *cobra.Command {
 	cmd.AddCommand(newPlanStatusCmd())
 	cmd.AddCommand(newPlanWhatsNextCmd())
 	cmd.AddCommand(newPlanReviewCmd())
-	cmd.AddCommand(newPlanExportCmd())
-	cmd.AddCommand(newPlanRebuildCmd())
-	cmd.AddCommand(newPlanImportCmd())
-	cmd.AddCommand(newPlanUpgradeCmd())
+	// The replication verbs rewrite pql.db or the changelog and report what
+	// they moved; suppressing that report would hide a partial run.
+	write := []*cobra.Command{
+		newPlanExportCmd(), newPlanRebuildCmd(),
+		newPlanImportCmd(), newPlanUpgradeCmd(),
+	}
+	markMutation(write...)
+	for _, c := range write {
+		cmd.AddCommand(c)
+	}
 	return cmd
 }
 

@@ -29,7 +29,9 @@ in a decisions/ directory at the vault root and are indexed into
 			return &exitError{code: diag.Usage}
 		},
 	}
-	cmd.AddCommand(newDecisionsSyncCmd())
+	sync := newDecisionsSyncCmd()
+	markMutation(sync) // writes pql.db; its output is a summary of what it did
+	cmd.AddCommand(sync)
 	cmd.AddCommand(newDecisionsValidateCmd())
 	cmd.AddCommand(newDecisionsClaimCmd())
 	cmd.AddCommand(newDecisionsListCmd())

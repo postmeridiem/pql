@@ -11,7 +11,77 @@ version and renames the matching section here to the released version with
 a date (e.g. `## [0.1.0] - 2026-05-01`), then opens a new working section
 matching the bumped version (e.g. `## [0.1.1-dev]`).
 
-## [2.2.1]
+## [2.3.0]
+
+### Added
+
+- **`--grep <regex>` on every read verb** (T-113), filtering results by content
+  so a caller never has to pipe. `pql ticket list --grep changelog` replaces
+  `pql ticket list | grep changelog`.
+
+  The motivation is permissions, not ergonomics. Permission rules match the
+  whole command string, so a pipeline containing pql matches no `pql` allow
+  rule and interrupts the caller for approval every time — and the usual way
+  around that, a `python3 -c` one-liner, trades one prompt for an unbounded
+  write grant. Filtering inside the binary keeps the whole operation in one
+  allowlisted invocation.
+
+  It filters the **output buffer**: it runs last, over exactly the rows the
+  command was otherwise going to emit, so `pql X --limit 5 --grep p` means what
+  `pql X --limit 5 | grep p` means. `TestIntegration_GrepEqualsPipedGrep` pins
+  that equivalence across seven verbs by running each one twice and comparing.
+
+  Matches are emitted one record per line with no enclosing array, each line
+  individually valid JSON — a filtered result is still machine-readable as
+  JSONL. Patterns are case-insensitive RE2; an unparseable one exits `64`
+  naming it. Zero matches writes zero bytes at exit `0`, as `--oneline`
+  already does.
+
+  Two deliberate divergences from a literal piped `grep`, both because the
+  pipe's behaviour there is an artefact of the JSON envelope rather than
+  something worth copying: **keys are never matched**, only values — otherwise
+  `--grep status` would match every ticket, since every ticket carries that
+  key — and **anchors bind to a value rather than the whole line**, so
+  `--grep '^governance/'` selects paths, where through a pipe every line
+  starts with `{"path":`.
+
+  `--pretty` is refused at exit `64`, since an indented array cannot also be
+  one record per line; `--jsonl` is accepted and redundant; `--oneline`
+  composes and matches the emitted line. Mutation verbs refuse `--grep` at
+  exit `64` for the reason they already refuse `--fields` (D-30): their output
+  is a receipt, and a receipt that could be suppressed confirms nothing.
+
+  **Compatibility:** additive. Output is unchanged unless `--grep` is passed.
+
+### Changed
+
+- **Global output flags are validated before a subcommand runs**, in the root
+  `PersistentPreRunE` rather than at the point of rendering. Found while
+  building the above: the render options are read at the *end* of `RunE`, so a
+  mutation verb rejecting `--grep` there refused the invocation after already
+  performing it — `ticket status T-1 done --grep x` exited `64` *and* set the
+  ticket to done. Flag rejections now leave no trace, and an
+  `--pretty`/`--jsonl` conflict is likewise caught before any work happens.
+
+### Fixed
+
+Carried from the unreleased 2.2.1 working section, which never shipped as its
+own release:
+
+- **`plan rebuild` reports what it actually rebuilt** (T-106, T-107). The
+  receipt described a full rebuild while replaying only the changelog-backed
+  tables; decisions are markdown-sourced (D-8) and were silently left alone.
+  It now auto-syncs decisions when it finds them empty against a populated DQR
+  tree and reports that under `decisions_synced`.
+- **The generated `pre-commit` hook no longer misdirects the vault**, which
+  made it export whichever vault the environment happened to name rather than
+  the repo being committed.
+- **`make` resolves the Go toolchain** the same way the other targets already
+  did, so a build works without a prefixed `PATH`.
+- **`make pre-push` gained a secrets and PII gate** (`ci/secrets.sh`), run
+  before lint and tests over the outgoing commit range.
+- A pending **gofmt sweep** landed, with three doc comments it had broken
+  corrected.
 
 ## [2.2.0] - 2026-08-08
 

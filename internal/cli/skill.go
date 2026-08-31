@@ -65,8 +65,10 @@ embedded bundle to detect:
 	}
 	cmd.AddCommand(newSkillStatusCmd())
 	cmd.AddCommand(newSkillShowCmd())
-	cmd.AddCommand(newSkillInstallCmd())
-	cmd.AddCommand(newSkillUninstallCmd())
+	install, uninstall := newSkillInstallCmd(), newSkillUninstallCmd()
+	markMutation(install, uninstall)
+	cmd.AddCommand(install)
+	cmd.AddCommand(uninstall)
 	return cmd
 }
 

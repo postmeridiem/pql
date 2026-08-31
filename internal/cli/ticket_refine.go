@@ -39,7 +39,9 @@ context, and write descriptions back via a JSON payload.
 	}
 	cmd.AddCommand(newTicketRefineListCmd())
 	cmd.AddCommand(newTicketRefineNextCmd())
-	cmd.AddCommand(newTicketRefineWriteCmd())
+	write := newTicketRefineWriteCmd()
+	markMutation(write)
+	cmd.AddCommand(write)
 	return cmd
 }
 

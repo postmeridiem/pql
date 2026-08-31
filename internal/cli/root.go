@@ -58,9 +58,21 @@ func newRootCmd() *cobra.Command {
 		// --quiet is a global flag; honor it before any subcommand runs by
 		// toggling diag's warning suppression. Subcommands don't define their
 		// own PersistentPreRun, so this fires for all of them.
-		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+		//
+		// The output flags are validated here too, and that placement is
+		// load-bearing rather than tidy. renderOptsFromFlags is otherwise
+		// called at the end of RunE, by which point a mutation verb has
+		// already written — so rejecting --grep there would refuse the
+		// invocation *after* performing it. Validating up front means a
+		// refused flag combination leaves no trace. The opts are recomputed
+		// in RunE rather than threaded through; it is a few flag reads.
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			q, _ := cmd.Flags().GetBool("quiet")
 			diag.SetQuiet(q)
+			if _, err := renderOptsFromFlags(cmd); err != nil {
+				return &exitError{code: diag.Usage, msg: err.Error()}
+			}
+			return nil
 		},
 		// No subcommand given. Cobra's default would print help and exit 0;
 		// we want exit 64 (Usage) so callers can distinguish "user invoked
@@ -79,6 +91,7 @@ func newRootCmd() *cobra.Command {
 	pf.Bool("pretty", false, "pretty-print JSON output")
 	pf.Bool("jsonl", false, "emit JSON-per-line instead of an array")
 	pf.IntP("limit", "n", 0, "cap result count (0 = no limit)")
+	pf.String("grep", "", "keep only records with a value matching this case-insensitive regex; emits one record per line")
 	pf.Bool("quiet", false, "suppress stderr warnings")
 	pf.Bool("verbose", false, "emit per-phase timing diagnostics on stderr")
 	pf.Bool("flat-search", false, "force primitive path — no enrichment, no connections")
@@ -90,7 +103,9 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newOutlinksCmd())
 	cmd.AddCommand(newMetaCmd())
 	cmd.AddCommand(newSchemaCmd())
-	cmd.AddCommand(newInitCmd())
+	initCmd := newInitCmd()
+	markMutation(initCmd) // writes config, hooks and scaffolding; the receipt lists them
+	cmd.AddCommand(initCmd)
 	cmd.AddCommand(newDoctorCmd())
 	cmd.AddCommand(newQueryCmd())
 	cmd.AddCommand(newBaseCmd())

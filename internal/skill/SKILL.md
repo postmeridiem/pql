@@ -78,6 +78,7 @@ These work on every command:
 | `--db <path>` | Point at a different database (env `PQL_DB`) — use it to keep a probe from touching a vault's own state |
 | `--config <path>` | Config override (env `PQL_CONFIG`) |
 | `--pretty` · `--jsonl` · `-n/--limit N` | Output shaping |
+| `--grep <regex>` | Keep only the records with a matching value. **This is how you avoid piping to `grep`, `jq` or `python3`** — see below |
 | `--quiet` · `--verbose` | Suppress stderr warnings · add per-phase timings |
 | `--flat-search` | Force the primitive path (see the caveat under ranked answers) |
 
@@ -437,7 +438,9 @@ The changelog carries a format version. An older one replays with a loud
   `--pretty` for humans, `--limit N` to cap. Two surfaces opt out of JSON
   deliberately: `ticket new --id-only` prints a bare id, and `--oneline` prints
   `id<TAB>status<TAB>title` on the list verbs, `path<TAB>score` on the ranked
-  ones.
+  ones. A third changes the shape without leaving JSON: `--grep` drops the
+  enclosing array and emits one record per line, so an array parser breaks on
+  it while a JSONL reader does not.
 - **stderr:** JSON diagnostics, one per line. Codes come in two shapes:
   `pql.<phase>.<kind>` for index, parse, eval and plan problems
   (`pql.parse.unexpected_token`), and `cli.error` / `cli.exit` for flag and
@@ -551,12 +554,69 @@ not read that as a failed call.
 Prefer these over piping to `jq`: they are cheaper and they compose with
 `--limit`.
 
+## Filtering by content: `--grep`
+
+`--fields` and `--oneline` trim *what each record shows*. `--grep <regex>`
+trims *which records you get*, and it is the answer to "which of these mention
+X" on any verb:
+
+```bash
+pql ticket list --grep changelog
+pql decisions list --grep 'ticket|changelog' --oneline
+pql ticket show T-99 --grep resolve
+pql files --grep '^governance/'
+```
+
+**Reach for it instead of a pipe.** This is not a style preference — a pipe
+costs the caller an approval prompt every time, because the permission rules
+match the whole command string and a pipeline containing pql is not a pql
+command. `pql ticket list | grep changelog` prompts; `pql ticket list --grep
+changelog` does not. The same goes for `jq` and for `python3 -c`, and reaching
+for an interpreter to dodge the prompt is worse than the prompt: blanket-
+allowing one is an unbounded write grant.
+
+It filters the output buffer, so it means exactly what the pipe meant:
+`pql X --limit 5 --grep p` is `pql X --limit 5 | grep p`. `--limit` picks the
+page, `--grep` filters that page.
+
+The rules, all of which have a reason you can predict from:
+
+- **Case-insensitive regex** (RE2 — alternation and anchors work,
+  backreferences and lookaround do not). An unparseable pattern exits `64`
+  naming it.
+- **One record per line, no enclosing array.** Each line is valid JSON on its
+  own, so the result is still machine-readable as JSONL — a filtered answer is
+  not a text dump. Don't hand it to a parser expecting an array.
+- **Zero matches emits zero bytes** at exit `0`, like `--oneline`. Success, and
+  still not evidence of absence.
+- **Values are matched, keys are not.** `--grep status` searches what the
+  statuses *are*; it does not match every ticket because every ticket has that
+  key. Whatever made a record match is visible in the record you get back.
+- **Anchors bind to a value, not to the line.** `--grep '^members/vale'`
+  matches paths starting with it. Through a pipe that anchor would be useless,
+  since every line starts with `{"path":`.
+- **It runs after projection.** With `--fields id,title`, `--grep` sees only
+  those two values — what you see is what was matched.
+- **`--pretty` is refused** at exit `64`: an indented array cannot also be one
+  record per line. `--jsonl` is accepted and redundant. `--oneline` composes,
+  and there `--grep` matches the text of the emitted line.
+- **Mutation verbs refuse it** at exit `64`, for the same reason they refuse
+  `--fields`: their output is a receipt, and a receipt that might be suppressed
+  confirms nothing.
+
+Its one real limit is the same as every other pql surface: it sees the fields
+pql emits, **never the body prose of a markdown file**. For that, `grep`/`rg`
+over the files is still the right tool.
+
 ## Anti-patterns
 
 - **One command per invocation.** No `&&`, no pipes, no `$(…)`, no
   redirection — the permission rules match by prefix and a shell construction
   containing pql is not a pql command. See Permissions below for what to use
   instead.
+- **Don't pipe pql's output to `grep`, `jq` or `python3`** — use `--grep` to
+  filter, `--fields` to project, `--limit` to cap. That is what they are for,
+  and each avoids a prompt the pipe would have cost.
 - **Don't chain `files` then `meta`** to filter — one `query` with a `WHERE`
   does it in a single pass.
 - **Don't parse error text** — pass the stderr diagnostic through.
@@ -566,7 +626,9 @@ Prefer these over piping to `jq`: they are cheaper and they compose with
 
 ## When not to use pql
 
-- **Literal string search** → `grep`/`rg`. pql's ranking is structural.
+- **Literal string search in the body of a markdown file** → `grep`/`rg`. pql's
+  ranking is structural and its `--grep` filters pql's own output, so neither
+  reaches body prose.
 - **Reading a file** → the `Read` tool.
 - **Code structure** → tree-sitter or an LSP.
 - **Editing vault content** → `Write`/`Edit`. pql never writes to your
@@ -601,6 +663,8 @@ practice each of these interrupts the caller:
 ```bash
 pql decisions sync && pql decisions list   # chained
 pql ticket show T-5 | head -20             # piped
+pql ticket list | grep changelog           # piped — use --grep
+pql ticket list | jq '.[].id'              # piped — use --fields or --oneline
 id=$(pql ticket new task "x" --id-only)    # substituted
 pql ticket list > out.json                 # redirected
 PQL_VAULT=/some/path pql tags              # env-var prefixed
@@ -611,10 +675,12 @@ alternative to the flags. They work when pql is run by a human; under a prefix
 allowlist they do not, because the command string starts with `PQL_VAULT=` and
 matches no `pql` rule. **Use the flag, not the env var.**
 
-Run one command per invocation and read its output instead. Use `--limit`,
-`--fields` and `--oneline` where you would have piped, and `--pretty` where you
-would have formatted — all three are cheaper than a pipe anyway, since they cut
-the payload at the source rather than after it has been produced.
+Run one command per invocation and read its output instead. Use `--grep` where
+you would have piped to `grep`, `jq` or `python3`, `--fields` and `--oneline`
+where you would have projected, `--limit` where you would have used `head`, and
+`--pretty` where you would have formatted — all of them are cheaper than a pipe
+anyway, since they cut the payload at the source rather than after it has been
+produced.
 
 A long or punctuation-heavy argument occasionally trips the same machinery — a
 title containing `|` can read as a pipe even when quoted. This is inconsistent

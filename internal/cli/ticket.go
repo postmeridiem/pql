@@ -180,22 +180,23 @@ func newTicketCmd() *cobra.Command {
 			return &exitError{code: diag.Usage}
 		},
 	}
-	cmd.AddCommand(newTicketNewCmd())
-	cmd.AddCommand(newTicketListCmd())
-	cmd.AddCommand(newTicketShowCmd())
-	cmd.AddCommand(newTicketStatusCmd())
-	cmd.AddCommand(newTicketStatusListCmd())
-	cmd.AddCommand(newTicketRelabelCmd())
-	cmd.AddCommand(newTicketAssignCmd())
-	cmd.AddCommand(newTicketSetParentCmd())
-	cmd.AddCommand(newTicketDecisionCmd())
-	cmd.AddCommand(newTicketBlockCmd())
-	cmd.AddCommand(newTicketUnblockCmd())
-	cmd.AddCommand(newTicketTeamCmd())
-	cmd.AddCommand(newTicketLabelCmd())
-	cmd.AddCommand(newTicketBoardCmd())
-	cmd.AddCommand(newTicketAppendCmd())
-	cmd.AddCommand(newTicketRefineCmd())
+	// Split by surface: the read verbs answer a question and accept the
+	// projection and filter flags; the mutation verbs return a receipt and
+	// reject them (D-30, and --grep for the same reason — see markMutation).
+	read := []*cobra.Command{
+		newTicketListCmd(), newTicketShowCmd(), newTicketStatusListCmd(),
+		newTicketBoardCmd(), newTicketRefineCmd(),
+	}
+	mutating := []*cobra.Command{
+		newTicketNewCmd(), newTicketStatusCmd(), newTicketRelabelCmd(),
+		newTicketAssignCmd(), newTicketSetParentCmd(), newTicketDecisionCmd(),
+		newTicketBlockCmd(), newTicketUnblockCmd(), newTicketTeamCmd(),
+		newTicketLabelCmd(), newTicketAppendCmd(),
+	}
+	markMutation(mutating...)
+	for _, c := range append(read, mutating...) {
+		cmd.AddCommand(c)
+	}
 	return cmd
 }
 

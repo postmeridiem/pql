@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -2384,4 +2385,222 @@ func pqlIT(t *testing.T, vault string, args ...string) string {
 		t.Fatalf("pql %v exit=%d\nstderr: %s", args, code, stderr)
 	}
 	return string(stdout)
+}
+
+// --- --grep (T-113) -------------------------------------------------------
+
+// TestIntegration_GrepEqualsPipedGrep is the defining test for --grep: the
+// flag exists so a caller never has to pipe, so it has to mean exactly what
+// the pipe meant. For each verb below it runs the command twice — once plain
+// and grepped in-process the way grep(1) would, once with --grep — and
+// requires the two to agree.
+//
+// The oracle is deliberately naive: a case-insensitive regex over each
+// rendered JSONL line. That is what `pql … --jsonl | grep -i pat` does, and
+// keeping it independent of the Filter implementation is the point. The
+// patterns are all ones that occur only in values, where the two definitions
+// coincide; the one place they diverge on purpose has its own test below.
+func TestIntegration_GrepEqualsPipedGrep(t *testing.T) {
+	vault := councilVault(t)
+
+	cases := []struct {
+		name    string
+		args    []string
+		pattern string
+		// universal marks a pattern every record matches, which pins the
+		// "matches everything" end of the range: a filter that silently
+		// dropped rows would still pass a subset-only assertion.
+		universal bool
+	}{
+		{name: "files/subset", args: []string{"files"}, pattern: "persona"},
+		{name: "files/universal", args: []string{"files"}, pattern: `\.md`, universal: true},
+		{name: "files/glob", args: []string{"files", "members/*"}, pattern: "journal"},
+		{name: "files/limited", args: []string{"files", "--limit", "5"}, pattern: `\.md`, universal: true},
+		{name: "files/alternation", args: []string{"files"}, pattern: "persona|journal"},
+		{name: "files/case-insensitive", args: []string{"files"}, pattern: "PERSONA"},
+		{name: "tags", args: []string{"tags"}, pattern: "council"},
+		{name: "schema", args: []string{"schema"}, pattern: "string"},
+		{name: "query", args: []string{"query", "SELECT path, name"}, pattern: "persona"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			all := jsonlLines(t, pqlIT(t, vault, append(slices.Clone(tc.args), "--jsonl")...))
+			if len(all) == 0 {
+				t.Fatalf("fixture produced no rows for %v; the case proves nothing", tc.args)
+			}
+
+			re := regexp.MustCompile("(?i)" + tc.pattern)
+			var want []string
+			for _, l := range all {
+				if re.MatchString(l) {
+					want = append(want, l)
+				}
+			}
+
+			got := jsonlLines(t, pqlIT(t, vault, append(slices.Clone(tc.args), "--grep", tc.pattern)...))
+
+			if !slices.Equal(got, want) {
+				t.Errorf("--grep %q disagrees with piping the same output to grep\n got (%d): %v\nwant (%d): %v",
+					tc.pattern, len(got), got, len(want), want)
+			}
+			switch {
+			case tc.universal && len(want) != len(all):
+				t.Errorf("pattern %q was meant to match every row, matched %d of %d", tc.pattern, len(want), len(all))
+			case !tc.universal && (len(want) == 0 || len(want) == len(all)):
+				t.Errorf("pattern %q matched %d of %d rows; a case that matches all or none proves nothing",
+					tc.pattern, len(want), len(all))
+			}
+		})
+	}
+}
+
+// TestIntegration_GrepMatchesValuesNotKeys covers the one place --grep and a
+// piped grep are meant to disagree. Every `files` row carries a "size" key, so
+// `| grep size` matches all of them; --grep tests values, so it matches none.
+// Without this the flag would be useless for exactly the terms an agent
+// reaches for — --grep status matching every ticket is not an answer.
+func TestIntegration_GrepMatchesValuesNotKeys(t *testing.T) {
+	vault := councilVault(t)
+
+	all := jsonlLines(t, pqlIT(t, vault, "files", "--jsonl"))
+	for _, l := range all {
+		if !strings.Contains(l, `"size"`) {
+			t.Fatalf("fixture assumption broken: row has no size key: %s", l)
+		}
+	}
+
+	stdout, _, code := run(t, vault, "files", "--grep", "size")
+	if code != 0 {
+		t.Fatalf("exit=%d, want 0 — zero matches is success", code)
+	}
+	if len(bytes.TrimSpace(stdout)) != 0 {
+		t.Errorf("--grep size matched a key; want no rows, got:\n%s", stdout)
+	}
+}
+
+// TestIntegration_GrepAnchorsBindToValues covers the second deliberate
+// divergence from a piped grep. `| grep '^members/vale'` never matches,
+// because every line starts with `{"path":`, so anchoring is unusable through
+// a pipe. --grep tests each value on its own, so ^ and $ anchor to the value —
+// which is what someone writing that pattern meant. Same reasoning as
+// matching values rather than keys: the pipe's behaviour here is an artefact
+// of the JSON envelope, not something to reproduce.
+func TestIntegration_GrepAnchorsBindToValues(t *testing.T) {
+	vault := councilVault(t)
+
+	all := jsonlLines(t, pqlIT(t, vault, "files", "--jsonl"))
+	for _, l := range all {
+		if strings.HasPrefix(l, "members/") {
+			t.Fatalf("fixture assumption broken: line is not JSON-enveloped: %s", l)
+		}
+	}
+
+	got := jsonlLines(t, pqlIT(t, vault, "files", "--grep", "^members/vale"))
+	if len(got) == 0 {
+		t.Fatal("^members/vale matched nothing; anchors should bind to the path value")
+	}
+	for _, l := range got {
+		if !strings.Contains(l, `"members/vale/`) {
+			t.Errorf("row does not start with the anchored prefix: %s", l)
+		}
+	}
+	if len(got) == len(all) {
+		t.Errorf("anchored pattern matched every row (%d); it should select a subset", len(got))
+	}
+}
+
+// TestIntegration_GrepContract pins the surrounding behaviour: the shape it
+// emits, what it does on no match, and the two combinations it refuses.
+func TestIntegration_GrepContract(t *testing.T) {
+	vault := councilVault(t)
+
+	t.Run("emits bare JSONL, not an array", func(t *testing.T) {
+		out := pqlIT(t, vault, "files", "--grep", "persona")
+		for _, l := range jsonlLines(t, out) {
+			if strings.HasPrefix(l, "[") || strings.HasSuffix(l, ",") {
+				t.Errorf("want one bare JSON object per line, got: %s", l)
+			}
+		}
+	})
+
+	t.Run("no match is exit 0 and zero bytes", func(t *testing.T) {
+		stdout, _, code := run(t, vault, "files", "--grep", "zzznotinthisvault")
+		if code != 0 {
+			t.Errorf("exit=%d, want 0 (D-22: zero matches is success)", code)
+		}
+		if len(stdout) != 0 {
+			t.Errorf("want zero bytes, got %q", stdout)
+		}
+	})
+
+	t.Run("invalid pattern exits 64 naming it", func(t *testing.T) {
+		_, stderr, code := run(t, vault, "files", "--grep", "[unclosed")
+		if code != 64 {
+			t.Errorf("exit=%d, want 64", code)
+		}
+		if !strings.Contains(string(stderr), "[unclosed") {
+			t.Errorf("stderr should quote the bad pattern, got: %s", stderr)
+		}
+	})
+
+	t.Run("refuses --pretty", func(t *testing.T) {
+		_, _, code := run(t, vault, "files", "--grep", "persona", "--pretty")
+		if code != 64 {
+			t.Errorf("exit=%d, want 64 — an indented array cannot also be one record per line", code)
+		}
+	})
+
+	t.Run("composes with --oneline", func(t *testing.T) {
+		vault := initVaultIT(t)
+		pqlIT(t, vault, "ticket", "new", "task", "keep this one")
+		pqlIT(t, vault, "ticket", "new", "task", "drop that one")
+
+		out := pqlIT(t, vault, "ticket", "list", "--oneline", "--grep", "keep")
+		lines := strings.Split(strings.TrimSpace(out), "\n")
+		if len(lines) != 1 || !strings.Contains(lines[0], "keep this one") {
+			t.Errorf("--oneline --grep = %q, want only the matching row", out)
+		}
+	})
+}
+
+// TestIntegration_GrepRefusedOnMutationVerbs guards the ordering as much as
+// the refusal. A mutation verb's stdout is a receipt, so --grep must not be
+// able to blank it (D-30) — and the refusal has to land before the write, or
+// the flag would refuse an invocation it had already performed.
+func TestIntegration_GrepRefusedOnMutationVerbs(t *testing.T) {
+	vault := initVaultIT(t)
+	pqlIT(t, vault, "ticket", "new", "task", "a ticket")
+
+	_, stderr, code := run(t, vault, "ticket", "status", "T-1", "done", "--grep", "anything")
+	if code != 64 {
+		t.Fatalf("exit=%d, want 64", code)
+	}
+	if !strings.Contains(string(stderr), "receipt") {
+		t.Errorf("stderr should explain why, got: %s", stderr)
+	}
+
+	// The refusal must have preceded the write.
+	out := pqlIT(t, vault, "ticket", "show", "T-1", "--fields", "status")
+	if strings.Contains(out, "done") {
+		t.Errorf("refused mutation still wrote: %s", out)
+	}
+}
+
+// jsonlLines splits JSONL output into non-empty lines, checking each parses on
+// its own — the property that keeps --grep output machine-readable.
+func jsonlLines(t *testing.T, out string) []string {
+	t.Helper()
+	var lines []string
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		var v any
+		if err := json.Unmarshal([]byte(l), &v); err != nil {
+			t.Fatalf("line is not valid JSON: %v\n%s", err, l)
+		}
+		lines = append(lines, l)
+	}
+	return lines
 }

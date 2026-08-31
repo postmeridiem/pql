@@ -25,8 +25,10 @@ func newWatchCmd() *cobra.Command {
 			return &exitError{code: diag.Usage}
 		},
 	}
-	cmd.AddCommand(newWatchStartCmd())
-	cmd.AddCommand(newWatchStopCmd())
+	start, stop := newWatchStartCmd(), newWatchStopCmd()
+	markMutation(start, stop) // toggle the watcher; the receipt says which way
+	cmd.AddCommand(start)
+	cmd.AddCommand(stop)
 	cmd.AddCommand(newWatchStatusCmd())
 	return cmd
 }
