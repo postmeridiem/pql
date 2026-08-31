@@ -208,3 +208,43 @@ func TestResolveQuestionErrorsOnMissingRecord(t *testing.T) {
 		t.Error("expected an error when the record is absent from its file")
 	}
 }
+
+// --- supersession detection (T-119) ---------------------------------------
+
+// Supersession is written into the status field in practice, not as the
+// standalone field the original regex expected. Reading only the latter left
+// real superseded decisions reporting `active`, which looks plausible and so
+// went unnoticed.
+func TestInferStatusReadsSupersessionFromStatusLine(t *testing.T) {
+	for _, tc := range []struct {
+		name, recType, statusLine, want string
+	}{
+		{"status-line form", typeConfirmed,
+			"- **Status:** Superseded by [D-15](#d-15-x)", statusSuperseded},
+		{"standalone field form", typeConfirmed,
+			"- **Superseded by:** [D-15](#d-15-x)", statusSuperseded},
+		{"plain active record", typeConfirmed,
+			"- **Status:** Active", statusActive},
+
+		// A record replaced only in part is still live. D-19 says exactly
+		// this and is still cited as an invariant, so marking it superseded
+		// would retire a rule the code still follows.
+		{"superseded in part", typeConfirmed,
+			"- **Status:** Superseded in part by [D-28](#d-28-x) — one clause only", statusActive},
+		{"partially superseded", typeConfirmed,
+			"- **Status:** Partially superseded by [D-28](#d-28-x)", statusActive},
+
+		// The same hedge on a question keeps it open rather than resolved.
+		{"question resolved", typeQuestion,
+			"- **Status:** Resolved → [D-13](#d-13-x)", statusResolved},
+		{"question partially resolved", typeQuestion,
+			"- **Status:** Partially resolved by [D-23](#d-23-x); the rest is open", statusOpen},
+		{"question open", typeQuestion, "- **Status:** Open", statusOpen},
+		{"question superseded", typeQuestion,
+			"- **Status:** Superseded by [Q-13](#q-13-x)", statusSuperseded},
+	} {
+		if got := inferStatus(tc.recType, []string{tc.statusLine}); got != tc.want {
+			t.Errorf("%s: inferStatus = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

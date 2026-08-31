@@ -3042,3 +3042,57 @@ D-29  - an argument that names a thing is validated. Both ids here are names,
         so an unknown one, or a type the pair matrix does not allow, exits
         non-zero naming the problem.
 ', NULL, '2026-08-31 18:10:45', '2026-08-31 18:10:45.010', '2026-08-31 18:10:45.010', NULL, 'f9b0b901881350239e4f3d49f892fd9c', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5J7JQ1HJEPQT7Y32Q972FHG', 'description', NULL, '`pql decisions list --status superseded` returns nothing. Three decisions in
+this tree are superseded and all three report `active`:
+
+  D-6  -> superseded by D-19
+  D-10 -> superseded by D-14
+  D-13 -> superseded by D-15
+
+The markdown says so plainly. pql does not read it.
+
+CAUSE
+
+inferStatus tests for supersession with
+
+  supersededRe = ^\s*-\s+\*\*Superseded\s+by:\*\*
+
+which requires a standalone field line. The convention actually used in this
+tree writes it into the status field instead:
+
+  - **Status:** Superseded by [D-15](#d-15-replication-via-per-table-monthly-sql-changelog-files)
+
+That does not match, so the check falls through and a confirmed record defaults
+to `active`. The parser and the tree have disagreed since the convention was
+adopted, and nothing surfaced it because a wrong-but-plausible status looks
+exactly like a right one.
+
+The reverse field is read correctly: `- **Supersedes:**` on the newer record
+produces a `supersedes` ref, which is why `decisions refs` shows these pairs
+while `decisions list --status superseded` shows nothing. Half the relation is
+visible and the half that changes a record''s lifecycle is not.
+
+FIX
+
+Accept both spellings. Keep the standalone field, and additionally treat a
+`**Status:**` line beginning with "superseded" as superseded — the same shape
+the question branch already uses to detect "resolved" and "partial". One extra
+prefix test in the existing loop; no schema change, no migration, and the three
+records correct themselves on the next `decisions sync`.
+
+Applies to questions too, since the check runs before the type branch: a
+question superseded by another record would have had the same problem.
+
+WHY IT MATTERS BEYOND THE THREE RECORDS
+
+T-118 adds decision-to-decision supersession to the close verb. Whatever that
+verb writes has to be a spelling the parser reads back, or it ships a feature
+that is syntactically correct and semantically inert — the failure mode T-99''s
+reparse test was written to catch. This is a prerequisite for that half of
+T-118, not a tidy-up alongside it.
+
+Also worth noting for scope: fixing this moves three records from active to
+superseded, which is a real change to what `decisions list --status active`
+returns. That is the correction, not a side effect.', NULL, '2026-08-31 18:39:47', '2026-08-31 18:39:47.950', '2026-08-31 18:39:47.950', NULL, '3409b5869ffaafebfb609c192a5b0877', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5J7JQ1HJEPQT7Y32Q972FHG', 'status', 'backlog', 'done', NULL, '2026-08-31 18:42:00', '2026-08-31 18:42:00.166', '2026-08-31 18:42:00.166', NULL, '9dbefd539811b6c7d5fedd4880a8cc53', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5J7JQ1HJEPQT7Y32Q972FHG', 'status', 'done', 'done', NULL, '2026-08-31 18:43:28', '2026-08-31 18:43:28.134', '2026-08-31 18:43:28.134', NULL, '5264e2f90d0a254bcd9d9246fe9cdf95', 2) ON CONFLICT(hash) DO NOTHING;

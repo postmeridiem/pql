@@ -171,9 +171,25 @@ func inferStatus(recType string, body []string) string {
 	if recType == typeRejected {
 		return statusActive
 	}
+	// Supersession is written two ways and both are read. The standalone
+	// `- **Superseded by:**` field is the original spelling; writing it into
+	// the status field instead is what the records in the wild actually do,
+	// and only reading the first form left three superseded decisions
+	// reporting `active` because the fallthrough default looks plausible
+	// (T-119). Checked before the type branch, so it covers questions too.
 	for _, line := range body {
 		if supersededRe.MatchString(line) {
 			return statusSuperseded
+		}
+		if m := statusRe.FindStringSubmatch(line); m != nil {
+			s := strings.ToLower(strings.TrimSpace(m[1]))
+			// "Superseded in part by D-28 — the no-runner clause. The other
+			// half still holds" is a live record, not a dead one, and D-19
+			// says exactly that while remaining a cited invariant. A record
+			// that is partly replaced keeps its own status.
+			if strings.HasPrefix(s, "superseded") && !isPartial(s) {
+				return statusSuperseded
+			}
 		}
 	}
 	if recType == typeQuestion {
@@ -183,7 +199,7 @@ func inferStatus(recType string, body []string) string {
 				continue
 			}
 			s := strings.ToLower(strings.TrimSpace(m[1]))
-			if strings.Contains(s, "partial") || strings.Contains(s, "remaining") {
+			if isPartial(s) {
 				return statusOpen
 			}
 			if strings.HasPrefix(s, "resolved") {
@@ -194,6 +210,19 @@ func inferStatus(recType string, body []string) string {
 		return statusOpen
 	}
 	return statusActive
+}
+
+// isPartial reports whether a status value hedges — the record is part-way
+// through the transition it names and has not finished it. Shared by the
+// supersession and resolution checks so "Superseded in part" and "Partially
+// resolved" behave the same way: the record keeps its live status.
+func isPartial(status string) bool {
+	for _, marker := range []string{"partial", "in part", "remaining"} {
+		if strings.Contains(status, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func extractDate(body []string) string {

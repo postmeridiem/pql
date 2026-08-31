@@ -6012,3 +6012,160 @@ D-29  - an argument that names a thing is validated. Both ids here are names,
         so an unknown one, or a type the pair matrix does not allow, exits
         non-zero naming the problem.
 ', 'backlog', 'medium', NULL, NULL, 'D-29', '2026-08-31 17:56:31.063', '2026-08-31 18:10:45.010', NULL, '3ddcf8515acfc4b4303e341932f949a0', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5J7JQ1HJEPQT7Y32Q972FHG', 'bug', NULL, 'Supersession written in the Status line is never parsed, so three superseded decisions report active', NULL, 'backlog', 'high', NULL, NULL, 'D-8', '2026-08-31 18:39:15.724', '2026-08-31 18:39:15.724', NULL, '69ec702c8451074bb62622a53ecaf2a8', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5J7JQ1HJEPQT7Y32Q972FHG', 'bug', NULL, 'Supersession written in the Status line is never parsed, so three superseded decisions report active', '`pql decisions list --status superseded` returns nothing. Three decisions in
+this tree are superseded and all three report `active`:
+
+  D-6  -> superseded by D-19
+  D-10 -> superseded by D-14
+  D-13 -> superseded by D-15
+
+The markdown says so plainly. pql does not read it.
+
+CAUSE
+
+inferStatus tests for supersession with
+
+  supersededRe = ^\s*-\s+\*\*Superseded\s+by:\*\*
+
+which requires a standalone field line. The convention actually used in this
+tree writes it into the status field instead:
+
+  - **Status:** Superseded by [D-15](#d-15-replication-via-per-table-monthly-sql-changelog-files)
+
+That does not match, so the check falls through and a confirmed record defaults
+to `active`. The parser and the tree have disagreed since the convention was
+adopted, and nothing surfaced it because a wrong-but-plausible status looks
+exactly like a right one.
+
+The reverse field is read correctly: `- **Supersedes:**` on the newer record
+produces a `supersedes` ref, which is why `decisions refs` shows these pairs
+while `decisions list --status superseded` shows nothing. Half the relation is
+visible and the half that changes a record''s lifecycle is not.
+
+FIX
+
+Accept both spellings. Keep the standalone field, and additionally treat a
+`**Status:**` line beginning with "superseded" as superseded — the same shape
+the question branch already uses to detect "resolved" and "partial". One extra
+prefix test in the existing loop; no schema change, no migration, and the three
+records correct themselves on the next `decisions sync`.
+
+Applies to questions too, since the check runs before the type branch: a
+question superseded by another record would have had the same problem.
+
+WHY IT MATTERS BEYOND THE THREE RECORDS
+
+T-118 adds decision-to-decision supersession to the close verb. Whatever that
+verb writes has to be a spelling the parser reads back, or it ships a feature
+that is syntactically correct and semantically inert — the failure mode T-99''s
+reparse test was written to catch. This is a prerequisite for that half of
+T-118, not a tidy-up alongside it.
+
+Also worth noting for scope: fixing this moves three records from active to
+superseded, which is a real change to what `decisions list --status active`
+returns. That is the correction, not a side effect.', 'backlog', 'high', NULL, NULL, 'D-8', '2026-08-31 18:39:15.724', '2026-08-31 18:39:47.950', NULL, 'ad0abbcacabbede6240799d4d6aed9a9', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5J7JQ1HJEPQT7Y32Q972FHG', 'bug', NULL, 'Supersession written in the Status line is never parsed, so three superseded decisions report active', '`pql decisions list --status superseded` returns nothing. Three decisions in
+this tree are superseded and all three report `active`:
+
+  D-6  -> superseded by D-19
+  D-10 -> superseded by D-14
+  D-13 -> superseded by D-15
+
+The markdown says so plainly. pql does not read it.
+
+CAUSE
+
+inferStatus tests for supersession with
+
+  supersededRe = ^\s*-\s+\*\*Superseded\s+by:\*\*
+
+which requires a standalone field line. The convention actually used in this
+tree writes it into the status field instead:
+
+  - **Status:** Superseded by [D-15](#d-15-replication-via-per-table-monthly-sql-changelog-files)
+
+That does not match, so the check falls through and a confirmed record defaults
+to `active`. The parser and the tree have disagreed since the convention was
+adopted, and nothing surfaced it because a wrong-but-plausible status looks
+exactly like a right one.
+
+The reverse field is read correctly: `- **Supersedes:**` on the newer record
+produces a `supersedes` ref, which is why `decisions refs` shows these pairs
+while `decisions list --status superseded` shows nothing. Half the relation is
+visible and the half that changes a record''s lifecycle is not.
+
+FIX
+
+Accept both spellings. Keep the standalone field, and additionally treat a
+`**Status:**` line beginning with "superseded" as superseded — the same shape
+the question branch already uses to detect "resolved" and "partial". One extra
+prefix test in the existing loop; no schema change, no migration, and the three
+records correct themselves on the next `decisions sync`.
+
+Applies to questions too, since the check runs before the type branch: a
+question superseded by another record would have had the same problem.
+
+WHY IT MATTERS BEYOND THE THREE RECORDS
+
+T-118 adds decision-to-decision supersession to the close verb. Whatever that
+verb writes has to be a spelling the parser reads back, or it ships a feature
+that is syntactically correct and semantically inert — the failure mode T-99''s
+reparse test was written to catch. This is a prerequisite for that half of
+T-118, not a tidy-up alongside it.
+
+Also worth noting for scope: fixing this moves three records from active to
+superseded, which is a real change to what `decisions list --status active`
+returns. That is the correction, not a side effect.', 'done', 'high', NULL, NULL, 'D-8', '2026-08-31 18:39:15.724', '2026-08-31 18:42:00.166', NULL, '955896e92289c577affa56d67c4a47f7', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5J7JQ1HJEPQT7Y32Q972FHG', 'bug', NULL, 'Supersession written in the Status line is never parsed, so three superseded decisions report active', '`pql decisions list --status superseded` returns nothing. Three decisions in
+this tree are superseded and all three report `active`:
+
+  D-6  -> superseded by D-19
+  D-10 -> superseded by D-14
+  D-13 -> superseded by D-15
+
+The markdown says so plainly. pql does not read it.
+
+CAUSE
+
+inferStatus tests for supersession with
+
+  supersededRe = ^\s*-\s+\*\*Superseded\s+by:\*\*
+
+which requires a standalone field line. The convention actually used in this
+tree writes it into the status field instead:
+
+  - **Status:** Superseded by [D-15](#d-15-replication-via-per-table-monthly-sql-changelog-files)
+
+That does not match, so the check falls through and a confirmed record defaults
+to `active`. The parser and the tree have disagreed since the convention was
+adopted, and nothing surfaced it because a wrong-but-plausible status looks
+exactly like a right one.
+
+The reverse field is read correctly: `- **Supersedes:**` on the newer record
+produces a `supersedes` ref, which is why `decisions refs` shows these pairs
+while `decisions list --status superseded` shows nothing. Half the relation is
+visible and the half that changes a record''s lifecycle is not.
+
+FIX
+
+Accept both spellings. Keep the standalone field, and additionally treat a
+`**Status:**` line beginning with "superseded" as superseded — the same shape
+the question branch already uses to detect "resolved" and "partial". One extra
+prefix test in the existing loop; no schema change, no migration, and the three
+records correct themselves on the next `decisions sync`.
+
+Applies to questions too, since the check runs before the type branch: a
+question superseded by another record would have had the same problem.
+
+WHY IT MATTERS BEYOND THE THREE RECORDS
+
+T-118 adds decision-to-decision supersession to the close verb. Whatever that
+verb writes has to be a spelling the parser reads back, or it ships a feature
+that is syntactically correct and semantically inert — the failure mode T-99''s
+reparse test was written to catch. This is a prerequisite for that half of
+T-118, not a tidy-up alongside it.
+
+Also worth noting for scope: fixing this moves three records from active to
+superseded, which is a real change to what `decisions list --status active`
+returns. That is the correction, not a side effect.', 'done', 'high', NULL, NULL, 'D-8', '2026-08-31 18:39:15.724', '2026-08-31 18:43:28.134', NULL, '4603e985623ec61004a4f76c29f5b9fb', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
