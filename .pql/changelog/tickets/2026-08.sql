@@ -3980,3 +3980,760 @@ A NOTE ON SCOPE. This is filed because it is an upstream defect an unrelated
 project actually hit, not as backlog grooming. Any environment that pins a vault
 by environment variable and works across more than one repository will hit it the
 same way, and the pinning is a documented pattern rather than an unusual setup.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-16 16:31:15.378', '2026-08-16 16:31:15.378', NULL, '8ad2510e8c8523f6c35efa5eb83f16c7', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FYBX6214TDP22Q7PASAAN8YG', 'task', NULL, 'No verb closes a question into a decision', 'pql can mint a record id but cannot close one. ''decisions claim <D|Q|R>'' is the only authoring verb, and there is no counterpart for the Q -> D transition.
+
+The schema already has the states: type question and status resolved both exist and are queryable. What is missing is the transition and the link. So every vault invents its own convention for it. In one vault I work in, the convention is a ''Resolved -> D-N'' line in the question body plus a hand-edited status field - written into a file header ad hoc, enforced by nobody, and not surfaced by ''decisions refs'' unless it happens to parse as a cross-reference.
+
+Suggested shape, matching the existing surface:
+
+  pql decisions resolve Q-2 --into D-23
+
+sets the question status to resolved, records the link so ''decisions refs Q-2'' and ''decisions show D-23 --with-refs'' both show it, and rejects an unknown or non-question id the way ''ticket decision'' already rejects an unknown D. The markdown stays the source of truth, so it would write the backlink line rather than only touching pql.db - same direction as ''ticket relabel --fix-prose''.
+
+Why it matters beyond tidiness: an open question that is never formally closed stays open in the index forever. This vault reports 12 open questions against 13 total, which is either accurate or an artefact of there being no cheap way to close one - and no way to tell which from the outside.
+
+Second, smaller point, docs rather than code. The bundled SKILL.md documents the D/Q/R vocabulary but not when to reach for each. Two rules would carry most of the value: a deferral is written as a Q rather than left as prose, and a D record is a home for durable documentation and not only for a choice between alternatives. The type is already named ''confirmed'' rather than ''decision'', which fits both readings - but the command, the directory and the --decision flag all say decision, so readers narrow it. A sentence in the skill fixes that; renaming anything would not be worth it.', 'in_progress', 'medium', NULL, NULL, NULL, '2026-08-09 09:57:30.761', '2026-08-19 20:35:07.754', NULL, 'b2b99714cf2ced422b49994f5f1faac0', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5EKW9PP433N5TF0CNTQQVWG', 'task', NULL, 'Global --grep filters output at the source, so agents stop shelling out to grep and python', NULL, 'backlog', 'high', NULL, NULL, 'D-27', '2026-08-31 10:13:45.525', '2026-08-31 10:13:45.525', NULL, '46c3bfaf6bb2bdb4103cd7bd04d756e9', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5EKW9PP433N5TF0CNTQQVWG', 'task', NULL, 'Global --grep filters output at the source, so agents stop shelling out to grep and python', 'Every projection flag pql has trims rows or keys. None of them answers "show me
+only the records mentioning X", so that question still leaves the binary:
+
+  pql ticket list | grep changelog
+  pql decisions list --oneline | python3 -c ''...''
+
+Both are exactly what the skill tells agents not to write, and for a reason
+that is about permissions rather than taste. A prefix allowlist matches the
+whole command string, so `Bash(pql *)` does not cover a pipeline containing
+pql, and piped commands prompt even when both sides are allowlisted
+(claude-code#39438). An agent that needs to filter therefore either interrupts
+the caller for approval or reaches for a python one-liner, and blanket-allowing
+an interpreter to avoid the prompt is an unbounded write grant. The cheapest
+fix is to make the filter a flag, so the whole operation stays inside one
+allowlisted invocation.
+
+SHAPE
+
+A global --grep <pattern> on every command, alongside --limit, --fields and
+--oneline:
+
+  pql ticket list --grep changelog
+  pql decisions list --grep ''ticket|changelog'' --oneline
+  pql ticket show T-99 --grep resolve
+
+Semantics, settled with the maintainer before implementation:
+
+- Line-oriented output, like grep(1). Matching records are emitted one per
+  line rather than inside an enclosing array, so the result reads the way grep
+  output reads. Each line is individually valid JSON, so the output is still
+  machine-consumable as JSONL - a filtered result stays parseable instead of
+  becoming a text dump.
+- Case-insensitive RE2 regex. The flag is named after grep and should behave
+  like it, and RE2 cannot backtrack catastrophically, so an agent-supplied
+  pattern cannot hang the binary. An invalid pattern exits 64 naming the parse
+  error rather than silently matching nothing.
+- Values only, not keys. `--grep status` searches the values, so it does not
+  match every ticket merely because every ticket carries a status key. What
+  matched is visible in what was emitted.
+- Filters after projection. --fields, --full and the per-verb default trims all
+  apply first, so --grep tests exactly the text the caller is about to see.
+  Consistent with matching on values: what you see is what was matched.
+- --limit caps the survivors, applied after filtering, the way `grep | head`
+  reads.
+- Zero matches emits zero bytes at exit 0, following the precedent --oneline
+  already sets. Still success under D-22, and still not evidence of absence.
+- Single-object verbs (meta, doctor, plan status, ticket show with one id) are
+  one record, so they are one line: emitted if a value matches, omitted if not.
+- --pretty is refused at exit 64. It is a multi-line indented array and cannot
+  also be one-record-per-line; the existing --pretty/--jsonl exclusion is the
+  precedent. --jsonl is accepted and redundant.
+
+WHERE IT LANDS
+
+render.Opts is already the single choke point every JSON-emitting verb routes
+through - render.Render for arrays, render.One for objects - so the filter goes
+there and reaches every verb without per-subcommand wiring, the way
+--flat-search does. --oneline formats its own plain-text lines outside
+render.Render and needs the same filter applied to its projected rows.
+
+The docs half is load-bearing and is the actual point of the ticket. The
+bundled SKILL.md currently tells agents to avoid pipes and offers --limit,
+--fields and --oneline as the alternatives; none of them filters by content, so
+the advice is incomplete exactly where an agent is most tempted to pipe. It
+should name --grep as the default route for "which records mention X", and say
+plainly that reaching for grep, jq or python is the fallback for body prose in
+markdown files, not for pql''s own output.', 'backlog', 'high', NULL, NULL, 'D-27', '2026-08-31 10:13:45.525', '2026-08-31 10:15:19.073', NULL, '464c2edca0bbcd9987ddf3aa0ff53d64', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5EKW9PP433N5TF0CNTQQVWG', 'task', NULL, 'Global --grep filters output at the source, so agents stop shelling out to grep and python', 'Every projection flag pql has trims rows or keys. None of them answers "show me
+only the records mentioning X", so that question still leaves the binary:
+
+  pql ticket list | grep changelog
+  pql decisions list --oneline | python3 -c ''...''
+
+Both are exactly what the skill tells agents not to write, and for a reason
+that is about permissions rather than taste. A prefix allowlist matches the
+whole command string, so `Bash(pql *)` does not cover a pipeline containing
+pql, and piped commands prompt even when both sides are allowlisted
+(claude-code#39438). An agent that needs to filter therefore either interrupts
+the caller for approval or reaches for a python one-liner, and blanket-allowing
+an interpreter to avoid the prompt is an unbounded write grant. The cheapest
+fix is to make the filter a flag, so the whole operation stays inside one
+allowlisted invocation.
+
+SHAPE
+
+A global --grep <pattern> on every command, alongside --limit, --fields and
+--oneline:
+
+  pql ticket list --grep changelog
+  pql decisions list --grep ''ticket|changelog'' --oneline
+  pql ticket show T-99 --grep resolve
+
+Semantics, settled with the maintainer before implementation:
+
+- Line-oriented output, like grep(1). Matching records are emitted one per
+  line rather than inside an enclosing array, so the result reads the way grep
+  output reads. Each line is individually valid JSON, so the output is still
+  machine-consumable as JSONL - a filtered result stays parseable instead of
+  becoming a text dump.
+- Case-insensitive RE2 regex. The flag is named after grep and should behave
+  like it, and RE2 cannot backtrack catastrophically, so an agent-supplied
+  pattern cannot hang the binary. An invalid pattern exits 64 naming the parse
+  error rather than silently matching nothing.
+- Values only, not keys. `--grep status` searches the values, so it does not
+  match every ticket merely because every ticket carries a status key. What
+  matched is visible in what was emitted.
+- Filters after projection. --fields, --full and the per-verb default trims all
+  apply first, so --grep tests exactly the text the caller is about to see.
+  Consistent with matching on values: what you see is what was matched.
+- --limit caps the survivors, applied after filtering, the way `grep | head`
+  reads.
+- Zero matches emits zero bytes at exit 0, following the precedent --oneline
+  already sets. Still success under D-22, and still not evidence of absence.
+- Single-object verbs (meta, doctor, plan status, ticket show with one id) are
+  one record, so they are one line: emitted if a value matches, omitted if not.
+- --pretty is refused at exit 64. It is a multi-line indented array and cannot
+  also be one-record-per-line; the existing --pretty/--jsonl exclusion is the
+  precedent. --jsonl is accepted and redundant.
+
+WHERE IT LANDS
+
+render.Opts is already the single choke point every JSON-emitting verb routes
+through - render.Render for arrays, render.One for objects - so the filter goes
+there and reaches every verb without per-subcommand wiring, the way
+--flat-search does. --oneline formats its own plain-text lines outside
+render.Render and needs the same filter applied to its projected rows.
+
+The docs half is load-bearing and is the actual point of the ticket. The
+bundled SKILL.md currently tells agents to avoid pipes and offers --limit,
+--fields and --oneline as the alternatives; none of them filters by content, so
+the advice is incomplete exactly where an agent is most tempted to pipe. It
+should name --grep as the default route for "which records mention X", and say
+plainly that reaching for grep, jq or python is the fallback for body prose in
+markdown files, not for pql''s own output.', 'in_progress', 'high', NULL, NULL, 'D-27', '2026-08-31 10:13:45.525', '2026-08-31 10:15:23.908', NULL, 'beaa842161f73c6a53981fe32318c032', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5EKW9PP433N5TF0CNTQQVWG', 'task', NULL, 'Global --grep filters output at the source, so agents stop shelling out to grep and python', 'Every projection flag pql has trims rows or keys. None of them answers "show me
+only the records mentioning X", so that question still leaves the binary:
+
+  pql ticket list | grep changelog
+  pql decisions list --oneline | python3 -c ''...''
+
+Both are exactly what the skill tells agents not to write, and for a reason
+that is about permissions rather than taste. A prefix allowlist matches the
+whole command string, so `Bash(pql *)` does not cover a pipeline containing
+pql, and piped commands prompt even when both sides are allowlisted
+(claude-code#39438). An agent that needs to filter therefore either interrupts
+the caller for approval or reaches for a python one-liner, and blanket-allowing
+an interpreter to avoid the prompt is an unbounded write grant. The cheapest
+fix is to make the filter a flag, so the whole operation stays inside one
+allowlisted invocation.
+
+SHAPE
+
+A global --grep <pattern> on every command, alongside --limit, --fields and
+--oneline:
+
+  pql ticket list --grep changelog
+  pql decisions list --grep ''ticket|changelog'' --oneline
+  pql ticket show T-99 --grep resolve
+
+Semantics, settled with the maintainer before implementation:
+
+- Line-oriented output, like grep(1). Matching records are emitted one per
+  line rather than inside an enclosing array, so the result reads the way grep
+  output reads. Each line is individually valid JSON, so the output is still
+  machine-consumable as JSONL - a filtered result stays parseable instead of
+  becoming a text dump.
+- Case-insensitive RE2 regex. The flag is named after grep and should behave
+  like it, and RE2 cannot backtrack catastrophically, so an agent-supplied
+  pattern cannot hang the binary. An invalid pattern exits 64 naming the parse
+  error rather than silently matching nothing.
+- Values only, not keys. `--grep status` searches the values, so it does not
+  match every ticket merely because every ticket carries a status key. What
+  matched is visible in what was emitted.
+- Filters after projection. --fields, --full and the per-verb default trims all
+  apply first, so --grep tests exactly the text the caller is about to see.
+  Consistent with matching on values: what you see is what was matched.
+- --limit caps the survivors, applied after filtering, the way `grep | head`
+  reads.
+- Zero matches emits zero bytes at exit 0, following the precedent --oneline
+  already sets. Still success under D-22, and still not evidence of absence.
+- Single-object verbs (meta, doctor, plan status, ticket show with one id) are
+  one record, so they are one line: emitted if a value matches, omitted if not.
+- --pretty is refused at exit 64. It is a multi-line indented array and cannot
+  also be one-record-per-line; the existing --pretty/--jsonl exclusion is the
+  precedent. --jsonl is accepted and redundant.
+
+WHERE IT LANDS
+
+render.Opts is already the single choke point every JSON-emitting verb routes
+through - render.Render for arrays, render.One for objects - so the filter goes
+there and reaches every verb without per-subcommand wiring, the way
+--flat-search does. --oneline formats its own plain-text lines outside
+render.Render and needs the same filter applied to its projected rows.
+
+The docs half is load-bearing and is the actual point of the ticket. The
+bundled SKILL.md currently tells agents to avoid pipes and offers --limit,
+--fields and --oneline as the alternatives; none of them filters by content, so
+the advice is incomplete exactly where an agent is most tempted to pipe. It
+should name --grep as the default route for "which records mention X", and say
+plainly that reaching for grep, jq or python is the fallback for body prose in
+markdown files, not for pql''s own output.', 'done', 'high', NULL, NULL, 'D-27', '2026-08-31 10:13:45.525', '2026-08-31 11:07:22.663', NULL, 'e43a9948fd414d51e3b77f65ad1772f1', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5EKW9PP433N5TF0CNTQQVWG', 'task', NULL, 'Global --grep filters output at the source, so agents stop shelling out to grep and python', 'Every projection flag pql has trims rows or keys. None of them answers "show me
+only the records mentioning X", so that question still leaves the binary:
+
+  pql ticket list | grep changelog
+  pql decisions list --oneline | python3 -c ''...''
+
+Both are exactly what the skill tells agents not to write, and for a reason
+that is about permissions rather than taste. A prefix allowlist matches the
+whole command string, so `Bash(pql *)` does not cover a pipeline containing
+pql, and piped commands prompt even when both sides are allowlisted
+(claude-code#39438). An agent that needs to filter therefore either interrupts
+the caller for approval or reaches for a python one-liner, and blanket-allowing
+an interpreter to avoid the prompt is an unbounded write grant. The cheapest
+fix is to make the filter a flag, so the whole operation stays inside one
+allowlisted invocation.
+
+SHAPE
+
+A global --grep <pattern> on every command, alongside --limit, --fields and
+--oneline:
+
+  pql ticket list --grep changelog
+  pql decisions list --grep ''ticket|changelog'' --oneline
+  pql ticket show T-99 --grep resolve
+
+Semantics, settled with the maintainer before implementation:
+
+- Line-oriented output, like grep(1). Matching records are emitted one per
+  line rather than inside an enclosing array, so the result reads the way grep
+  output reads. Each line is individually valid JSON, so the output is still
+  machine-consumable as JSONL - a filtered result stays parseable instead of
+  becoming a text dump.
+- Case-insensitive RE2 regex. The flag is named after grep and should behave
+  like it, and RE2 cannot backtrack catastrophically, so an agent-supplied
+  pattern cannot hang the binary. An invalid pattern exits 64 naming the parse
+  error rather than silently matching nothing.
+- Values only, not keys. `--grep status` searches the values, so it does not
+  match every ticket merely because every ticket carries a status key. What
+  matched is visible in what was emitted.
+- Filters after projection. --fields, --full and the per-verb default trims all
+  apply first, so --grep tests exactly the text the caller is about to see.
+  Consistent with matching on values: what you see is what was matched.
+- --limit caps the survivors, applied after filtering, the way `grep | head`
+  reads.
+- Zero matches emits zero bytes at exit 0, following the precedent --oneline
+  already sets. Still success under D-22, and still not evidence of absence.
+- Single-object verbs (meta, doctor, plan status, ticket show with one id) are
+  one record, so they are one line: emitted if a value matches, omitted if not.
+- --pretty is refused at exit 64. It is a multi-line indented array and cannot
+  also be one-record-per-line; the existing --pretty/--jsonl exclusion is the
+  precedent. --jsonl is accepted and redundant.
+
+WHERE IT LANDS
+
+render.Opts is already the single choke point every JSON-emitting verb routes
+through - render.Render for arrays, render.One for objects - so the filter goes
+there and reaches every verb without per-subcommand wiring, the way
+--flat-search does. --oneline formats its own plain-text lines outside
+render.Render and needs the same filter applied to its projected rows.
+
+The docs half is load-bearing and is the actual point of the ticket. The
+bundled SKILL.md currently tells agents to avoid pipes and offers --limit,
+--fields and --oneline as the alternatives; none of them filters by content, so
+the advice is incomplete exactly where an agent is most tempted to pipe. It
+should name --grep as the default route for "which records mention X", and say
+plainly that reaching for grep, jq or python is the fallback for body prose in
+markdown files, not for pql''s own output.', 'in_progress', 'high', NULL, NULL, 'D-27', '2026-08-31 10:13:45.525', '2026-08-31 11:24:07.870', NULL, '70f09d5973c3f8c4024eeaf304f0e62f', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5EKW9PP433N5TF0CNTQQVWG', 'task', NULL, 'Global --grep filters output at the source, so agents stop shelling out to grep and python', 'Every projection flag pql has trims rows or keys. None of them answers "show me
+only the records mentioning X", so that question still leaves the binary:
+
+  pql ticket list | grep changelog
+  pql decisions list --oneline | python3 -c ''...''
+
+Both are exactly what the skill tells agents not to write, and for a reason
+that is about permissions rather than taste. A prefix allowlist matches the
+whole command string, so `Bash(pql *)` does not cover a pipeline containing
+pql, and piped commands prompt even when both sides are allowlisted
+(claude-code#39438). An agent that needs to filter therefore either interrupts
+the caller for approval or reaches for a python one-liner, and blanket-allowing
+an interpreter to avoid the prompt is an unbounded write grant. The cheapest
+fix is to make the filter a flag, so the whole operation stays inside one
+allowlisted invocation.
+
+SHAPE
+
+A global --grep <pattern> on every command, alongside --limit, --fields and
+--oneline:
+
+  pql ticket list --grep changelog
+  pql decisions list --grep ''ticket|changelog'' --oneline
+  pql ticket show T-99 --grep resolve
+
+Semantics, settled with the maintainer before implementation:
+
+- Line-oriented output, like grep(1). Matching records are emitted one per
+  line rather than inside an enclosing array, so the result reads the way grep
+  output reads. Each line is individually valid JSON, so the output is still
+  machine-consumable as JSONL - a filtered result stays parseable instead of
+  becoming a text dump.
+- Case-insensitive RE2 regex. The flag is named after grep and should behave
+  like it, and RE2 cannot backtrack catastrophically, so an agent-supplied
+  pattern cannot hang the binary. An invalid pattern exits 64 naming the parse
+  error rather than silently matching nothing.
+- Values only, not keys. `--grep status` searches the values, so it does not
+  match every ticket merely because every ticket carries a status key. What
+  matched is visible in what was emitted.
+- Filters after projection. --fields, --full and the per-verb default trims all
+  apply first, so --grep tests exactly the text the caller is about to see.
+  Consistent with matching on values: what you see is what was matched.
+- --limit caps the survivors, applied after filtering, the way `grep | head`
+  reads.
+- Zero matches emits zero bytes at exit 0, following the precedent --oneline
+  already sets. Still success under D-22, and still not evidence of absence.
+- Single-object verbs (meta, doctor, plan status, ticket show with one id) are
+  one record, so they are one line: emitted if a value matches, omitted if not.
+- --pretty is refused at exit 64. It is a multi-line indented array and cannot
+  also be one-record-per-line; the existing --pretty/--jsonl exclusion is the
+  precedent. --jsonl is accepted and redundant.
+
+WHERE IT LANDS
+
+render.Opts is already the single choke point every JSON-emitting verb routes
+through - render.Render for arrays, render.One for objects - so the filter goes
+there and reaches every verb without per-subcommand wiring, the way
+--flat-search does. --oneline formats its own plain-text lines outside
+render.Render and needs the same filter applied to its projected rows.
+
+The docs half is load-bearing and is the actual point of the ticket. The
+bundled SKILL.md currently tells agents to avoid pipes and offers --limit,
+--fields and --oneline as the alternatives; none of them filters by content, so
+the advice is incomplete exactly where an agent is most tempted to pipe. It
+should name --grep as the default route for "which records mention X", and say
+plainly that reaching for grep, jq or python is the fallback for body prose in
+markdown files, not for pql''s own output.
+
+CORRECTION, during implementation: --grep filters the output buffer.
+
+The bullet above saying "--limit caps the survivors, applied after filtering,
+the way `grep | head` reads" is wrong, and was corrected before it shipped. The
+rule is the other way round: --limit picks the page, --grep filters that page,
+so the flag means exactly what piping the same invocation to grep would mean.
+
+The original ordering was not just a different choice, it was unimplementable
+as specified. Several verbs push --limit down into the query - files, tags,
+schema, backlinks, outlinks and the three ranked verbs all read it and pass it
+to the primitive - so "filter, then limit" would have required suppressing that
+pushdown on eight call sites whenever --grep was set, and would have made
+--grep silently widen the result set the caller had asked to cap.
+
+Framing it as a filter over the output buffer removes all of that. The
+mechanism lives on the edge, after everything else the verb does, so it works
+for any verb without knowing anything about it - which is also why it needed no
+per-subcommand wiring beyond the render layer.
+
+It also gives the feature its defining test, now in the integration suite as
+TestIntegration_GrepEqualsPipedGrep: run the verb, grep its output in-process
+the way grep(1) would, run it again with --grep, require the two to agree.
+Seven verbs are covered, including a --limit case.
+
+TWO DELIBERATE DIVERGENCES FROM A PIPED GREP
+
+Both are cases where the pipe''s behaviour is an artefact of the JSON envelope
+rather than something worth reproducing. Each has its own test.
+
+- Keys are not matched. Every `files` row carries a "size" key, so `| grep
+  size` matches all of them while --grep matches none. Reproducing the pipe
+  here would make the flag useless for exactly the terms an agent reaches for:
+  --grep status matching every ticket is not an answer.
+
+- Anchors bind to values, not to the rendered line. `| grep ''^members/vale''`
+  never matches, because every line starts with `{"path":`, so ^ and $ are
+  unusable through a pipe. --grep tests each value separately, so the anchor
+  means what the person writing it meant.
+
+FOUND WHILE BUILDING
+
+Rejecting --grep on the mutation verbs (D-30: a receipt must not be
+suppressible) initially refused the invocation *after* performing it, because
+renderOptsFromFlags is called at the end of RunE, once the write has already
+landed. `ticket status T-113 done --grep foo` exited 64 and set the ticket to
+done. Fixed by validating the output flags in the root PersistentPreRunE,
+before any subcommand body runs; the regression test asserts the ticket is
+unchanged after the refusal.', 'in_progress', 'high', NULL, NULL, 'D-27', '2026-08-31 10:13:45.525', '2026-08-31 11:41:08.816', NULL, 'd071dcbfc7b14f7a970b797f439fc6bf', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5EKW9PP433N5TF0CNTQQVWG', 'task', NULL, 'Global --grep filters output at the source, so agents stop shelling out to grep and python', 'Every projection flag pql has trims rows or keys. None of them answers "show me
+only the records mentioning X", so that question still leaves the binary:
+
+  pql ticket list | grep changelog
+  pql decisions list --oneline | python3 -c ''...''
+
+Both are exactly what the skill tells agents not to write, and for a reason
+that is about permissions rather than taste. A prefix allowlist matches the
+whole command string, so `Bash(pql *)` does not cover a pipeline containing
+pql, and piped commands prompt even when both sides are allowlisted
+(claude-code#39438). An agent that needs to filter therefore either interrupts
+the caller for approval or reaches for a python one-liner, and blanket-allowing
+an interpreter to avoid the prompt is an unbounded write grant. The cheapest
+fix is to make the filter a flag, so the whole operation stays inside one
+allowlisted invocation.
+
+SHAPE
+
+A global --grep <pattern> on every command, alongside --limit, --fields and
+--oneline:
+
+  pql ticket list --grep changelog
+  pql decisions list --grep ''ticket|changelog'' --oneline
+  pql ticket show T-99 --grep resolve
+
+Semantics, settled with the maintainer before implementation:
+
+- Line-oriented output, like grep(1). Matching records are emitted one per
+  line rather than inside an enclosing array, so the result reads the way grep
+  output reads. Each line is individually valid JSON, so the output is still
+  machine-consumable as JSONL - a filtered result stays parseable instead of
+  becoming a text dump.
+- Case-insensitive RE2 regex. The flag is named after grep and should behave
+  like it, and RE2 cannot backtrack catastrophically, so an agent-supplied
+  pattern cannot hang the binary. An invalid pattern exits 64 naming the parse
+  error rather than silently matching nothing.
+- Values only, not keys. `--grep status` searches the values, so it does not
+  match every ticket merely because every ticket carries a status key. What
+  matched is visible in what was emitted.
+- Filters after projection. --fields, --full and the per-verb default trims all
+  apply first, so --grep tests exactly the text the caller is about to see.
+  Consistent with matching on values: what you see is what was matched.
+- --limit caps the survivors, applied after filtering, the way `grep | head`
+  reads.
+- Zero matches emits zero bytes at exit 0, following the precedent --oneline
+  already sets. Still success under D-22, and still not evidence of absence.
+- Single-object verbs (meta, doctor, plan status, ticket show with one id) are
+  one record, so they are one line: emitted if a value matches, omitted if not.
+- --pretty is refused at exit 64. It is a multi-line indented array and cannot
+  also be one-record-per-line; the existing --pretty/--jsonl exclusion is the
+  precedent. --jsonl is accepted and redundant.
+
+WHERE IT LANDS
+
+render.Opts is already the single choke point every JSON-emitting verb routes
+through - render.Render for arrays, render.One for objects - so the filter goes
+there and reaches every verb without per-subcommand wiring, the way
+--flat-search does. --oneline formats its own plain-text lines outside
+render.Render and needs the same filter applied to its projected rows.
+
+The docs half is load-bearing and is the actual point of the ticket. The
+bundled SKILL.md currently tells agents to avoid pipes and offers --limit,
+--fields and --oneline as the alternatives; none of them filters by content, so
+the advice is incomplete exactly where an agent is most tempted to pipe. It
+should name --grep as the default route for "which records mention X", and say
+plainly that reaching for grep, jq or python is the fallback for body prose in
+markdown files, not for pql''s own output.
+
+CORRECTION, during implementation: --grep filters the output buffer.
+
+The bullet above saying "--limit caps the survivors, applied after filtering,
+the way `grep | head` reads" is wrong, and was corrected before it shipped. The
+rule is the other way round: --limit picks the page, --grep filters that page,
+so the flag means exactly what piping the same invocation to grep would mean.
+
+The original ordering was not just a different choice, it was unimplementable
+as specified. Several verbs push --limit down into the query - files, tags,
+schema, backlinks, outlinks and the three ranked verbs all read it and pass it
+to the primitive - so "filter, then limit" would have required suppressing that
+pushdown on eight call sites whenever --grep was set, and would have made
+--grep silently widen the result set the caller had asked to cap.
+
+Framing it as a filter over the output buffer removes all of that. The
+mechanism lives on the edge, after everything else the verb does, so it works
+for any verb without knowing anything about it - which is also why it needed no
+per-subcommand wiring beyond the render layer.
+
+It also gives the feature its defining test, now in the integration suite as
+TestIntegration_GrepEqualsPipedGrep: run the verb, grep its output in-process
+the way grep(1) would, run it again with --grep, require the two to agree.
+Seven verbs are covered, including a --limit case.
+
+TWO DELIBERATE DIVERGENCES FROM A PIPED GREP
+
+Both are cases where the pipe''s behaviour is an artefact of the JSON envelope
+rather than something worth reproducing. Each has its own test.
+
+- Keys are not matched. Every `files` row carries a "size" key, so `| grep
+  size` matches all of them while --grep matches none. Reproducing the pipe
+  here would make the flag useless for exactly the terms an agent reaches for:
+  --grep status matching every ticket is not an answer.
+
+- Anchors bind to values, not to the rendered line. `| grep ''^members/vale''`
+  never matches, because every line starts with `{"path":`, so ^ and $ are
+  unusable through a pipe. --grep tests each value separately, so the anchor
+  means what the person writing it meant.
+
+FOUND WHILE BUILDING
+
+Rejecting --grep on the mutation verbs (D-30: a receipt must not be
+suppressible) initially refused the invocation *after* performing it, because
+renderOptsFromFlags is called at the end of RunE, once the write has already
+landed. `ticket status T-113 done --grep foo` exited 64 and set the ticket to
+done. Fixed by validating the output flags in the root PersistentPreRunE,
+before any subcommand body runs; the regression test asserts the ticket is
+unchanged after the refusal.', 'done', 'high', NULL, NULL, 'D-27', '2026-08-31 10:13:45.525', '2026-08-31 11:48:32.491', NULL, '993bc7baa51b5d6d9387317d51d0dc20', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5F9X8E0KRWPQG7WVNH5TXVC', 'task', NULL, 'Sweep for optimistic defaults — succeed-unless-broken should be fail-unless-proven', NULL, 'backlog', 'medium', NULL, NULL, NULL, '2026-08-31 11:50:00.560', '2026-08-31 11:50:00.560', NULL, '2d609778f6ad5da03a3367834066f414', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5F9X8E0KRWPQG7WVNH5TXVC', 'task', NULL, 'Sweep for optimistic defaults — succeed-unless-broken should be fail-unless-proven', 'A pattern worth combing this codebase for rather than fixing in one place. Code
+tends to default to success and then enumerate the failures the author
+anticipated. The safer inversion is to default to failure and require a positive
+success condition, so that an unanticipated failure - or a forgotten line -
+lands on the safe side.
+
+THREE FORMS TO LOOK FOR
+
+- Tests asserting what must NOT appear rather than what must. A check that the
+  bad value is absent (!strings.Contains(got, "error")) passes for every wrong
+  output that merely avoids it, and quietly stops covering new failure modes as
+  the code grows - no coverage number moves when it stops covering something.
+  The strict form asserts the exact expected result, so a mutation has to
+  reproduce it rather than dodge one named mistake.
+
+- Checks and error handling that report success when nothing could actually be
+  determined. A failed read, an empty probe, or a parse whose error is dropped
+  and leaves the zero value flowing on (a bare 0 or "" from an ignored err) each
+  render as a pass that is indistinguishable from a real one.
+
+- Fields, flags and defaults initialised to the optimistic value, so every early
+  return has to remember to clear them (an ok bool, or a Valid: true set at
+  construction). The version that starts false and is set only on success cannot
+  be broken by an omission.
+
+SCOPE
+
+Survey and report before changing anything. The goal is to learn how common the
+pattern is, not to land a large diff. Findings get named; scope for fixing comes
+back from the user.
+
+WHERE TO START - TWO COUNTS TAKEN WHILE FILING THIS
+
+Both are grep counts, not a survey. They size the problem; they do not classify
+it, and classifying is most of the work.
+
+FORM 1, roughly 128 sites. Negative assertions in tests (!strings.Contains or
+!bytes.Contains), concentrated in six files:
+
+  internal/query/dsl/eval/compile_test.go        30
+  internal/cli/integration_test.go               30
+  internal/cli/init_test.go                      16
+  internal/cli/init_replace_test.go               8
+  internal/planning/migrate/migrate_test.go       5
+  internal/cli/render/render_test.go              5
+
+That total is the headline number but it is the least trustworthy of the two.
+Some of these are legitimately negative claims - "the error message must not
+leak an absolute path", "the receipt must not contain the old label" - where
+the absence IS the property under test and a positive assertion would be the
+wrong shape. Those should stay. The survey''s real job is separating them from
+the ones that only avoid a named mistake, and the two read identically at a
+grep. Expect the defensible fraction to be substantial.
+
+FORM 2, 18 sites. Flag reads that discard the error:
+
+  q, _ := cmd.Flags().GetBool("quiet")
+  limit, _ := cmd.Flags().GetInt("limit")
+
+Each yields the zero value on failure, indistinguishable from the flag being
+genuinely unset. Here it is probably harmless - cobra errors only when the flag
+is undefined, a programming mistake a test would catch - but it is exactly the
+shape this ticket describes, and "probably harmless" is a judgement the next
+reader has to re-derive at every one of the 18. Worth settling once: either a
+helper that panics on an undefined flag, or a sentence somewhere sanctioning the
+spelling.
+
+That distinction generalises, and the survey should carry it throughout: a bare
+_ discarding a real runtime error is a bug; one discarding an error that can
+only fire on programmer error is a convention. Report them as two numbers, not
+one. A survey that returns a single large count invites a large mechanical diff,
+which is the outcome this ticket''s scope section is trying to avoid.
+
+FORM 3 was not counted. Optimistically-initialised fields have no grep signature
+- an `ok: true` at construction looks like any other struct literal - so it
+needs reading rather than matching. Do not report a zero here and call it clean.
+
+RELATED
+
+T-115 records the documentation survey done alongside this ticket, including the
+drift it turned up. The convention this ticket implies - choose the default that
+makes an omission safe - was deliberately NOT written down yet, because the two
+candidate homes for it have already drifted from each other; see T-115.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-31 11:50:00.560', '2026-08-31 11:57:14.001', NULL, '7787288cb3cfcfe926367e48d6bd49ec', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5FBJJ93GWTXRHNWSQ432ZWM', 'bug', NULL, 'Verification docs have drifted from the Makefile and duplicate each other, so there is no safe home for a new convention', NULL, 'backlog', 'medium', NULL, NULL, NULL, '2026-08-31 11:57:17.256', '2026-08-31 11:57:17.256', NULL, '94b38a129a27d3773da452725819ea84', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5FBJJ93GWTXRHNWSQ432ZWM', 'bug', NULL, 'Verification docs have drifted from the Makefile and duplicate each other, so there is no safe home for a new convention', 'Filed as the survey output from an attempt to record one new convention: "choose
+the default that makes an omission safe" (the principle behind T-114). The
+instruction was to find the existing home for verification discipline and extend
+it rather than start a second one. The survey says there is no such home, and
+that the nearest candidates have already drifted - so nothing was written, and
+where the principle belongs is the maintainer''s call rather than a side effect
+of filing T-114.
+
+FINDING 1 - THERE IS NO EXISTING HOME FOR ASSERTION DISCIPLINE
+
+Everything the repo says about testing is about WHICH tests exist and WHAT to
+run. Nothing says how to write an assertion, how strong it should be, or when a
+weaker claim is the correct one.
+
+  docs/structure/project-structure.md, "Test infrastructure" (l.155-163)
+      the three tiers, their build tags, fixture locations.
+  docs/structure/project-structure.md, "Verification" (l.210-223)
+      a nine-step end-to-end milestone checklist - commands to run, not
+      properties to assert.
+  CLAUDE.md, "Test infrastructure" (l.125-133)
+      the same three tiers, compressed.
+  .claude/skills/pql-testing/
+      audits the embedded SKILL.md by consuming it. Scope is the skill''s
+      accuracy, not the Go tests. Not a home for this.
+  governance/decisions/architecture.md
+      31 confirmed decisions, none about testing philosophy. The one adjacent
+      mention is inside D-23''s cost section, noting that a regression test
+      guards write-through - an application, not a convention.
+
+So the principle would be new material wherever it lands. The candidates are a
+new D record in governance/decisions/architecture.md, or a subsection of
+project-structure.md''s Verification. A D record looks right - it is a choice
+with alternatives and a rationale, which is what that tree is for, and D-22
+already sets the precedent of recording an output-contract-shaped rule there -
+but see finding 3 before adding to project-structure.md either way.
+
+FINDING 2 - THE SAME MATERIAL IS STATED TWICE, AND ONE COPY IS STALE
+
+CLAUDE.md and project-structure.md both carry a Makefile target table and a
+test-tier list. They agree with each other and disagree with the Makefile:
+
+  CLAUDE.md:93                      | `make lint` | `golangci-lint run` |
+  project-structure.md:179          | `make lint` | `golangci-lint run` |
+  Makefile:144                      lint: ./ci/lint.sh
+                                    (golangci-lint + goreleaser check +
+                                     govulncheck)
+
+This is not a cosmetic gap. `make lint` is a gate, and both docs describe it as
+one third of what it is - a contributor who reads either and runs golangci-lint
+directly believes they have passed a check they have not run. The Makefile knows
+this failure mode by name; the comment directly above the target records that it
+already happened once:
+
+    # That is not hypothetical - `make lint` was golangci-lint alone while
+    # ci/lint.sh had grown two more stages, so a workflow verified with
+    # `make lint` failed on a tool it never installed.
+
+The fix was applied to the Makefile and not to either doc, which is how the
+drift got in.
+
+FINDING 3 - project-structure.md CONTRADICTS ITSELF
+
+Line 179 says make lint is golangci-lint run. Line 191, twelve lines later,
+correctly describes ci/lint.sh as golangci-lint + goreleaser check +
+govulncheck. Both are in the "Build & release pipeline" section. A reader
+resolving the conflict has to go to the Makefile, at which point the document
+is not serving its purpose.
+
+FINDING 4 - TWO SMALLER STALE REFERENCES IN THE SAME FILE
+
+  project-structure.md:208   names `decisions/` as the DQR location. D-21 moved
+                             it to governance/{decisions,questions,rejected}/.
+                             The path in the doc no longer exists.
+
+  project-structure.md:193   describes ci/release.sh as the release path.
+                             Already known dead - T-70 tracks that
+                             release.yaml calls goreleaser directly.
+
+WHY NOTHING WAS WRITTEN
+
+Adding a verification convention to a pair of documents that already say the
+same thing differently, one of them stale and one of them self-contradicting,
+makes the problem the convention is about. The instruction that prompted this
+put it plainly: a principle written in two places diverges quietly, and the
+divergence stays invisible until the two copies contradict each other. That has
+already happened here, to the material next door.
+
+WHAT WOULD RESOLVE IT
+
+Maintainer''s call, in this order:
+
+1. Decide whether CLAUDE.md''s build/test tables are the canonical copy or a
+   summary that should point at project-structure.md instead of restating it.
+   Every duplicated table is a future instance of finding 2.
+2. Reconcile the make lint description in whichever copies survive, and fix
+   findings 3 and 4 while in the file.
+3. Then place the T-114 principle, once there is one place for it to go.
+
+Steps 1 and 2 are prerequisites for 3, not tidying to be done afterwards - the
+whole point of the survey was to avoid adding a second home, and today there is
+no first home to extend.
+
+TEXT TO PLACE, ONCE THERE IS SOMEWHERE TO PUT IT
+
+Recorded here so the drafting is not lost, deliberately NOT committed to any
+doc:
+
+  Choose the default that makes an omission safe. Default to failure and require
+  a positive success condition, rather than defaulting to success and
+  enumerating the failures you thought of. An unanticipated failure, or a
+  forgotten line, then lands on the safe side.
+
+  The edge, which has to be stated alongside it or the exception becomes the
+  excuse: a strict assertion is wrong where the expected value could only be
+  produced by reimplementing the thing under test, because the test then passes
+  whenever both copies share a bug. There, assert a property a wrong
+  implementation cannot satisfy - output that is a subsequence of its input, a
+  count that must sit between two others - and say in the test why the weaker
+  claim is the stronger one.
+
+RELATED
+
+T-114 - the code sweep this survey was filed alongside.
+T-70  - ci/release.sh is dead code (finding 4).', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-31 11:57:17.256', '2026-08-31 12:35:22.145', NULL, '6e1c3ea067be08875747137be62abf91', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G1RZ3FETE52W7K24P68S9K3C', 'task', NULL, 'Invalid values reject without naming the valid set, though the program knows it', 'Surfaced from a consuming repo, 2026-08-20, while citing pql as the quality bar for CLI error UX in its own tooling-consolidation question.
+
+The stated principle is that errors become instructions. Measured, it holds for one case and not the more common one:
+
+  pql ticket frobnicate
+    -> full usage + command list                                    INSTRUCTION
+
+  pql ticket status T-1246 nonsense
+    -> {"code":"cli.exit","msg":"T-1246: repo: invalid status \"nonsense\""}
+
+  pql ticket new
+    -> {"code":"cli.error","msg":"accepts 2 arg(s), received 0"}
+
+  pql ticket show T-99999
+    -> {"code":"cli.exit","msg":"ticket T-99999 not found"}
+
+The gap is specifically the CLOSED SETS. status has exactly six legal values, type five, priority four. The program knows every one of them at the moment it rejects the input and prints none of them. Same for ''accepts 2 arg(s)'': the two are type and title, which the command definition already names.
+
+Evidence this is paid for downstream: a consuming repo''s agent rules carry a hand-written warning that ticket new takes POSITIONAL type and title and that --title is silently absorbed into the title string. That documentation exists to compensate for an error message that could say it directly.
+
+Suggested shape (maintainer''s call): whenever the accepted set is known and enumerable, print it.
+
+  error: invalid status "nonsense"
+    valid: backlog | ready | in_progress | review | done | cancelled
+    try:   pql ticket status T-1246 in_progress
+
+  error: ticket T-99999 not found
+    try:   pql ticket list --status backlog
+
+Constraint: the machine-readable envelope {level,code,msg} must survive, since consumers parse it. Adding valid/try fields to the envelope and rendering the human form only on a TTY keeps both audiences. Non-zero exit codes stay regardless -- they are load-bearing in git hooks.
+
+Related prior art in this repo: T-31 (verifySchema recovery message), T-49 (schema-mismatch recovery hint), T-86 (DSL column vocabulary undiscoverable).
+
+The originating repo was named here when this was filed, and was generalised before the ticket was first published. This repo is public and .pql/changelog/ is committed by design, so ticket prose is published prose; CLAUDE.md maps a private repo name to "a consuming repo". The condition is the more useful report anyway - what matters is that a downstream project paid for the gap in hand-written documentation, not which project it was.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-20 00:05:12.182', '2026-08-31 13:00:20.127', NULL, '9af4d1165e4306b89aa53a200f388f93', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
