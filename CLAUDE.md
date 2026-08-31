@@ -56,16 +56,53 @@ findings that were resolved by untracking a file instead of rewriting the past
 — `.pql/hooks/*` and the T-25 changelog entry both carry an absolute home
 directory. A gate that fails on unfixable history gets bypassed within a week.
 
-Rules beyond the gitleaks defaults live in an untracked `.gitleaks.toml`
-(see `.git/info/exclude`), because a rule naming the thing it guards cannot be
-committed to a public repo. **The defaults alone will not catch any of this**:
-verified 2026-08-09 that a Visa number, an Amex number, an IBAN, a BSN and a
-US SSN all pass a default scan untouched. The default ruleset is a secrets
-scanner — API keys, tokens, private keys — not a PII scanner.
+**The gitleaks defaults will not catch any of this**: verified 2026-08-09 that
+a Visa number, an Amex number, an IBAN, a BSN and a US SSN all pass a default
+scan untouched. The default ruleset is a secrets scanner — API keys, tokens,
+private keys — not a PII scanner. So the rules that matter here are ours, and
+they come in two layers because they have different secrecy requirements:
+
+| Layer | Where | Holds |
+|---|---|---|
+| Generic | `.gitleaks.toml`, **committed** | home paths, sibling-checkout paths, RFC1918, IBAN, cards, SSN, BSN, email — patterns, never values, so publishing them reveals nothing |
+| Local | `.gitleaks.local.toml`, **gitignored, optional** | this machine's hostnames and the private repo names — a rule must contain the string it matches, so these cannot be committed to a public repo |
+
+The local layer sets `[extend] path = ".gitleaks.toml"` and refines it. If it is
+present `ci/secrets.sh` uses it; if not, the generic rules run on their own.
+**Its absence is not an error** — you get the generic layer and the scan says
+so. Every run prints which of the two it used, so a clean result always states
+what it was clean *of*.
+
+That split is the point: **the committed layer protects everyone — contributors,
+CI, a fresh clone — and the local layer protects this machine.** Someone else's
+machine is their business, and nothing blocks them over a file that is neither
+theirs to have nor protecting anything of theirs.
+
+This is the second design, and the first is worth remembering because it failed
+in a way this one cannot. It put *every* rule in an untracked `.gitleaks.toml`
+and pointed at a `.git/info/exclude` entry; **neither the file nor the entry
+existed in any clone**, so `make secrets` reported clean for months while
+running the bare defaults. The fix is not a better hiding place — a required
+untracked file is missing on the next clone wherever you put it — it is that
+nothing required is untracked any more. What remains untracked is optional, and
+its absence is announced rather than assumed.
+
+Note the ignore lives in the committed `.gitignore`, not in `.git/info/exclude`.
+A committed ignore rule travels to every clone; the exclude file is per-clone,
+and relying on it is precisely how the first design ended up protecting nothing.
+
+Editing `.gitleaks.toml` is easier to get wrong than it looks: three separate
+ways to write a rule that matches nothing were hit while writing it, two of them
+silent. They are documented at the top of that file, and `make secrets-selftest`
+(which `make secrets` runs first) checks the ruleset against a fixture of
+planted positives and negative controls, asserting counts in both directions.
+A rule that stops matching and a rule that starts over-matching are both
+regressions; only the second one announces itself.
 
 This section used to prescribe a `git diff | grep` by hand. Both leaks it was
 written to prevent got through it anyway, which is the argument for a gate
-rather than a habit.
+rather than a habit — and the gate then spent months checking nothing, which is
+the argument for the selftest.
 
 ## Architecture invariants
 

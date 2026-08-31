@@ -1,0 +1,92 @@
+Fixture for ci/secrets-selftest.sh. Every rule in .gitleaks.toml is exercised
+here by at least one sample that must be caught, and the ways each rule is
+meant NOT to fire are exercised by samples that must be ignored.
+
+Two rules of the road for editing this file:
+
+  - Every value below is synthetic or a published test vector. No real host,
+    address, account or person appears here, and none may be added. The point
+    of the file is the SHAPE.
+  - Adding a sample means updating the expected counts in
+    ci/secrets-selftest.sh, which fails on any mismatch in either direction —
+    a rule that stops matching and a rule that starts over-matching are both
+    regressions, and only the first one announces itself.
+
+The negatives matter more than the positives. A rule that has quietly stopped
+matching still passes any test that only asks "did anything fire", which is the
+failure mode this whole gate was built to close.
+
+=== MUST BE CAUGHT ===
+
+pql-absolute-home-path
+  /home/jdoe/.local/bin/pql
+  /var/home/jdoe/.config/pql/config.yaml
+
+pql-sibling-checkout-path
+  /var/mnt/data/projects/someproject/src/main.rs
+  /mnt/storage/projects/another-thing/README.md
+
+pql-private-ip
+  10.13.37.42
+  172.20.4.9
+  192.168.99.99
+
+pql-iban
+  NL91ABNA0417164300
+
+pql-credit-card
+  4111 1111 1111 1111
+  5500 0000 0000 0004
+  3782 822463 10005
+
+pql-us-ssn
+  123-45-6789
+
+pql-nl-bsn
+  One sample per keyword branch. The rule is an alternation, and a fixture that
+  exercises a single branch stays green while the others are dead — observed,
+  not theorised: one branch was mutated and the selftest did not notice, because
+  only a different branch had a sample.
+  NOTE: prose in this file is scanned too. Do not write a rule's keyword in a
+  comment, or the comment becomes a phantom match that keeps the count correct
+  while the branch it describes is broken. That happened here first.
+  bsn 123456782
+  burgerservicenummer 123456782
+  sofinummer 123456782
+
+pql-personal-email
+  someone@gmail.com
+
+=== MUST BE IGNORED ===
+
+Toolchain and CI homes — not personal, and the reason the home-path rule
+carries an allowlist rather than a narrower regex.
+  /home/linuxbrew/.linuxbrew/bin/go
+  /home/runner/work/pql/pql
+
+Attribution trailers and documentation placeholders are deliberate.
+  Co-Authored-By: Claude <noreply@anthropic.com>
+  contact dev@example.com for details
+  someone@test.invalid
+
+Documentation addresses, as distinct from a real host on a real subnet.
+  192.168.1.1
+  192.168.0.255
+
+Reserved SSN groups that are never issued.
+  000-12-3456
+  666-12-3456
+  123-00-6789
+  123-45-0000
+
+Identifiers this repo emits constantly. A ULID is 26 uppercase alphanumerics
+and an IBAN pattern must not swallow one; the changelog is full of both these
+and MD5 row hashes, so a false positive here would fire on every ticket commit
+and get the gate switched off within a week.
+  06G1RZ3FETE52W7K24P68S9K3C
+  8ad2510e8c8523f6c35efa5eb83f16c7
+
+A bare 9-digit run with no BSN keyword nearby. The keyword scoping is what
+makes that rule usable at all — order numbers, row counts and timestamps are
+all 9-ish digits.
+  reference 123456782 was processed

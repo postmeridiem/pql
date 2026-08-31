@@ -34,6 +34,36 @@ matching the bumped version (e.g. `## [0.1.1-dev]`).
 `make vuln` and the `govulncheck` stage of `make lint` now report no
 vulnerabilities at any level.
 
+- **The secrets gate now has rules, and fails when it cannot load them**
+  (T-117). `make secrets` had been passing for months while checking only the
+  gitleaks defaults — a secrets scanner, not a PII scanner — because the design
+  called for an untracked `.gitleaks.toml` that no clone ever contained, and
+  pointed at a `.git/info/exclude` entry that was never added. It reported
+  success for a question it never asked, in the one check whose failure cannot
+  be undone afterwards.
+
+  Generic rules (home paths, sibling-checkout paths, RFC1918, IBAN, payment
+  cards, US SSN, Dutch BSN, personal email) now ship **committed** in
+  `.gitleaks.toml`, since a pattern reveals nothing it guards — so
+  contributors, CI and a fresh clone all get them with no setup. Rules that
+  must name what they guard go in an optional, gitignored
+  `.gitleaks.local.toml` that extends it, per machine. Its absence is not an
+  error: the generic rules run and every scan prints which of the two layers
+  it used, so a clean result states what it was clean of.
+
+  Nothing required is untracked any more, which is the actual fix — a required
+  untracked file is missing on the next clone wherever it is put. The ignore
+  rule also moved into the committed `.gitignore`, since `.git/info/exclude`
+  is per-clone and never having been populated is half of why the old design
+  protected nothing.
+
+  `make secrets-selftest` proves the ruleset against a fixture of planted
+  positives and negative controls, asserting per-rule counts in both
+  directions, and runs as the first step of `make secrets`. A scanner config
+  fails silently by construction — a dead rule returns no findings, which is
+  indistinguishable from a clean repo — and three separate ways to write a
+  rule that matches nothing were hit while building this, two of them silent.
+
 ### Added
 
 - **`--grep <regex>` on every read verb** (T-113), filtering results by content

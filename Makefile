@@ -149,8 +149,15 @@ ci-test: ## Exactly what CI runs for tests: unit + race + integration (ci/test.s
 	./ci/test.sh
 
 .PHONY: secrets
-secrets: ## Scan the outgoing commits for secrets and PII (ci/secrets.sh).
+secrets: ## Scan the outgoing commits for secrets and PII (ci/secrets.sh). Runs the selftest first.
 	./ci/secrets.sh
+
+.PHONY: secrets-selftest
+secrets-selftest: ## Prove .gitleaks.toml still matches what it claims (ci/secrets-selftest.sh).
+	# Also runs as the first step of `make secrets`, so the ruleset is proved
+	# on the same invocation that relies on it. Kept separate for iterating on
+	# the rules without scanning the outgoing range each time.
+	./ci/secrets-selftest.sh
 
 .PHONY: vuln
 vuln: ## govulncheck alone. Also covered by `make lint`; kept for running it in isolation.

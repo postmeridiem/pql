@@ -76,3 +76,15 @@ Thumbs.db
 .githooks/post-merge
 .githooks/post-checkout
 .githooks/post-rewrite
+
+# Per-machine gitleaks rules layered on top of the committed .gitleaks.toml.
+# Untracked because every rule in it names the thing it matches — hostnames,
+# private repo names — and this repo is public, so committing it would publish
+# exactly what it exists to keep out.
+#
+# Ignored HERE rather than in .git/info/exclude, deliberately. The previous
+# design relied on the exclude file, which is per-clone and was never actually
+# populated in any clone; a committed .gitignore travels, so the file cannot be
+# added by accident on any machine. It is optional: without it ci/secrets.sh
+# runs the generic rules and says that is what it did.
+.gitleaks.local.toml
