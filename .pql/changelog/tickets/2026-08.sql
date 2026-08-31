@@ -5796,3 +5796,82 @@ sets the question status to resolved, records the link so ''decisions refs Q-2''
 Why it matters beyond tidiness: an open question that is never formally closed stays open in the index forever. This vault reports 12 open questions against 13 total, which is either accurate or an artefact of there being no cheap way to close one - and no way to tell which from the outside.
 
 Second, smaller point, docs rather than code. The bundled SKILL.md documents the D/Q/R vocabulary but not when to reach for each. Two rules would carry most of the value: a deferral is written as a Q rather than left as prose, and a D record is a home for durable documentation and not only for a choice between alternatives. The type is already named ''confirmed'' rather than ''decision'', which fits both readings - but the command, the directory and the --decision flag all say decision, so readers narrow it. A sentence in the skill fixes that; renaming anything would not be worth it.', 'done', 'medium', NULL, NULL, NULL, '2026-08-09 09:57:30.761', '2026-08-31 15:57:23.979', NULL, 'ebfc4c6cd813e943b6fdc504c4eb7633', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5HXSMTZDG68R0WRV0V4S25M', 'task', NULL, 'decisions resolve only accepts a D, so a question absorbed by another question cannot be closed', NULL, 'backlog', 'medium', NULL, NULL, 'D-29', '2026-08-31 17:56:31.063', '2026-08-31 17:56:31.063', NULL, '4b835d6f752043686a8900668b772f2b', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5HXSMTZDG68R0WRV0V4S25M', 'task', NULL, 'decisions resolve only accepts a D, so a question absorbed by another question cannot be closed', '`pql decisions resolve <Q-N> --into <D-N>` (T-99) requires the target to be a
+confirmed record. That covers the common case and misses the one this vault
+actually has.
+
+EVIDENCE
+
+Surveying the twelve open questions right after T-99 shipped, exactly one had a
+stated disposition, and it was the shape the new verb cannot express. Q-9''s body
+records:
+
+  **Converged direction:** the issue-tracker-as-referee variant is developed in
+  [Q-13](#q-13-githubgitea-issue-backend-for-id-claiming-and-one-way-mirror).
+
+Q-9 is not answered by a decision. It was absorbed by a more developed question.
+The verb refuses that with "Q-13 is a question record, not a confirmed", which
+is a correct message for a rule that is too narrow.
+
+So the survey found eleven genuinely-open questions and one closable one, and
+the closable one is the only one the tooling cannot touch.
+
+THE DATA MODEL ALREADY ALLOWS IT
+
+This is a gap in the verb, not in the schema. inferStatus checks for a
+`- **Superseded by:**` line BEFORE it branches on record type, so the check is
+type-agnostic and a question carrying that field already parses as status
+`superseded`. The vocabulary, the field and the status all exist; nothing
+writes them.
+
+Worth confirming that `superseded` is the right resting state for Q-9 rather
+than `resolved`. It reads correctly - the question was not answered, it was
+replaced by a better statement of itself - and it keeps the open-question count
+honest either way, since neither status is open.
+
+A SECOND MISSING TARGET, SAME ROOT
+
+A question can also be closed by a REJECTION. "Should we do X?" answered by an
+R record saying X was considered and rejected is a real disposition, and
+`--into R-N` is refused for the same reason. Both cases are the verb hardcoding
+one of the three record types as the only legal target.
+
+SUGGESTED SHAPE
+
+Two options, and the second is probably better.
+
+(a) Widen `--into` to accept D, Q or R, varying the wording written into the
+    Status line: "Resolved →" for a decision or a rejection, "Superseded by" for
+    a question. One verb, but its name stops matching half of what it does -
+    "resolve Q-9 into Q-13" is not what happened to Q-9.
+
+(b) Add a sibling verb for the supersession relation:
+
+      pql decisions supersede Q-9 --by Q-13
+
+    and leave `resolve` meaning "a question was answered", widened only to
+    accept an R alongside a D. This reads correctly at the call site, and it
+    generalises past questions: DECISIONS supersede each other constantly in
+    this tree - D-15 supersedes D-13, D-14 supersedes D-10 - and every one of
+    those `**Supersedes:**` / `**Superseded by:**` pairs was hand-written today.
+    A supersede verb would maintain both sides of that pair the way T-99''s
+    resolve maintains the question side of a resolution.
+
+Option (b) turns a narrow fix into the missing half of the authoring surface,
+which is the argument for it. It is also more work, so the call is the
+maintainer''s.
+
+SCOPE NOTE
+
+Whatever ships should keep T-99''s two rules, which were load-bearing there and
+are load-bearing here: write the markdown, because the DQR tree is the source of
+truth (D-8) and a status written only to pql.db is reverted by the next sync;
+and do not overwrite prose that already exists in the target field - add when
+absent, report when present, never clobber.
+
+RELATED
+
+T-99  - the resolve verb this extends.
+D-29  - an argument that names a thing is validated; both ids here are names,
+        which is why the refusal is correct even though the rule is too narrow.', 'backlog', 'medium', NULL, NULL, 'D-29', '2026-08-31 17:56:31.063', '2026-08-31 17:57:16.178', NULL, 'ad134a53689606e98393b0caa730ebe1', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

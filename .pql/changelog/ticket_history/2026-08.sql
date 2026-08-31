@@ -2749,3 +2749,81 @@ INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, chang
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5G7E6NVZG51XNZ5BHANF27M', 'status', 'review', 'done', NULL, '2026-08-31 15:31:30', '2026-08-31 15:31:30.839', '2026-08-31 15:31:30.839', NULL, '7c7839feb7b5ac750c6f63f6199a1906', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5G7E6NVZG51XNZ5BHANF27M', 'status', 'done', 'done', NULL, '2026-08-31 15:31:52', '2026-08-31 15:31:52.675', '2026-08-31 15:31:52.675', NULL, 'e1de1b5b08b00a35a73d3373daaa5e57', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FYBX6214TDP22Q7PASAAN8YG', 'status', 'in_progress', 'done', NULL, '2026-08-31 15:57:23', '2026-08-31 15:57:23.979', '2026-08-31 15:57:23.979', NULL, 'ff8b70f1b08fd2d3bd0b4a389c9c24f2', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G5HXSMTZDG68R0WRV0V4S25M', 'description', NULL, '`pql decisions resolve <Q-N> --into <D-N>` (T-99) requires the target to be a
+confirmed record. That covers the common case and misses the one this vault
+actually has.
+
+EVIDENCE
+
+Surveying the twelve open questions right after T-99 shipped, exactly one had a
+stated disposition, and it was the shape the new verb cannot express. Q-9''s body
+records:
+
+  **Converged direction:** the issue-tracker-as-referee variant is developed in
+  [Q-13](#q-13-githubgitea-issue-backend-for-id-claiming-and-one-way-mirror).
+
+Q-9 is not answered by a decision. It was absorbed by a more developed question.
+The verb refuses that with "Q-13 is a question record, not a confirmed", which
+is a correct message for a rule that is too narrow.
+
+So the survey found eleven genuinely-open questions and one closable one, and
+the closable one is the only one the tooling cannot touch.
+
+THE DATA MODEL ALREADY ALLOWS IT
+
+This is a gap in the verb, not in the schema. inferStatus checks for a
+`- **Superseded by:**` line BEFORE it branches on record type, so the check is
+type-agnostic and a question carrying that field already parses as status
+`superseded`. The vocabulary, the field and the status all exist; nothing
+writes them.
+
+Worth confirming that `superseded` is the right resting state for Q-9 rather
+than `resolved`. It reads correctly - the question was not answered, it was
+replaced by a better statement of itself - and it keeps the open-question count
+honest either way, since neither status is open.
+
+A SECOND MISSING TARGET, SAME ROOT
+
+A question can also be closed by a REJECTION. "Should we do X?" answered by an
+R record saying X was considered and rejected is a real disposition, and
+`--into R-N` is refused for the same reason. Both cases are the verb hardcoding
+one of the three record types as the only legal target.
+
+SUGGESTED SHAPE
+
+Two options, and the second is probably better.
+
+(a) Widen `--into` to accept D, Q or R, varying the wording written into the
+    Status line: "Resolved →" for a decision or a rejection, "Superseded by" for
+    a question. One verb, but its name stops matching half of what it does -
+    "resolve Q-9 into Q-13" is not what happened to Q-9.
+
+(b) Add a sibling verb for the supersession relation:
+
+      pql decisions supersede Q-9 --by Q-13
+
+    and leave `resolve` meaning "a question was answered", widened only to
+    accept an R alongside a D. This reads correctly at the call site, and it
+    generalises past questions: DECISIONS supersede each other constantly in
+    this tree - D-15 supersedes D-13, D-14 supersedes D-10 - and every one of
+    those `**Supersedes:**` / `**Superseded by:**` pairs was hand-written today.
+    A supersede verb would maintain both sides of that pair the way T-99''s
+    resolve maintains the question side of a resolution.
+
+Option (b) turns a narrow fix into the missing half of the authoring surface,
+which is the argument for it. It is also more work, so the call is the
+maintainer''s.
+
+SCOPE NOTE
+
+Whatever ships should keep T-99''s two rules, which were load-bearing there and
+are load-bearing here: write the markdown, because the DQR tree is the source of
+truth (D-8) and a status written only to pql.db is reverted by the next sync;
+and do not overwrite prose that already exists in the target field - add when
+absent, report when present, never clobber.
+
+RELATED
+
+T-99  - the resolve verb this extends.
+D-29  - an argument that names a thing is validated; both ids here are names,
+        which is why the refusal is correct even though the rule is too narrow.', NULL, '2026-08-31 17:57:16', '2026-08-31 17:57:16.178', '2026-08-31 17:57:16.178', NULL, 'bdc47d9280b9dfc3ca3d320c0d528527', 2) ON CONFLICT(hash) DO NOTHING;
