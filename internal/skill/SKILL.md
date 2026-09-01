@@ -292,7 +292,7 @@ they live in SQLite and travel via the changelog described below.
 | `pql decisions read <id>` | The record's full markdown body |
 | `pql decisions refs <id>` | Cross-references involving a record |
 | `pql decisions claim <D\|Q\|R> <domain> "title"` | Print the next free id. No side effects |
-| `pql decisions resolve <Q-N> --into <D-N>` | Close a question into the decision that answers it |
+| `pql decisions close <id> --into <id> \| --obsolete` | Record a terminal disposition: resolved, superseded, or obsolete |
 
 Record type is `confirmed`, `question` or `rejected` — the D/Q/R of the tree —
 and status is `active`, `superseded`, `resolved` or `open`. Passing `--type Q`
@@ -307,23 +307,30 @@ the filter-value warning under Contracts.
   alternatives — an invariant, a convention, the shape of a subsystem. Hence
   the type name `confirmed`.
 
-### Closing a question
+### Closing a record
 
 ```bash
-pql decisions resolve Q-2 --into D-23
+pql decisions close Q-2  --into D-23    question answered by a decision
+pql decisions close Q-4  --into R-1     question answered "no"
+pql decisions close D-13 --into D-15    decision replaced by a later one
+pql decisions close Q-7  --obsolete     stopped mattering; no longer relevant
 ```
 
-Marks the question resolved and links it to the decision that answered it.
+The relation follows from the pair of types, so never name it: question into
+decision or rejection is *resolved*, decision into decision is *superseded*.
+
 Edits the DQR markdown and re-syncs, so the result is queryable immediately —
 no follow-up `decisions sync`.
 
-The link then shows from both ends: `decisions refs Q-2` and
-`decisions show D-23 --with-refs`.
+A resolution then shows from both ends: `decisions refs Q-2` and
+`decisions show D-23 --with-refs`. Supersession also writes `**Supersedes:**`
+on the newer record.
 
-Both ids are validated: an unknown id, or a `D-` where a `Q-` belongs, exits
-non-zero naming the problem. An already-resolved question is refused, not
-re-pointed. The decision's `**Raised by:**` line is written only when absent;
-an existing one is left alone and the receipt says so.
+Refused, each naming the routes out: an unknown id, a record already closed, a
+question into a question (that is a cross-reference — leave both open), a
+decision into a question, and any record into itself. An existing
+`**Raised by:**` or `**Supersedes:**` field is never overwritten; the receipt
+says when one was left alone.
 
 The markdown is the source of truth, so **run `pql decisions sync` before
 querying** whenever the DQR files may have changed — otherwise you are

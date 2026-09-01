@@ -2631,20 +2631,20 @@ func dqrVault(t *testing.T) string {
 	return root
 }
 
-func TestIntegration_DecisionsResolve(t *testing.T) {
+func TestIntegration_DecisionsClose(t *testing.T) {
 	vault := dqrVault(t)
 
-	out := pqlIT(t, vault, "decisions", "resolve", "Q-1", "--into", "D-1")
+	out := pqlIT(t, vault, "decisions", "close", "Q-1", "--into", "D-1")
 	var res struct {
-		QuestionID string `json:"question_id"`
-		DecisionID string `json:"decision_id"`
-		Status     string `json:"status"`
+		ID         string `json:"id"`
+		Into       string `json:"into"`
+		Relation   string `json:"relation"`
 		StatusLine string `json:"status_line"`
 	}
 	if err := json.Unmarshal([]byte(out), &res); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, out)
 	}
-	if res.QuestionID != "Q-1" || res.DecisionID != "D-1" || res.Status != "resolved" {
+	if res.ID != "Q-1" || res.Into != "D-1" || res.Relation != "resolved" {
 		t.Errorf("receipt = %+v, want Q-1/D-1/resolved", res)
 	}
 	// The receipt quotes the line it wrote, so the caller can verify the edit
@@ -2678,7 +2678,7 @@ func TestIntegration_DecisionsResolve(t *testing.T) {
 	}
 }
 
-func TestIntegration_DecisionsResolveRejections(t *testing.T) {
+func TestIntegration_DecisionsCloseRejections(t *testing.T) {
 	vault := dqrVault(t)
 
 	for _, tc := range []struct {
@@ -2686,10 +2686,11 @@ func TestIntegration_DecisionsResolveRejections(t *testing.T) {
 		args []string
 		want int
 	}{
-		{"missing --into", []string{"decisions", "resolve", "Q-1"}, 64},
-		{"unknown question", []string{"decisions", "resolve", "Q-99", "--into", "D-1"}, 66},
-		{"unknown decision", []string{"decisions", "resolve", "Q-1", "--into", "D-99"}, 66},
-		{"question id is a decision", []string{"decisions", "resolve", "D-1", "--into", "D-1"}, 64},
+		{"no disposition", []string{"decisions", "close", "Q-1"}, 64},
+		{"unknown question", []string{"decisions", "close", "Q-99", "--into", "D-1"}, 66},
+		{"unknown decision", []string{"decisions", "close", "Q-1", "--into", "D-99"}, 66},
+		{"self close", []string{"decisions", "close", "D-1", "--into", "D-1"}, 64},
+		{"question into question", []string{"decisions", "close", "Q-1", "--into", "Q-2"}, 64},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, stderr, code := run(t, vault, tc.args...)
@@ -2703,8 +2704,8 @@ func TestIntegration_DecisionsResolveRejections(t *testing.T) {
 	}
 
 	// Resolving twice is refused rather than silently rewriting the link.
-	pqlIT(t, vault, "decisions", "resolve", "Q-1", "--into", "D-1")
-	_, _, code := run(t, vault, "decisions", "resolve", "Q-1", "--into", "D-1")
+	pqlIT(t, vault, "decisions", "close", "Q-1", "--into", "D-1")
+	_, _, code := run(t, vault, "decisions", "close", "Q-1", "--into", "D-1")
 	if code == 0 {
 		t.Error("resolving an already-resolved question should be refused")
 	}

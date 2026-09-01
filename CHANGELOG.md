@@ -66,32 +66,42 @@ vulnerabilities at any level.
 
 ### Added
 
-- **`pql decisions resolve <Q-N> --into <D-N>`** (T-99), closing a question into
-  the decision that answers it. pql could mint a record id with `decisions
-  claim` but had no counterpart for closing one, so every vault invented its own
-  convention for the Q → D transition and none of them were enforced or
-  queryable.
+- **`pql decisions close <id> --into <id> | --obsolete`** (T-99, T-118),
+  recording a record's terminal disposition. pql could mint a record id with
+  `decisions claim` but had no counterpart for closing one, so every vault
+  invented its own convention and none were enforced or queryable.
 
-  It **edits the markdown**, which is new: the DQR tree is the source of truth
-  for decisions (D-8), so a status written only to `pql.db` is reverted by the
-  next sync. `ticket relabel --fix-prose` set the precedent for writing DQR
-  prose in place. pql.db is re-synced before the command returns, so the change
-  is queryable immediately.
+  The relation follows from the pair of record types rather than being named at
+  the call site: a question closed by a decision or a rejection is *resolved*, a
+  decision closed by a decision is *superseded*, and `--obsolete` closes a
+  record that stopped mattering with no target at all. Pairs that are not
+  closures are refused with every supported route listed — notably a question
+  into a question, which is a cross-reference rather than a closure and leaves
+  both records open.
 
-  A single rewritten `**Status:**` line in the question's file is all it takes
-  for both records to show the link — refs are looked up from either end, so
-  `decisions refs Q-2` and `decisions show D-23 --with-refs` each surface it.
-  The decision also gains a readable `**Raised by:**` line when it has none;
-  when it already has one, that field is free prose about a record's provenance
-  and is left exactly as written, with the receipt saying so. Both ids are
-  validated, so an unknown id — or a `D-` where a `Q-` belongs — exits non-zero
-  naming the problem (D-29).
+  It **edits the markdown**, which is new for this tool: the DQR tree is the
+  source of truth for decisions (D-8), so a status written only to `pql.db` is
+  reverted by the next sync. `ticket relabel --fix-prose` set the precedent.
+  Both `pql.db` and the DQR README are refreshed before the command returns.
 
-  The bundled skill also now says **when** to reach for each of D/Q/R, which it
-  documented only as vocabulary before: a deferral is written as a Q rather than
-  left as prose in some other record, and a D is a home for durable
-  documentation rather than only a choice between alternatives — which is why
-  the type is called `confirmed`.
+  For a resolution one rewritten `**Status:**` line is enough for both records
+  to show the link, since refs resolve from either end. Supersession also
+  writes `**Supersedes:**` on the newer record. An existing `**Raised by:**` or
+  `**Supersedes:**` field is never overwritten — that field carries prose about
+  a record's provenance, and clobbering it to insert a link the database
+  already holds would destroy something to duplicate something.
+
+- **Supersession written into the `**Status:**` line is now parsed** (T-119).
+  `decisions list --status superseded` returned nothing while D-6, D-10 and
+  D-13 were all superseded and reporting `active`: the parser tested only for a
+  standalone `- **Superseded by:**` field, and the convention in use writes it
+  into the status field. Both spellings are read now.
+
+  Hedged statuses keep their live status. D-19 reads "Superseded in part by
+  D-28 — the no-runner clause. The other half still holds" and is still a cited
+  invariant, so matching on the prefix alone would have retired it. The partial
+  test the question branch already used for "Partially resolved" is now shared
+  by both checks.
 
 - **`--grep <regex>` on every read verb** (T-113), filtering results by content
   so a caller never has to pipe. `pql ticket list --grep changelog` replaces

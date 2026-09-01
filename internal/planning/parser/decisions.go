@@ -23,7 +23,6 @@ var (
 	dependsRe    = regexp.MustCompile(`(?i)^\s*-\s+\*\*Depends\s+on:\*\*`)
 	amendsRe     = regexp.MustCompile(`(?i)^\s*\*\*Amendment\s*\(`)
 	refIDRe      = regexp.MustCompile(`\b[DQRT]-\d+\b`)
-	raisedByRe   = regexp.MustCompile(`(?i)^\s*-\s+\*\*Raised\s+by:\*\*`)
 	metaFieldRe  = regexp.MustCompile(`^\s*-\s+\*\*[^*]+:\*\*`)
 )
 

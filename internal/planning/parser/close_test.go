@@ -71,13 +71,13 @@ const twoDecisions = `# Decisions
 - **Raised by:** A hallway conversation.
 `
 
-func TestResolveQuestionRewritesStatusAndAddsBacklink(t *testing.T) {
+func TestCloseRewritesStatusAndAddsBacklink(t *testing.T) {
 	root := writeDQR(t, twoQuestions, twoDecisions)
 	recs := recordsIn(t, root)
 
-	out, err := ResolveQuestion(root, recs["Q-1"], recs["D-1"])
+	out, err := Close(root, recs["Q-1"], ptr(recs["D-1"]))
 	if err != nil {
-		t.Fatalf("ResolveQuestion: %v", err)
+		t.Fatalf("Close: %v", err)
 	}
 
 	q := readFile(t, root, "governance/questions/architecture.md")
@@ -97,12 +97,12 @@ func TestResolveQuestionRewritesStatusAndAddsBacklink(t *testing.T) {
 
 // The whole risk of this verb is editing the wrong record's prose, so pin that
 // neighbours are untouched rather than only that the target changed.
-func TestResolveQuestionLeavesNeighbouringRecordsAlone(t *testing.T) {
+func TestCloseLeavesNeighbouringRecordsAlone(t *testing.T) {
 	root := writeDQR(t, twoQuestions, twoDecisions)
 	recs := recordsIn(t, root)
 
-	if _, err := ResolveQuestion(root, recs["Q-1"], recs["D-1"]); err != nil {
-		t.Fatalf("ResolveQuestion: %v", err)
+	if _, err := Close(root, recs["Q-1"], ptr(recs["D-1"])); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 
 	q := readFile(t, root, "governance/questions/architecture.md")
@@ -122,13 +122,13 @@ func TestResolveQuestionLeavesNeighbouringRecordsAlone(t *testing.T) {
 // An existing **Raised by:** is free prose about where a record came from.
 // Overwriting it to insert a link the database already holds would destroy
 // something to duplicate something.
-func TestResolveQuestionPreservesExistingRaisedBy(t *testing.T) {
+func TestClosePreservesExistingRaisedBy(t *testing.T) {
 	root := writeDQR(t, twoQuestions, twoDecisions)
 	recs := recordsIn(t, root)
 
-	out, err := ResolveQuestion(root, recs["Q-2"], recs["D-2"])
+	out, err := Close(root, recs["Q-2"], ptr(recs["D-2"]))
 	if err != nil {
-		t.Fatalf("ResolveQuestion: %v", err)
+		t.Fatalf("Close: %v", err)
 	}
 	if out.BackLink != "" {
 		t.Errorf("BackLink = %q, want empty — D-2 already had the field", out.BackLink)
@@ -144,12 +144,12 @@ func TestResolveQuestionPreservesExistingRaisedBy(t *testing.T) {
 
 // A question with no Status line parses as open, so resolving it has to add
 // the line rather than silently do nothing.
-func TestResolveQuestionAddsMissingStatusLine(t *testing.T) {
+func TestCloseAddsMissingStatusLine(t *testing.T) {
 	root := writeDQR(t, "# Open Questions\n\n### Q-1: No status here\n- **Question:** Eh?\n", twoDecisions)
 	recs := recordsIn(t, root)
 
-	if _, err := ResolveQuestion(root, recs["Q-1"], recs["D-1"]); err != nil {
-		t.Fatalf("ResolveQuestion: %v", err)
+	if _, err := Close(root, recs["Q-1"], ptr(recs["D-1"])); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 	q := readFile(t, root, "governance/questions/architecture.md")
 	if !strings.Contains(q, "### Q-1: No status here\n- **Status:** Resolved → [D-1]") {
@@ -159,12 +159,12 @@ func TestResolveQuestionAddsMissingStatusLine(t *testing.T) {
 
 // The point of the edit: the next sync must read the record back as resolved.
 // Without this the rewrite could be syntactically fine and semantically inert.
-func TestResolveQuestionSurvivesReparse(t *testing.T) {
+func TestCloseSurvivesReparse(t *testing.T) {
 	root := writeDQR(t, twoQuestions, twoDecisions)
 	recs := recordsIn(t, root)
 
-	if _, err := ResolveQuestion(root, recs["Q-1"], recs["D-1"]); err != nil {
-		t.Fatalf("ResolveQuestion: %v", err)
+	if _, err := Close(root, recs["Q-1"], ptr(recs["D-1"])); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 
 	after := recordsIn(t, root)
@@ -198,13 +198,13 @@ func TestAnchorMatchesRenderedHeadingSlug(t *testing.T) {
 	}
 }
 
-func TestResolveQuestionErrorsOnMissingRecord(t *testing.T) {
+func TestCloseErrorsOnMissingRecord(t *testing.T) {
 	root := writeDQR(t, twoQuestions, twoDecisions)
 	recs := recordsIn(t, root)
 
 	ghost := recs["Q-1"]
 	ghost.ID = "Q-404"
-	if _, err := ResolveQuestion(root, ghost, recs["D-1"]); err == nil {
+	if _, err := Close(root, ghost, ptr(recs["D-1"])); err == nil {
 		t.Error("expected an error when the record is absent from its file")
 	}
 }
@@ -246,5 +246,140 @@ func TestInferStatusReadsSupersessionFromStatusLine(t *testing.T) {
 		if got := inferStatus(tc.recType, []string{tc.statusLine}); got != tc.want {
 			t.Errorf("%s: inferStatus = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+// ptr is a helper for passing a record as the optional target.
+func ptr(r Record) *Record { return &r }
+
+// --- close relations (T-118) ----------------------------------------------
+
+func TestRelationForDerivesFromTypePair(t *testing.T) {
+	q := Record{ID: "Q-1", Type: typeQuestion}
+	q2 := Record{ID: "Q-2", Type: typeQuestion}
+	d := Record{ID: "D-1", Type: typeConfirmed}
+	d2 := Record{ID: "D-2", Type: typeConfirmed}
+	r := Record{ID: "R-1", Type: typeRejected}
+
+	for _, tc := range []struct {
+		name             string
+		subject, target  Record
+		want             Relation
+		wantErrSubstring string
+	}{
+		{name: "question answered by decision", subject: q, target: d, want: RelResolved},
+		{name: "question answered no", subject: q, target: r, want: RelResolved},
+		{name: "decision replaced", subject: d, target: d2, want: RelSuperseded},
+
+		// The pair that produced this verb's original design mistake. The
+		// message has to name the routes out, not just refuse.
+		{name: "question into question", subject: q, target: q2,
+			wantErrSubstring: "cross-reference"},
+		// D -> D is legal, so without a self guard a decision could supersede
+		// itself and reparse as superseded-by-nothing.
+		{name: "self close", subject: d, target: d,
+			wantErrSubstring: "cannot close into itself"},
+		{name: "decision into question", subject: d, target: q2,
+			wantErrSubstring: "cannot close into a question"},
+		{name: "rejection has nothing to close", subject: r, target: d,
+			wantErrSubstring: "no further state to close into"},
+	} {
+		got, err := RelationFor(tc.subject, tc.target)
+		if tc.wantErrSubstring != "" {
+			if err == nil {
+				t.Errorf("%s: expected an error", tc.name)
+			} else if !strings.Contains(err.Error(), tc.wantErrSubstring) {
+				t.Errorf("%s: error = %q, want it to mention %q", tc.name, err, tc.wantErrSubstring)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: unexpected error %v", tc.name, err)
+		} else if got != tc.want {
+			t.Errorf("%s: relation = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+const supersedable = `# Decisions
+
+### D-1: First decision
+- **Date:** 2026-08-31
+- **Decision:** Yes.
+
+### D-2: Second decision
+- **Date:** 2026-08-31
+- **Decision:** Actually no.
+`
+
+// Supersession writes a pair across two records, and both halves must land or
+// the tree contradicts itself — the old record would still read active while
+// the new one claims to have replaced it.
+func TestCloseSupersedesWritesBothSides(t *testing.T) {
+	root := writeDQR(t, twoQuestions, supersedable)
+	recs := recordsIn(t, root)
+
+	out, err := Close(root, recs["D-1"], ptr(recs["D-2"]))
+	if err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if out.Relation != RelSuperseded {
+		t.Errorf("relation = %q, want %q", out.Relation, RelSuperseded)
+	}
+
+	d := readFile(t, root, "governance/decisions/architecture.md")
+	if !strings.Contains(d, "- **Status:** Superseded by [D-2](#d-2-second-decision)") {
+		t.Errorf("old record not marked superseded; got:\n%s", d)
+	}
+	if !strings.Contains(d, "- **Supersedes:** [D-1](#d-1-first-decision)") {
+		t.Errorf("new record does not claim the supersession; got:\n%s", d)
+	}
+
+	// And the parser must read it back, or the pair is decorative (T-119).
+	after := recordsIn(t, root)
+	if got := after["D-1"].Status; got != statusSuperseded {
+		t.Errorf("D-1 after reparse = %q, want %q", got, statusSuperseded)
+	}
+	if got := after["D-2"].Status; got != statusActive {
+		t.Errorf("D-2 after reparse = %q, want %q — the newer record stays live", got, statusActive)
+	}
+}
+
+// Same-file supersession must not need a relative path: both records live in
+// decisions/architecture.md, so the link is a bare anchor.
+func TestCloseSupersedeLinkIsBareAnchorWithinAFile(t *testing.T) {
+	root := writeDQR(t, twoQuestions, supersedable)
+	recs := recordsIn(t, root)
+
+	out, err := Close(root, recs["D-1"], ptr(recs["D-2"]))
+	if err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if strings.Contains(out.StatusLine, "../") || strings.Contains(out.StatusLine, ".md") {
+		t.Errorf("status line = %q, want a bare #anchor for a same-file target", out.StatusLine)
+	}
+}
+
+func TestCloseObsoleteTakesNoTarget(t *testing.T) {
+	root := writeDQR(t, twoQuestions, twoDecisions)
+	recs := recordsIn(t, root)
+
+	out, err := Close(root, recs["Q-1"], nil)
+	if err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if out.Relation != RelObsolete {
+		t.Errorf("relation = %q, want %q", out.Relation, RelObsolete)
+	}
+	if out.TargetFile != "" || out.BackLink != "" {
+		t.Errorf("obsolete close touched a target: %+v", out)
+	}
+
+	// The trap this guards: a status the parser does not recognise leaves the
+	// record in the open count forever, which is the failure the verb exists
+	// to fix arriving by another door.
+	after := recordsIn(t, root)
+	if got := after["Q-1"].Status; got != statusResolved {
+		t.Errorf("obsolete Q-1 reparsed as %q, want %q — it must leave the open count", got, statusResolved)
 	}
 }
