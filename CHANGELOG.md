@@ -19,6 +19,14 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ### Fixed
 
+- **`pql skill install`'s refusal hint is now covered end to end.** T-121
+  shipped a hint naming the files `--force` would replace, but the existing
+  refusal test only asserted that stderr mentioned `modified`, so the hint
+  itself was verified by inspection. It now parses the diagnostic's `hint`
+  field and checks that a single edited file in the multi-file `clean-house`
+  bundle is named **and that the untouched one is not** — a hint listing the
+  whole bundle would pass a contains-check while telling the reader nothing.
+
 - **`make eval` passes again, and now asserts what its goldens claim** (T-120).
   It had been failing on a `context` case scoring NDCG=0, MRR=0, P@5=0.
 

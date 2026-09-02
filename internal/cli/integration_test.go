@@ -601,6 +601,74 @@ func TestIntegration_Skill_InstallRefusesModifiedWithoutForce(t *testing.T) {
 	}
 }
 
+// The refusal above stops the overwrite; this asserts it says what --force
+// would destroy. Since --force is also how a routine upgrade lands, a refusal
+// that only reports "something differs" trains the reader to force past it
+// without knowing what they are discarding (T-121).
+//
+// clean-house is the vehicle because it is the multi-file bundle: editing one
+// of its files distinguishes a hint that compares from one that just lists the
+// bundle. Asserting the absent name matters as much as the present one — a
+// hint naming every file would satisfy a contains-check while telling the
+// reader nothing (D-32).
+func TestIntegration_Skill_RefusalNamesWhatForceWouldReplace(t *testing.T) {
+	vault := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
+
+	if err := pqlCmd(t, "--vault", vault, "--db", dbPath, "skill", "install").Run(); err != nil {
+		t.Fatalf("seed install: %v", err)
+	}
+
+	// Edit a reference file, leaving SKILL.md pristine.
+	edited := filepath.Join(vault, ".claude", "skills", "clean-house", "references", "rules.md")
+	if _, err := os.Stat(edited); err != nil {
+		t.Fatalf("expected a multi-file clean-house bundle: %v", err)
+	}
+	if err := os.WriteFile(edited, []byte("hand edited\n"), 0o644); err != nil {
+		t.Fatalf("hand-edit: %v", err)
+	}
+
+	cmd := pqlCmd(t, "--vault", vault, "--db", dbPath, "skill", "install")
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
+	err := cmd.Run()
+
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 64 {
+		t.Fatalf("expected refusal at exit 64, got %v\nstderr: %s", err, errBuf.String())
+	}
+
+	// The diagnostic is JSON per line; the hint is its own field, so parse it
+	// rather than substring-matching the whole stream.
+	var hint string
+	for _, line := range bytes.Split(bytes.TrimSpace(errBuf.Bytes()), []byte("\n")) {
+		var d struct {
+			Hint string `json:"hint"`
+		}
+		if json.Unmarshal(line, &d) == nil && d.Hint != "" {
+			hint = d.Hint
+		}
+	}
+	if hint == "" {
+		t.Fatalf("no hint on the refusal diagnostic: %s", errBuf.String())
+	}
+	if !strings.Contains(hint, "references/rules.md") {
+		t.Errorf("hint does not name the edited file: %q", hint)
+	}
+	if strings.Contains(hint, "SKILL.md") {
+		t.Errorf("hint names SKILL.md, which was not edited — it is listing the bundle, not comparing it: %q", hint)
+	}
+	if !strings.Contains(hint, "--force") {
+		t.Errorf("hint should name the flag that would discard the edits: %q", hint)
+	}
+
+	// And the edit really is still there — the refusal is not advisory.
+	body, _ := os.ReadFile(edited)
+	if string(body) != "hand edited\n" {
+		t.Errorf("edited file was overwritten despite refusal: %q", body)
+	}
+}
+
 func TestIntegration_Skill_UninstallRemovesFiles(t *testing.T) {
 	vault := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "pql.sqlite")
