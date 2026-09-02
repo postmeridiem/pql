@@ -230,10 +230,23 @@ to overwrite unless --force is passed.`,
 				var refused *skill.ErrRefusedOverwrite
 				if errors.As(err, &refused) {
 					_ = renderSkillStatuses(cmd, statuses)
+					// Name what would be lost. The refusal already stopped the
+					// overwrite; the hint is what makes the next step — almost
+					// always --force — an informed one rather than a reflex
+					// (T-121). Without it the caller is told only that
+					// something differs, which is not enough to decide.
+					hint := "pass --force to overwrite"
+					if len(refused.Files) > 0 {
+						hint = fmt.Sprintf(
+							"--force replaces %s in %s, discarding local edits; "+
+								"copy anything worth keeping first, and file changes upstream "+
+								"so they survive the next install",
+							strings.Join(refused.Files, ", "), refused.Name)
+					}
 					return &exitError{
 						code: diag.Usage,
 						msg:  err.Error(),
-						hint: "pass --force to overwrite",
+						hint: hint,
 					}
 				}
 				return &exitError{code: diag.Software, msg: err.Error()}

@@ -285,10 +285,12 @@ func (s *Skill) Install(root string, force bool) (*Status, error) {
 		switch current.State {
 		case StateModified:
 			return current, &ErrRefusedOverwrite{Name: s.Name, State: current.State,
-				Reason: "skill has been hand-edited since install"}
+				Reason: "skill has been hand-edited since install",
+				Files:  s.driftingFiles(root)}
 		case StateUnknown:
 			return current, &ErrRefusedOverwrite{Name: s.Name, State: current.State,
-				Reason: "skill present but wasn't installed by pql"}
+				Reason: "skill present but wasn't installed by pql",
+				Files:  s.driftingFiles(root)}
 		}
 	}
 
@@ -394,17 +396,52 @@ func UninstallAll(root string) error {
 	return errors.Join(errs...)
 }
 
+// driftingFiles returns the bundle-relative paths whose on-disk content
+// differs from what this binary would write, in deterministic order.
+//
+// This is the set --force would overwrite, which is the only set worth
+// naming: the refusal exists so that forcing is a decision, and a decision
+// needs its subject. The lock file records a bundle hash rather than
+// per-file hashes, so this compares against the *embedded* content rather
+// than against what was last installed. The difference matters when the
+// binary has also moved on — a file can appear here because the user edited
+// it, because the skill changed upstream, or both — so the message says
+// "differs from what this binary would write" rather than claiming the user
+// touched it.
+//
+// A read error makes a file drifting rather than clean. Reporting a file
+// the caller cannot lose is cheap; omitting one they can is not (D-32).
+func (s *Skill) driftingFiles(root string) []string {
+	dir := s.installDir(root)
+	var drifted []string
+	for _, rel := range s.Files() {
+		onDisk, err := os.ReadFile(filepath.Join(dir, rel)) //nolint:gosec // G304: rel comes from the embedded bundle, not user input
+		if err != nil || string(onDisk) != s.files[rel] {
+			drifted = append(drifted, rel)
+		}
+	}
+	return drifted
+}
+
 // ErrRefusedOverwrite is returned by Install when it would clobber
 // user work without force=true.
 type ErrRefusedOverwrite struct {
 	Name   string
 	State  State
 	Reason string
+	// Files are the bundle-relative paths that differ from what this
+	// binary would write — what --force would replace. May be empty when
+	// the difference is the lock file rather than content.
+	Files []string
 }
 
 func (e *ErrRefusedOverwrite) Error() string {
-	return fmt.Sprintf("skill %q: refusing to overwrite (%s): %s; pass force=true to overwrite",
+	msg := fmt.Sprintf("skill %q: refusing to overwrite (%s): %s",
 		e.Name, e.State, e.Reason)
+	if len(e.Files) > 0 {
+		msg += "; --force would replace " + strings.Join(e.Files, ", ")
+	}
+	return msg + "; pass force=true to overwrite"
 }
 
 // hashBundle hashes the bundle as a deterministic concatenation of

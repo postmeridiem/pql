@@ -66,6 +66,15 @@ vulnerabilities at any level.
 
 ### Added
 
+- **Installed skills now say they are installed** (T-121). Both bundled
+  SKILL.md files open with a notice that the copy under `.claude/skills/` was
+  written by `pql skill install`, that local edits do not survive, and where
+  the upstream source lives so a change can be filed once and ship to everyone.
+  Observed: five good-faith edits across the two skills in a single session,
+  all ephemeral, two of which added consuming-project specifics to a document
+  shipped to every pql user — a mistake the file's own provenance would have
+  prevented.
+
 - **D-33, "CI scripts are the definition; callers invoke, never restate"**
   (T-70) — the first record in a new `process` domain. The substance of every
   check lives in a script under `ci/`; workflows and Makefile targets invoke it
@@ -204,6 +213,12 @@ vulnerabilities at any level.
   the old compact shape and skip the read entirely**:
   `decisions show D-1,D-2,D-3 --fields id,title,status` touches no files. The
   card is now what you ask for rather than what you get.
+
+- **`pql skill install`'s refusal names the files `--force` would replace**
+  (T-121). It already refused to overwrite hand-edited skills, but said only
+  that something differed — so `--force`, which is also the normal way to take
+  an upgrade, was an uninformed reflex. It now lists the drifting files and
+  says the edits will be discarded and where to file them instead.
 
 - **Global output flags are validated before a subcommand runs**, in the root
   `PersistentPreRunE` rather than at the point of rendering. Found while

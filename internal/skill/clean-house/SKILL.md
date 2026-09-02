@@ -15,6 +15,15 @@ description: >
   apply fixes, not just report.
 ---
 
+> **Installed copy — edit upstream, not here.** Under `.claude/skills/`, this
+> file was written by `pql skill install` and is owned by the binary that wrote
+> it. Local edits do not survive: `pql skill install` refuses while they exist
+> and names the files that differ, but `--force` discards them, and forcing is
+> how a pql upgrade normally lands. The source is
+> `internal/skill/clean-house/SKILL.md` in `github.com/postmeridiem/pql` —
+> change it there, or file a ticket against that repo, so the change ships to
+> every user instead of living in one checkout until the next install.
+
 # clean-house
 
 A periodic gardening pass over `decisions/`. The DQR system is

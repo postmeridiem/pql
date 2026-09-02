@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -282,6 +283,51 @@ func TestInstall_RefusesToOverwriteModified(t *testing.T) {
 	body, _ := os.ReadFile(filepath.Join(s.installDir(root), SkillFile))
 	if string(body) != "edited\n" {
 		t.Errorf("file modified despite refusal: %q", body)
+	}
+}
+
+// The refusal is only useful if it says what --force would destroy. Asserting
+// the exact expected set rather than "Files is non-empty": a refusal that
+// named some other file would satisfy the weaker check while telling the
+// caller the wrong thing to go and rescue (D-32).
+func TestInstall_RefusalNamesTheFilesForceWouldReplace(t *testing.T) {
+	root := t.TempDir()
+	s := ByName("clean-house")
+	if _, err := s.Install(root, false); err != nil {
+		t.Fatalf("initial Install: %v", err)
+	}
+	// Edit exactly one file of a multi-file bundle, so a report that simply
+	// lists everything is distinguishable from one that compares.
+	edited := filepath.Join(s.installDir(root), SkillFile)
+	if err := os.WriteFile(edited, []byte("edited\n"), 0o644); err != nil {
+		t.Fatalf("hand-edit: %v", err)
+	}
+
+	_, err := s.Install(root, false)
+	var refused *ErrRefusedOverwrite
+	if !errors.As(err, &refused) {
+		t.Fatalf("expected ErrRefusedOverwrite, got %v", err)
+	}
+	want := []string{SkillFile}
+	if !reflect.DeepEqual(refused.Files, want) {
+		t.Errorf("refused.Files = %v, want %v", refused.Files, want)
+	}
+	if !strings.Contains(err.Error(), SkillFile) {
+		t.Errorf("error text does not name the file that would be replaced: %q", err)
+	}
+}
+
+// A pristine bundle that is merely stale must not be reported as drifting:
+// nothing of the user's is at risk, and naming files here would train the
+// reader to ignore the list in the case that matters.
+func TestDriftingFiles_EmptyWhenPristine(t *testing.T) {
+	root := t.TempDir()
+	s := ByName("clean-house")
+	if _, err := s.Install(root, false); err != nil {
+		t.Fatalf("initial Install: %v", err)
+	}
+	if got := s.driftingFiles(root); len(got) != 0 {
+		t.Errorf("driftingFiles on a pristine install = %v, want none", got)
 	}
 }
 

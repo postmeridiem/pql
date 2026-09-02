@@ -13,6 +13,15 @@ description: >
   success (exit 0, empty `[]`), not an error.
 ---
 
+> **Installed copy — edit upstream, not here.** Under `.claude/skills/`, this
+> file was written by `pql skill install` and is owned by the binary that wrote
+> it. Local edits do not survive: `pql skill install` refuses while they exist
+> and names the files that differ, but `--force` discards them, and forcing is
+> how a pql upgrade normally lands. The source is `internal/skill/SKILL.md` in
+> `github.com/postmeridiem/pql` — change it there, or file a ticket against
+> that repo, so the change ships to every user instead of living in one
+> checkout until the next install.
+
 # pql — vault queries + project planning
 
 `pql` indexes a markdown vault into SQLite and answers questions about it.
