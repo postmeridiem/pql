@@ -1733,3 +1733,128 @@ THE SHIPPED SKILL HAS THE SAME GAP, and is the more reachable half of the fix. i
 DESIRED CONTRACT, not a design: someone who asks for a record by id, without knowing the surface, ends up holding the record. Several shapes would satisfy that — show''s help naming read as where the body lives; body becoming projectable through --fields; show emitting a pointer when it omits the body; or the two verbs collapsing with the card shape behind a flag. Which one is the maintainer''s call. The defect is that the obvious verb answers incompletely and is silent about having done so.
 
 Related: T-9 exposed heading anchors on decisions read, so the body path has had attention that the discoverability of it has not.', 'review', 'medium', NULL, NULL, NULL, '2026-09-02 12:48:54.187', '2026-09-02 13:28:12.080', NULL, 'b213cb6fbe863edf078ca2ff2013c8d7', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY1N5XNKDTCQ354QCFAPQAA4', 'bug', NULL, 'ci/release.sh is dead code; release.yaml calls goreleaser directly', 'Found 2026-08-08 while auditing the Makefile for the divergence that broke the
+2.0.0 release (`make lint` had drifted from `ci/lint.sh`).
+
+`CLAUDE.md` states: "CI substance lives in `ci/{lint,test,release,eval}.sh`.
+GitHub Actions workflows in `.github/workflows/` are thin wrappers around these —
+keeps local and CI behaviour identical and lets the provider be swapped without
+rewriting the scripts."
+
+That is true for lint and test, and false for the other two:
+
+- **`ci/release.sh` is invoked by nothing.** `release.yaml` uses
+  `goreleaser/goreleaser-action@v6` with `args: release --clean` directly. The
+  script runs `goreleaser release --clean`, so today they agree by coincidence —
+  but nothing keeps them in step, and the stated swap-the-provider property does
+  not hold for the one workflow that publishes binaries.
+- **`ci/eval.sh` is invoked by nothing either.** Its header calls it a scheduled
+  job, but no workflow schedules it. `make eval` now delegates to it, so it is at
+  least exercised locally.
+
+Options for release, in preference order:
+
+1. Point `release.yaml` at `./ci/release.sh`, installing goreleaser the way the
+   lint job does. Restores the documented property. Costs the action''s built-in
+   caching and version pinning, which is worth checking before assuming it is
+   free — the action pins a goreleaser version, the script uses whatever is on
+   PATH.
+2. Delete `ci/release.sh` and amend `CLAUDE.md` to say the release path
+   deliberately uses the action. Honest, smaller, and gives up the swap property
+   for that one workflow.
+
+Either is fine; drifting docs are not. Pick one and make the doc match.
+
+For eval: decide whether it is a scheduled job (add the schedule) or a manual
+local tool (say so in the script header and in CLAUDE.md).
+
+Deliberately not done during the 2.0.0 release — editing the release workflow
+while a release is in flight re-triggers it.
+
+RESOLVED 2026-09-02
+
+OPTION 1, and the cost this ticket flagged for it turned out to be backwards.
+
+The ticket warned that pointing release.yaml at ./ci/release.sh "costs the
+action''s built-in caching and version pinning ... the action pins a goreleaser
+version, the script uses whatever is on PATH". The action was configured with
+`version: latest`. Meanwhile v2.16.0 was pinned in three places - ci.yaml''s
+lint job, ci.yaml''s snapshot job, and release.yaml''s own lint job.
+
+So the publish step was the ONLY unpinned goreleaser invocation in the repo,
+and it sat immediately downstream of a `goreleaser check` that validated
+.goreleaser.yaml against a different build. The gate did not cover the thing it
+gated. That is a live defect this ticket found by accident while framing it as
+a cost, and option 1 fixes it rather than paying for it.
+
+Third argument, which settles it: .goreleaser.yaml''s SBOM and signing blocks
+are commented out with the note "wired in CI when ci/release.sh grows install
+steps for syft and cosign". The plan for signing was already written against
+the script. Option 2 would have deleted the file that plan depends on.
+
+WHAT CHANGED
+
+- release.yaml: workflow-level `env:` holds GORELEASER_VERSION and
+  GOLANGCI_LINT_VERSION, so the two jobs cannot diverge. The publish step
+  installs the pinned goreleaser and runs ./ci/release.sh.
+- ci/release.sh: header corrected - it is invoked on a push to main carrying a
+  dated CHANGELOG section, not on a tag push; the workflow mints the tag
+  itself. Gained the same missing-tool preamble ci/lint.sh has, which matters
+  more here because this script runs with a tag already pushed.
+- ci/eval.sh: declared a manual local tool in its own header. Not scheduled,
+  no metrics sink.
+- CLAUDE.md and project-structure.md: both now say ci/{lint,test,release}.sh
+  are workflow-run and secrets/eval are local-only, with the caller named per
+  script - the distinction that drifted in the first place.
+
+EVAL: MANUAL LOCAL TOOL, NOT A SCHEDULED JOB
+
+Decided on the facts rather than the intent. `make eval` FAILS today on a clean
+checkout - the context case scores NDCG@5=0, MRR=0, P@5=0. Scheduling a red job
+with no metrics sink produces either a permanently-failing badge or noise
+nobody reads. Filed as T-120: the golden expects "members/koskela/persona"
+without the .md extension, so it misses on spelling, and there is a second
+question underneath about context returning one result where the golden wants
+two.
+
+TWO DOC CLAIMS CORRECTED THAT THIS TICKET DID NOT NAME
+
+Both were downstream of the same drift:
+
+- The docs said releases publish "signed binaries + SHA256SUMS + SBOM". SBOM
+  and cosign signing are commented out in .goreleaser.yaml. Verified by running
+  `make snapshot`: 5 platforms and checksums.txt, no signing or SBOM stage.
+- The Verification checklist said to tag a pre-release and push the tag. There
+  is no v*-tag trigger; the release signal is a dated CHANGELOG section on main.
+
+NOT DONE, DELIBERATELY
+
+"CI scripts are the definition; workflows and Makefile targets shell out to
+them and never restate their steps" is now a property this repo has broken
+twice - `make lint` (2.0.0) and this ticket - and it is still recorded only as
+prose in two documents. It has the shape of a D record. Not filed here because
+this ticket''s scope was to pick an option and make the doc match.', 'done', 'medium', NULL, NULL, 'D-33', '2026-08-08 10:04:26.412', '2026-09-02 15:39:43.084', NULL, '3ce27bd50dbb02108b4abccbf6c71a9b', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G64AGK5DW8R57VTSHEBM6BCC', 'task', NULL, 'Installed skills carry no notice that pql owns them, so local edits are made and silently lost', '`pql skill install` writes SKILL.md files into a consuming project''s .claude/skills/. Neither the pql skill nor the clean-house sub-skill says, in the file itself, that pql wrote it and will write it again. Nothing at the point of editing signals that the file is not the project''s own.
+
+WHAT HAPPENS. An agent working in a consuming project reads the installed skill, finds a row it can improve, and edits it. The edit is correct, it is committed to that project, and it works — until the next `pql skill install` anywhere on the machine replaces the file. No warning is emitted, the loss is silent, and the project''s git history shows an edit that has quietly stopped being in effect.
+
+Observed: five edits across the two installed skills in a single session, all made in good faith, all ephemeral. Two of them were worse than ephemeral — they added consuming-project specifics to a document shipped to every pql user, which is a mistake the file''s own provenance would have prevented had it been stated.
+
+DESIRED, not a design: someone about to edit an installed skill learns from the file that they should not. A header stating that the file is installed by pql, that local edits are replaced on the next install, and that changes are requested by filing against this repo, would do it. So would a generated-file marker of the kind linters and formatters already use. The mechanism matters less than the notice existing at the point of the mistake rather than in release notes.
+
+Two things worth deciding alongside it. Whether the notice names the upstream path (`internal/skill/SKILL.md`) so a reporter can quote what they want changed. And whether `skill install` should refuse, or at least report, when the file it is about to overwrite differs from what it last wrote — a silent overwrite of someone''s work is the same defect one layer up, and it is the one that actually destroys effort.
+
+Related: T-48 shipped a durability section for the embedded skill; whatever it covered, the current shipped files carry no edit notice.', 'done', 'medium', NULL, NULL, NULL, '2026-09-02 12:48:39.723', '2026-09-02 15:39:55.216', NULL, 'c0cdaa4ca8544add46abcefabd1d0060', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G64AJBN8ESS2889RXA8HVYW8', 'task', NULL, 'decisions show returns the card, not the record, and says nothing about it', '`pql decisions show <id>` returns a record''s metadata and not its content, while `pql ticket show <id>` returns the ticket''s description. Same verb, two surfaces, different completeness.
+
+OBSERVED: decisions show answers with id, type, domain, title, status, date, file_path and synced_at. There is no body key, and --fields ''*'' does not add one, because body is not among the fields show projects. `pql decisions read <id>` returns it.
+
+WHY IT COSTS SOMETHING. show is the conventional verb for ''display this thing'' and is the one a caller reaches for first. It succeeds, so nothing signals the answer is partial. A caller following a citation of the form ''read D-N rather than a retelling'' runs decisions show D-N, receives a header, and reasonably concludes the body is not available through the CLI — then falls back to opening the markdown and slicing line ranges. That fallback is fragile in two specific ways: it truncates silently when a record is longer than the range guessed, and it can run past a record boundary into the next one, both of which produce a confident wrong answer rather than an error. In one session this happened repeatedly before decisions read was found in --help.
+
+THE ASYMMETRY IS WHAT MAKES THE EXPECTATION REASONABLE. A caller who has learned that ticket show returns the description has no reason to suspect that decisions show withholds the body. If the two surfaces are meant to differ, that is a thing to state rather than to leave as a discovery.
+
+THE SHIPPED SKILL HAS THE SAME GAP, and is the more reachable half of the fix. internal/skill/SKILL.md describes the pair in adjacent rows — show as ''one or more records, optionally with cross-references or the tickets implementing them'', read as ''the record''s full markdown body''. Read together, nothing says show omits the body: ''one or more records'' reads as the records themselves. The table was present and correct throughout the session above and still produced the wrong call repeatedly, because documented and discoverable are different properties and only the second changes behaviour. Naming what each verb WITHHOLDS is what separates them; naming what each returns does not, because both descriptions sound complete.
+
+DESIRED CONTRACT, not a design: someone who asks for a record by id, without knowing the surface, ends up holding the record. Several shapes would satisfy that — show''s help naming read as where the body lives; body becoming projectable through --fields; show emitting a pointer when it omits the body; or the two verbs collapsing with the card shape behind a flag. Which one is the maintainer''s call. The defect is that the obvious verb answers incompletely and is silent about having done so.
+
+Related: T-9 exposed heading anchors on decisions read, so the body path has had attention that the discoverability of it has not.', 'done', 'medium', NULL, NULL, NULL, '2026-09-02 12:48:54.187', '2026-09-02 15:40:02.025', NULL, 'e142c882f7a580e6a078776fe73dfca9', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
