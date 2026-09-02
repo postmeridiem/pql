@@ -1977,3 +1977,59 @@ and let the number fall out. See D-32.
 RELATED
 
 T-70 - decided ci/eval.sh is a manual local tool, partly because of this.', 'review', 'medium', NULL, NULL, NULL, '2026-09-02 11:54:42.306', '2026-09-02 16:16:49.388', NULL, '8a6e6fdb6f45b67c1476897c5e3d515d', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G63Y5D09S38Q3YWRKPBGHN80', 'bug', NULL, 'make eval fails: the context golden expects an extensionless path', 'Found 2026-09-02 while working T-70, which asked whether ci/eval.sh should be
+scheduled. It cannot be scheduled as it stands, because it is red.
+
+`make eval` fails today, on a clean checkout, with no local state involved:
+
+    --- FAIL: TestEval_Council/context_members/vaasa/persona.md
+        NDCG@5=0.000  MRR=0.000  P@5=0.000
+        NDCG@5 = 0 - no expected results in top-5
+
+The other two cases (related, search) pass.
+
+CAUSE - A TYPO IN THE GOLDEN, NOT A RANKING REGRESSION
+
+internal/connect/rank/testdata/golden/council.json, the context case, expects:
+
+    "expected_top_k": [
+      "members/koskela/persona",        <- no .md
+      "members/vaasa/journal.md"
+    ]
+
+`pql context members/vaasa/persona.md` against testdata/council-snapshot
+returns:
+
+    members/koskela/persona.md    0.5000
+
+So the first expectation misses on the extension alone. This is the exact trap
+the pql skill documents for `outlinks`: its `target` is the raw link text, and
+a wikilink is written without `.md`, so a golden authored from outlink output
+carries the unresolved spelling. The eval compares strings, so it scores zero
+rather than reporting a near-miss.
+
+A SECOND, SEPARATE PROBLEM UNDERNEATH IT
+
+Fixing the extension is not the whole answer. `context` returns exactly ONE
+result for that target, so `members/vaasa/journal.md` is absent regardless of
+spelling. After the typo fix the case would pass - the assertion is only
+"NDCG@5 != 0" - while still returning half of what the golden says it should.
+
+That is worth deciding rather than papering over. Either the golden''s second
+expectation is wrong (journal.md is same-directory, which is `related`''s
+property, and context weights link overlap and path proximity differently), or
+context is under-returning on a link-sparse fixture. The note on the case says
+"koskela is linked from vaasa; journal is same directory", which suggests the
+author wanted both and got one.
+
+WHY THIS IS NOT FIXED IN T-70
+
+Correcting the golden is a ranking-quality judgement, not a typo sweep: it
+decides what `context` is supposed to return, which is the thing the eval
+exists to hold pql to. Changing a golden to match current output is how an
+eval stops being an eval - the strict form is to decide the expected set first
+and let the number fall out. See D-32.
+
+RELATED
+
+T-70 - decided ci/eval.sh is a manual local tool, partly because of this.', 'done', 'medium', NULL, NULL, NULL, '2026-09-02 11:54:42.306', '2026-09-02 16:21:17.125', NULL, 'de6144200c1c29173ee0b982ef98e423', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
