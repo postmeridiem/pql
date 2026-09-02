@@ -10,8 +10,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `project.yaml` — single source of truth for project metadata: name, description, current declared version, license, repo, module path, schema_version, maintainers. The Makefile sources `VERSION` from here; the skill checks `schema_version` against this. Bump fields here rather than scattering them.
 - `docs/structure/design-philosophy.md` — binding "why" doc. The binary is a *ranker* with intent-level surfaces. Generate vs rank as separate phases. Provenance is data. Two stores (cache + user-state, per D-3). No vectors. Narrow scope.
 - `docs/structure/project-structure.md` — canonical layout, build pipeline, test infrastructure, growth model.
-- `docs/structure/initial-plan.md` — original v1 plan (PQL grammar, SQLite schema, CLI specifics). Some framing superseded by the philosophy + structure docs; grammar/schema/exit-codes still authoritative.
-- `docs/structure/planning.md` — spec for `pql decisions` / `pql ticket` / `pql plan`. First real writer to the user-state DB (`pql.db`), distinct from the cache (`index.db`).
+- `docs/pql-grammar.md`, `docs/output-contract.md` — the DSL grammar, and the stdout/stderr/exit-code contract. Both maintained; both used to be sections of `initial-plan.md`.
+
+**Archived — read for reasoning, never for current behaviour.** Both carry a banner saying so, and where either disagrees with a live source, the live source is right:
+- `docs/structure/initial-plan.md` — the original v1 design. Still cited by several Go comments and by the config `pql init` seeds, so it stays put.
+- `docs/structure/planning.md` — the build spec for the planning surface, written before it existed. **Planning is now documented by the data structure it produces**: the reasoning is in `governance/decisions/` (D-3, D-8, D-15, D-19, D-24 through D-31 all bear on it), the schema is `internal/planning/schema.go`, and the command surface is `pql <command> --help` plus `internal/skill/SKILL.md`. A spec document beside a shipped command surface is two descriptions of one thing, and that pair drifts.
 - `governance/decisions/architecture.md (D-3 + D-19)` — the cache (`index.db`) vs user-authored state (`pql.db`) split, and how pql.db evolves (no migration runner today; see below). Read before touching anything that persists under `.pql/`.
 - `docs/vault-layout.md` — the three vault-level conventions (`.pql/config.yaml`, `.pqlignore`, `.pql/`). The index defaults to `<vault>/.pql/index.db` (in-vault, like `.git/`); falls back to user cache on read-only vaults. Planning state lives beside it at `<vault>/.pql/pql.db` — no cache fallback, writes to a read-only vault fail cleanly.
 - `docs/pqlignore.md` — gitignore-compatible exclusion file spec.

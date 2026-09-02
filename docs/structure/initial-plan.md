@@ -2,7 +2,30 @@
 
 A Go CLI that indexes and queries any repo containing Markdown files with YAML frontmatter, wikilinks, tags, and Obsidian Bases. Ships as a single static binary, maintains a SQLite index in `<vault>/.pql/` (with a user-cache fallback for read-only vaults — see [`vault-layout.md`](../vault-layout.md)), exposes a SQL-derived query dialect (PQL — see [`pql-grammar.md`](../pql-grammar.md)), and is designed to be drop-in for AI agents (Claude Code, primarily) that need structural introspection without brute-force grep+read.
 
-> **Status note (2026-04):** this document is the original v1 design. Some of its framing has been superseded by `design-philosophy.md` (the binary as a *ranker* with intent-level surfaces), the project structure approved in `project-structure.md`, and the planning extension in `planning.md` (decisions + tickets backed by a second SQLite file). The PQL DSL described below remains valid as the "flat" / escape-hatch surface; intent-level commands sit *above* it; planning commands sit *beside* it against `pql.db`. Read these four documents together.
+> **Historical — archived, not maintained.** This is the original v1 design
+> document, kept for the reasoning that produced pql rather than as a
+> description of what it does now. It is no longer updated. **Where it
+> disagrees with a live source, the live source is right.**
+>
+> It used to say that its grammar, schema and exit codes remained
+> authoritative. That is no longer true — each has since grown its own
+> maintained home:
+>
+> | For | Read |
+> |---|---|
+> | The PQL DSL grammar | [`pql-grammar.md`](../pql-grammar.md) |
+> | Output shape and exit codes | [`docs/output-contract.md`](../output-contract.md) |
+> | The index.db schema | `internal/store/schema/` (`v2.sql`, `fts.sql`) |
+> | The pql.db schema | `internal/planning/schema.go` |
+> | Vault layout, config, `.pql/` | [`vault-layout.md`](../vault-layout.md) |
+> | Repository layout and pipeline | [`project-structure.md`](project-structure.md) |
+> | The binding "why" | [`design-philosophy.md`](design-philosophy.md) |
+> | Any decision since v1 | `governance/decisions/` |
+>
+> Several Go source comments still cite this file by path, and `pql init`
+> writes that path into the default config it seeds into consuming vaults, so
+> the file stays where it is. Those citations point at design reasoning, which
+> is what this document is still good for.
 
 ## Context and problem
 
@@ -437,7 +460,7 @@ The GitHub Actions workflow is a thin wrapper around `ci/release.sh`. Switching 
 
 ## Reference: the Council vault as first customer
 
-This project is motivated by the Council repo at `/var/mnt/data/projects/council/`. Its frontmatter vocabulary:
+This project is motivated by the Council vault, a sibling checkout, frozen into `testdata/council-snapshot/` as the motivating fixture. Its frontmatter vocabulary:
 
 | `type` value | Location | Key fields |
 |---|---|---|

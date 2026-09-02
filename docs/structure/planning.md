@@ -1,9 +1,30 @@
 # Planning subcommands — decisions + tickets
 
-Canonical spec for the `pql decisions`, `pql ticket`, and `pql plan`
-command trees. Read alongside `design-philosophy.md` (the "why"),
-`project-structure.md` (canonical layout), and `decisions/architecture.md (D-3)`
-(the cache vs state split this feature is the first real user of).
+> **Historical — archived, not maintained.** This was the build spec for the
+> planning surface, written before it existed. It is kept for the reasoning
+> that produced the feature, not as a description of what pql does now, and it
+> is no longer updated. **Where it disagrees with a live source, the live
+> source is right.**
+>
+> Planning is now documented by the data structure it produces, not by a
+> parallel document:
+>
+> | For | Read |
+> |---|---|
+> | Why the surface is shaped this way | `governance/decisions/architecture.md` — D-3, D-8, D-14, D-15, D-19, D-20, D-24, D-25, D-26, D-27, D-30, D-31 all bear on planning |
+> | What the commands do, flag by flag | `pql <command> --help`, and `internal/skill/SKILL.md` (what agents are told) |
+> | The pql.db schema | `internal/planning/schema.go` |
+> | Output shape and exit codes | `docs/output-contract.md` |
+>
+> That split is deliberate rather than neglect. A spec document and a shipped
+> command surface are two descriptions of one thing, and the pair drifts the
+> moment either moves — which is what happened to the rows below. The decision
+> records carry the reasoning because reasoning does not go stale the way a
+> flag table does, and `--help` carries the flags because it is generated from
+> the code that implements them.
+
+Read alongside `design-philosophy.md` (the "why") and `project-structure.md`
+(canonical layout).
 
 This document originated as a hand-off from clide's April 2026 planning
 cycle (clide's `D-039` committed "pql owns the planning subcommands;
@@ -13,17 +34,16 @@ to build to replace that stopgap and become the canonical planning
 CLI for any project adopting clide's `decisions/` convention
 (`D-NNN` confirmed, `Q-NNN` open, `R-NNN` rejected).
 
-Reference materials outside this repo:
+Reference materials outside this repo, described by role rather than path
+since this one is published (see CLAUDE.md, "This repo is public"):
 
-- Clide's live convention: `/var/mnt/data/projects/clide/decisions/`
-  (markdown source of truth + `README.md` documenting record shape).
-- Clide's stopgap: `/var/mnt/data/projects/clide/tools/scripts/plan`
-  + `tools/scripts/planning/*.py`. Verb shape, flag names, and
-  output formats define the API contract pql must match so the
-  migration is a call-site find-replace.
-- Settled-reach's originals (Python, Scrum-heavy):
-  `/var/mnt/data/projects/settled-reach/main/tooling/db/`
-  (`decisions_sync.py`, `ticket`, `decision`) and `db/schema.sql`.
+- The consuming IDE's live convention — a `decisions/` tree of markdown as
+  source of truth, plus a README documenting record shape.
+- That project's Python stopgap for the same job. Its verb shape, flag names
+  and output formats defined the API contract pql had to match, so the
+  migration could be a call-site find-replace.
+- A second consuming project's originals, also Python and Scrum-heavy: a
+  decisions-sync script, `ticket` and `decision` commands, and a SQL schema.
 
 ## Locked decisions
 
@@ -62,7 +82,7 @@ Reference materials outside this repo:
 
 ## Schema (Go-native, SQLite-backed)
 
-Adapted from `/var/mnt/data/projects/settled-reach/main/db/schema.sql`,
+Adapted from the second consuming project's `schema.sql`,
 Scrum layer stripped. Lives in `pql.db`, wholly distinct from the
 `files/frontmatter/tags/links/headings/bases` schema in `index.db`.
 

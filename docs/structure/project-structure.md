@@ -1,6 +1,6 @@
 # Project Structure
 
-This document is the canonical reference for `pql`'s repository layout, build pipeline, test infrastructure, and growth model. Read alongside `design-philosophy.md` (the binding "why") and `initial-plan.md` (the original v1 plan, retained for grammar/schema/CLI specifics).
+This document is the canonical reference for `pql`'s repository layout, build pipeline, test infrastructure, and growth model. Read alongside `design-philosophy.md` (the binding "why"). `initial-plan.md` and `planning.md` are **archived** — original design reasoning, not current behaviour; each carries a banner naming the live source for what it used to cover.
 
 ## Why this exists
 
@@ -32,7 +32,7 @@ pql/
 │   │   ├── query_*.go                # primitive query subcommands (files, tags, backlinks, outlinks, schema, meta)
 │   │   ├── intent_*.go               # intent subcommands (related, search, context, base)
 │   │   ├── dsl.go                    # `pql query <DSL>` escape hatch
-│   │   ├── decisions_*.go            # planning: `pql decisions …` (see planning.md)
+│   │   ├── decisions_*.go            # planning: `pql decisions …`
 │   │   ├── ticket_*.go               # planning: `pql ticket …`
 │   │   ├── plan_*.go                 # planning: `pql plan …` (cross-cutting)
 │   │   ├── render/                   # JSON / JSONL / table / CSV; exit-code mapping
@@ -56,7 +56,7 @@ pql/
 │   │   ├── search/
 │   │   ├── context/
 │   │   └── …                         # NEW INTENT = NEW SUBPACKAGE + one cli/intent_*.go file
-│   ├── planning/                     # decisions + tickets; writes to pql.db (see planning.md, D-3)
+│   ├── planning/                     # decisions + tickets; writes to pql.db (D-3; schema.go is the schema of record)
 │   │   ├── db.go                     # opens <vault>/.pql/pql.db; creates schema if missing
 │   │   ├── schema.go                 # CREATE TABLE IF NOT EXISTS + CanonicalVersion (no migration runner, D-19)
 │   │   ├── parser/                   # DQR markdown → []Record (decisions.go, headings.go)
@@ -90,9 +90,9 @@ pql/
 ├── docs/
 │   ├── structure/
 │   │   ├── design-philosophy.md      # source of truth for "why"
-│   │   ├── initial-plan.md           # original v1 plan; grammar/schema/CLI specifics
+│   │   ├── initial-plan.md           # ARCHIVED — original v1 design reasoning
 │   │   ├── project-structure.md      # this file
-│   │   └── planning.md               # decisions + tickets spec (pql.db, the state store)
+│   │   └── planning.md               # ARCHIVED — pre-build spec; planning is documented by its own data now
 │   ├── intents.md                    # intent catalog + per-intent contract
 │   ├── signals.md                    # signal catalog: what it measures, where it shines/fails
 │   ├── pql-grammar.md                # DSL grammar

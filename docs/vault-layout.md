@@ -17,9 +17,9 @@ The convention is the same shape developers already know from git: a tool-manage
 
 `pql` stores its index and any derived per-vault data inside the vault at `<vault>/.pql/`. Contents in v1:
 
-- `index.db` — the SQLite index described in `structure/initial-plan.md` § "The SQLite index". Pure cache; regenerable from the vault; drop-and-rebuild on schema-version mismatch.
+- `index.db` — the SQLite index. Schema of record is `internal/store/schema/` (`v2.sql`, `fts.sql`); the original design sketch is in the archived `structure/initial-plan.md` § "The SQLite index". Pure cache; regenerable from the vault; drop-and-rebuild on schema-version mismatch.
 - `index.db-wal`, `index.db-shm` — SQLite WAL sidecar files.
-- `pql.db` — user-authored state (planning decisions and tickets). Lands with the `pql decisions` / `pql ticket` / `pql plan` commands per `structure/planning.md`. Forward-only migrations; losing this file loses user data (unlike `index.db`). Rationale in `adr/0003-pql-db-for-user-state.md`.
+- `pql.db` — user-authored state (planning decisions and tickets), written by the `pql decisions` / `pql ticket` / `pql plan` commands. Schema of record is `internal/planning/schema.go`. There is **no migration runner** (D-19): the schema is `CREATE TABLE IF NOT EXISTS` and the database is regenerated from the committed `.pql/changelog/` (D-15) rather than altered in place. Losing this file does not lose user data the way it once would have, but it is still not a cache — recovery is `rm .pql/pql.db && pql plan rebuild`. Rationale in `governance/decisions/architecture.md` (D-3).
 - `pql.db-wal`, `pql.db-shm` — SQLite WAL sidecars for the state store.
 
 Files that may join later (additive, no schema break):
@@ -76,7 +76,7 @@ Three layers, fully documented in [`pqlignore.md`](pqlignore.md). Quick summary:
 
 Optional. When present, tunes the indexer and query layers for this vault.
 
-Fields, defaults, and the YAML→Go validation contract live in `internal/config/config.go`; the user-facing example is in `structure/initial-plan.md` § "Config file". `pql init` (v0.1) seeds a sensible default.
+Fields, defaults, and the YAML→Go validation contract live in `internal/config/config.go`, which is the source of record; the archived `structure/initial-plan.md` § "Config file" holds the original example. `pql init` seeds a sensible default.
 
 A representative example:
 

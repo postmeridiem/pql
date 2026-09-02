@@ -19,6 +19,35 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ### Changed
 
+- **`docs/structure/initial-plan.md` and `docs/structure/planning.md` are
+  archived.** Both now open with a banner saying they are historical, that they
+  are not maintained, and that a live source wins wherever they disagree — plus
+  a table naming the live source for each thing they used to cover.
+
+  `initial-plan.md` claimed its grammar, schema and exit codes were still
+  authoritative; each has since grown a maintained home (`docs/pql-grammar.md`,
+  `docs/output-contract.md`, `internal/store/schema/`). `planning.md` was the
+  build spec for a surface that did not exist yet — **planning is now
+  documented by the data structure it produces**: reasoning in
+  `governance/decisions/`, schema in `internal/planning/schema.go`, commands in
+  `--help` and the embedded skill. A spec document beside a shipped command
+  surface is two descriptions of one thing, and that pair drifts.
+
+  Neither file moves. Five Go source comments cite `initial-plan.md` by path,
+  and `pql init` writes that path into the default config it seeds into
+  consuming vaults, so moving it would break a reference already published.
+
+- **Three stale claims in `docs/vault-layout.md`**, found while repointing it:
+  it cited the archived planning spec, described `pql.db` as using forward-only
+  migrations (D-19 removed the migration runner), and pointed at
+  `adr/0003-pql-db-for-user-state.md` — a path that does not exist, since ADRs
+  became decision records under `governance/`.
+
+- **Absolute sibling-checkout paths removed from `docs/`**, which is now clear
+  of them. Seven paths across the two archived documents named other checkouts
+  on a maintainer's disk in a public repo; they are described by role instead,
+  per CLAUDE.md's "This repo is public".
+
 - **Unreleased work now goes under `## [Unreleased]`**, and the version number
   is chosen at release rather than minted in advance (**D-34**). The previous
   convention named the working section after a version that had to be guessed
