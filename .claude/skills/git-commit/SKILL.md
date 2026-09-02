@@ -75,10 +75,14 @@ changelog edit with the same `git add` as the rest of the change so the
 two land in one commit, not two.
 
 Section convention:
-- The current working section header tracks `project.yaml`'s `version:`
-  field exactly (currently `## [0.1.0-dev]`). Both move together —
-  bumping the project version means renaming the matching section here
-  to the released version + date and opening a new working section.
+- **New entries go under `## [Unreleased]`.** Never invent a version
+  number for them. The number is chosen at release, when the section can
+  be read and semver applied to what is actually in it — a pre-minted
+  `2.2.1` section once shipped as part of `2.3.0`, and its entries had
+  to be hand-carried across.
+- `project.yaml`'s `version:` is the **last released** version, so it
+  does not move between releases and a dev build stamps it. `make
+  binary-drift` answers "was this built from HEAD"; `--version` cannot.
 - Add the entry under one of the standard subsections: **Added**,
   **Changed**, **Deprecated**, **Removed**, **Fixed**, **Security**.
 - One-liner summarising the *user-visible impact*, not the
@@ -97,10 +101,18 @@ When in doubt, add a Changed line — terse is fine. Drift between the
 log and the actual behaviour is worse than the occasional too-trivial
 entry.
 
-When releasing a tagged version (post-release commit):
-1. Bump `project.yaml`'s `version:` (e.g. `0.1.0-dev` → `0.1.1-dev`).
-2. Rename the matching CHANGELOG section to `## [0.1.0] - YYYY-MM-DD`.
-3. Open a new `## [0.1.1-dev]` section above it with empty subsections.
+Releasing is **one commit**, and pushing it to `main` is the release
+signal — `release.yaml` mints the tag and publishes:
+1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, picking
+   `X.Y.Z` from what the section actually contains.
+2. Set `project.yaml`'s `version:` to the same `X.Y.Z`.
+3. Open a fresh empty `## [Unreleased]` above it.
+4. Update `project.yaml`'s `status:` — it summarises the current
+   release, so leaving it behind is drift like any other.
+
+Do not create or push the tag by hand. The workflow does it, and only
+when the declared version's section carries a date and no such tag
+exists yet.
 
 ## What not to commit
 
