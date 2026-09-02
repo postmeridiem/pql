@@ -66,6 +66,16 @@ vulnerabilities at any level.
 
 ### Added
 
+- **D-33, "CI scripts are the definition; callers invoke, never restate"**
+  (T-70) — the first record in a new `process` domain. The substance of every
+  check lives in a script under `ci/`; workflows and Makefile targets invoke it
+  and never re-list what it does, because a restated step list is correct on
+  the day it is written and degrades silently afterwards. The property being
+  protected is that a green check locally means the same thing as a green check
+  in CI. It has now failed twice — `make lint` at the 2.0.0 release, and
+  `ci/release.sh` in T-70 — so it is recorded rather than assumed, and enforced
+  by `ci/workflows_test.go` rather than by review.
+
 - **`ci/workflows_test.go`** — the `ci/` directory's wiring is now asserted
   rather than described. Every workflow must parse; every `${{ env.X }}` must
   resolve to a defined key, since an unresolvable one expands to the empty

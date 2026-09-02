@@ -1573,3 +1573,104 @@ them and never restate their steps" is now a property this repo has broken
 twice - `make lint` (2.0.0) and this ticket - and it is still recorded only as
 prose in two documents. It has the shape of a D record. Not filed here because
 this ticket''s scope was to pick an option and make the doc match.', 'review', 'medium', NULL, NULL, NULL, '2026-08-08 10:04:26.412', '2026-09-02 12:15:08.206', NULL, '8fe041a309db15b409d8a4c8e1f7d44e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY1N5XNKDTCQ354QCFAPQAA4', 'bug', NULL, 'ci/release.sh is dead code; release.yaml calls goreleaser directly', 'Found 2026-08-08 while auditing the Makefile for the divergence that broke the
+2.0.0 release (`make lint` had drifted from `ci/lint.sh`).
+
+`CLAUDE.md` states: "CI substance lives in `ci/{lint,test,release,eval}.sh`.
+GitHub Actions workflows in `.github/workflows/` are thin wrappers around these —
+keeps local and CI behaviour identical and lets the provider be swapped without
+rewriting the scripts."
+
+That is true for lint and test, and false for the other two:
+
+- **`ci/release.sh` is invoked by nothing.** `release.yaml` uses
+  `goreleaser/goreleaser-action@v6` with `args: release --clean` directly. The
+  script runs `goreleaser release --clean`, so today they agree by coincidence —
+  but nothing keeps them in step, and the stated swap-the-provider property does
+  not hold for the one workflow that publishes binaries.
+- **`ci/eval.sh` is invoked by nothing either.** Its header calls it a scheduled
+  job, but no workflow schedules it. `make eval` now delegates to it, so it is at
+  least exercised locally.
+
+Options for release, in preference order:
+
+1. Point `release.yaml` at `./ci/release.sh`, installing goreleaser the way the
+   lint job does. Restores the documented property. Costs the action''s built-in
+   caching and version pinning, which is worth checking before assuming it is
+   free — the action pins a goreleaser version, the script uses whatever is on
+   PATH.
+2. Delete `ci/release.sh` and amend `CLAUDE.md` to say the release path
+   deliberately uses the action. Honest, smaller, and gives up the swap property
+   for that one workflow.
+
+Either is fine; drifting docs are not. Pick one and make the doc match.
+
+For eval: decide whether it is a scheduled job (add the schedule) or a manual
+local tool (say so in the script header and in CLAUDE.md).
+
+Deliberately not done during the 2.0.0 release — editing the release workflow
+while a release is in flight re-triggers it.
+
+RESOLVED 2026-09-02
+
+OPTION 1, and the cost this ticket flagged for it turned out to be backwards.
+
+The ticket warned that pointing release.yaml at ./ci/release.sh "costs the
+action''s built-in caching and version pinning ... the action pins a goreleaser
+version, the script uses whatever is on PATH". The action was configured with
+`version: latest`. Meanwhile v2.16.0 was pinned in three places - ci.yaml''s
+lint job, ci.yaml''s snapshot job, and release.yaml''s own lint job.
+
+So the publish step was the ONLY unpinned goreleaser invocation in the repo,
+and it sat immediately downstream of a `goreleaser check` that validated
+.goreleaser.yaml against a different build. The gate did not cover the thing it
+gated. That is a live defect this ticket found by accident while framing it as
+a cost, and option 1 fixes it rather than paying for it.
+
+Third argument, which settles it: .goreleaser.yaml''s SBOM and signing blocks
+are commented out with the note "wired in CI when ci/release.sh grows install
+steps for syft and cosign". The plan for signing was already written against
+the script. Option 2 would have deleted the file that plan depends on.
+
+WHAT CHANGED
+
+- release.yaml: workflow-level `env:` holds GORELEASER_VERSION and
+  GOLANGCI_LINT_VERSION, so the two jobs cannot diverge. The publish step
+  installs the pinned goreleaser and runs ./ci/release.sh.
+- ci/release.sh: header corrected - it is invoked on a push to main carrying a
+  dated CHANGELOG section, not on a tag push; the workflow mints the tag
+  itself. Gained the same missing-tool preamble ci/lint.sh has, which matters
+  more here because this script runs with a tag already pushed.
+- ci/eval.sh: declared a manual local tool in its own header. Not scheduled,
+  no metrics sink.
+- CLAUDE.md and project-structure.md: both now say ci/{lint,test,release}.sh
+  are workflow-run and secrets/eval are local-only, with the caller named per
+  script - the distinction that drifted in the first place.
+
+EVAL: MANUAL LOCAL TOOL, NOT A SCHEDULED JOB
+
+Decided on the facts rather than the intent. `make eval` FAILS today on a clean
+checkout - the context case scores NDCG@5=0, MRR=0, P@5=0. Scheduling a red job
+with no metrics sink produces either a permanently-failing badge or noise
+nobody reads. Filed as T-120: the golden expects "members/koskela/persona"
+without the .md extension, so it misses on spelling, and there is a second
+question underneath about context returning one result where the golden wants
+two.
+
+TWO DOC CLAIMS CORRECTED THAT THIS TICKET DID NOT NAME
+
+Both were downstream of the same drift:
+
+- The docs said releases publish "signed binaries + SHA256SUMS + SBOM". SBOM
+  and cosign signing are commented out in .goreleaser.yaml. Verified by running
+  `make snapshot`: 5 platforms and checksums.txt, no signing or SBOM stage.
+- The Verification checklist said to tag a pre-release and push the tag. There
+  is no v*-tag trigger; the release signal is a dated CHANGELOG section on main.
+
+NOT DONE, DELIBERATELY
+
+"CI scripts are the definition; workflows and Makefile targets shell out to
+them and never restate their steps" is now a property this repo has broken
+twice - `make lint` (2.0.0) and this ticket - and it is still recorded only as
+prose in two documents. It has the shape of a D record. Not filed here because
+this ticket''s scope was to pick an option and make the doc match.', 'review', 'medium', NULL, NULL, 'D-33', '2026-08-08 10:04:26.412', '2026-09-02 12:38:19.948', NULL, 'ef76678c5d717414def6a7a81a71c42a', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

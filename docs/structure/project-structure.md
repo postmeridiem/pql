@@ -173,7 +173,7 @@ Fixture vaults: `testdata/council-snapshot/` (a committed frozen copy of the Cou
 
 **CI scripts in `ci/`, GitHub Actions wrappers in `.github/workflows/`:**
 
-The substance of CI lives in `ci/*.sh` so it can run identically locally and in CI. The workflows shell out to those scripts rather than restating their steps, so the provider can be replaced later without touching them. That property now holds for every script a workflow runs, and is the reason a Makefile target which re-listed a script's stages is treated as a bug here.
+The substance of CI lives in `ci/*.sh` so it can run identically locally and in CI. The workflows shell out to those scripts rather than restating their steps, so the provider can be replaced later without touching them. That property now holds for every script a workflow runs, and is the reason a Makefile target which re-listed a script's stages is treated as a bug here. It is recorded as **D-33** in `governance/decisions/process.md`, with the two incidents that earned it.
 
 Which scripts a workflow runs, and which are local tools, is itself the distinction that drifted (T-70) — so each entry below states its caller.
 
