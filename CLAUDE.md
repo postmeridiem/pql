@@ -156,6 +156,13 @@ goreleaser invocation in the repo pinned v2.16.0, so the `goreleaser check` that
 gates a release and the `goreleaser release` that performs it could be different
 builds. It now installs the pinned version and runs `./ci/release.sh`.
 
+That wiring is now a test rather than a promise — `ci/workflows_test.go` runs
+in `make test` and fails if a workflow calls a script that is missing, if a
+`ci/*.sh` has no caller in any workflow or Makefile target, if a `${{ env.X }}`
+resolves to nothing, or if an inline `run:` block is not valid bash. It is a
+homegrown check on an existing dependency rather than `actionlint`, for the
+reasons in its package comment.
+
 The other two scripts are deliberately local-only, and say so in their own
 headers: `ci/secrets.sh` runs from `make pre-push`, and `ci/eval.sh` from
 `make eval` and nothing else. **`ci/eval.sh` is a manual tool, not a gate** — no

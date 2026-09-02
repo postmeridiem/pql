@@ -107,7 +107,8 @@ pql/
 │   ├── secrets.sh                    # gitleaks over the outgoing range                 (local only: `make pre-push`)
 │   ├── secrets-selftest.sh           # proves .gitleaks.toml still matches what it claims
 │   ├── eval.sh                       # ranking-quality eval                             (local only: `make eval`; not a gate)
-│   └── release.sh                    # goreleaser release --clean                       (release.yaml's release job)
+│   ├── release.sh                    # goreleaser release --clean                       (release.yaml's release job)
+│   └── workflows_test.go             # guards this directory's wiring — see below
 ├── .github/workflows/                # GitHub Actions wrappers around ci/*.sh (added with first CI run)
 ├── .goreleaser.yaml                  # GitHub Releases publisher
 ├── .golangci.yaml                    # errcheck, revive, gocritic, staticcheck, gosec, …
@@ -181,6 +182,8 @@ Which scripts a workflow runs, and which are local tools, is itself the distinct
 - `ci/release.sh` — `goreleaser release --clean`. Run by `release.yaml`'s release job, after that job installs goreleaser at the version pinned in the workflow's `env:` — the same one the lint job ran `goreleaser check` with, so the config that was validated is the config that publishes. Never run it by hand; `make snapshot` dry-runs the same config without publishing.
 - `ci/secrets.sh` — gitleaks over `<upstream>..HEAD`, preceded by `ci/secrets-selftest.sh`. **Local only**, from `make secrets` / `make pre-push`; no workflow runs it. See `CLAUDE.md`, "This repo is public".
 - `ci/eval.sh` — ranking-quality eval. **Local only and not a gate**: nothing schedules it, there is no metrics sink, and the golden set is currently red (T-120). `make eval` is its only caller. Run it when changing a signal, a weight or candidate generation, and read the output as a diff against the previous run.
+
+**The caller/script wiring is tested, not just documented** — `ci/workflows_test.go`, a plain unit test in `make test`. It asserts that every workflow parses, that every `${{ env.X }}` resolves to a defined key (an unresolvable one expands to the empty string rather than failing), that every inline `run:` block is valid bash, that every `./ci/*.sh` a workflow invokes exists and is executable, and — the T-70 check — that every `ci/*.sh` has at least one caller in a workflow or the Makefile. Deliberately not `actionlint`: it is better at expression syntax and action versions, but it would be a fourth pinned binary for every contributor, and the two properties that actually broke here (a workflow calling a missing script; a script nobody calls) need to know what this repo's `ci/` means. `gopkg.in/yaml.v3` was already a direct dependency, so this added nothing to install.
 
 **What a release actually publishes**, per `.goreleaser.yaml`: 5 platforms (linux/{amd64,arm64}, darwin/{amd64,arm64}, windows/amd64), a `checksums.txt` of SHA256 sums, and git-derived release notes. **SBOM generation and cosign signing are configured but commented out** — they need `syft` and `cosign` installed in the release job, which is why the release path is a script that can grow those steps rather than an action invocation that cannot. The workflow's `id-token: write` permission is already in place for keyless signing when they are enabled.
 

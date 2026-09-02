@@ -66,6 +66,20 @@ vulnerabilities at any level.
 
 ### Added
 
+- **`ci/workflows_test.go`** — the `ci/` directory's wiring is now asserted
+  rather than described. Every workflow must parse; every `${{ env.X }}` must
+  resolve to a defined key, since an unresolvable one expands to the empty
+  string instead of failing; every inline `run:` block must be valid bash;
+  every `./ci/*.sh` a workflow invokes must exist and be executable; and every
+  `ci/*.sh` must have at least one caller in a workflow or the Makefile. That
+  last one is the check T-70 would have failed for months.
+
+  A plain unit test on `gopkg.in/yaml.v3`, already a direct dependency, rather
+  than adding `actionlint` as a fourth pinned binary every contributor and CI
+  job would have to install. actionlint is better at expression syntax and
+  action versions; it cannot know that this repo's `ci/` scripts are supposed
+  to have callers, which is the property that actually broke.
+
 - **D-32, "choose the default that makes an omission safe"** (T-114, T-115) —
   the first record in a new `testing` domain of the DQR tree, the domain D-21
   reserved and nothing had yet used. Default to failure and require a positive
