@@ -76,13 +76,12 @@ two land in one commit, not two.
 
 Section convention:
 - **New entries go under `## [Unreleased]`.** Never invent a version
-  number for them. The number is chosen at release, when the section can
-  be read and semver applied to what is actually in it — a pre-minted
-  `2.2.1` section once shipped as part of `2.3.0`, and its entries had
-  to be hand-carried across.
+  number for them.
 - `project.yaml`'s `version:` is the **last released** version, so it
   does not move between releases and a dev build stamps it. `make
   binary-drift` answers "was this built from HEAD"; `--version` cannot.
+- Both rules and their rationale are **D-34** in
+  `governance/decisions/process.md`.
 - Add the entry under one of the standard subsections: **Added**,
   **Changed**, **Deprecated**, **Removed**, **Fixed**, **Security**.
 - One-liner summarising the *user-visible impact*, not the

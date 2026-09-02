@@ -5,26 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Unreleased work goes under `## [Unreleased]`, per Keep a Changelog. The
-version number is chosen **at release**, not before it: that is the moment you
-can see what the section actually contains and apply semver to it. This used
-to work the other way — a version-named working section, minted in advance —
-and the cost is recorded a few sections down, where entries had to be
-hand-carried out of a `2.2.1` section that never shipped under that number.
-
-`project.yaml`'s `version:` is therefore the **last released** version, not
-the next one, and a build between releases stamps it. Use `make binary-drift`
-to ask whether a binary came from HEAD; `--version` has never been able to
-answer that.
+Unreleased work goes under `## [Unreleased]`. The version number is chosen at
+release, never before — see **D-34** in `governance/decisions/process.md` for
+why, and for what that means for `project.yaml`'s `version:`.
 
 **To release** (one commit): rename `## [Unreleased]` to
 `## [X.Y.Z] - YYYY-MM-DD`, set `project.yaml`'s `version:` to the same
-`X.Y.Z`, and open a fresh empty `## [Unreleased]` above it. Pushing that to
-`main` is the release signal — `release.yaml` looks for a dated section
-matching the declared version, mints the tag and publishes. While the section
-is undated, or the tag already exists, it does nothing.
+`X.Y.Z`, refresh its `status:` summary, and open a fresh empty
+`## [Unreleased]` above. Pushing that to `main` is the release signal;
+`release.yaml` mints the tag and publishes. Never tag by hand.
 
 ## [Unreleased]
+
+### Changed
+
+- **Unreleased work now goes under `## [Unreleased]`**, and the version number
+  is chosen at release rather than minted in advance (**D-34**). The previous
+  convention named the working section after a version that had to be guessed
+  before the work existed; a `2.2.1` section guessed that way shipped as part
+  of `2.3.0`, and its entries were hand-carried across. `project.yaml`'s
+  `version:` is consequently the last released version, so a build between
+  releases stamps it — `make binary-drift`, not `--version`, answers whether a
+  binary came from HEAD. `release.yaml` needed no logic change.
 
 ## [2.3.0] - 2026-09-02
 

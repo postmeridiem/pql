@@ -76,6 +76,7 @@ You might also want, project-permitting:
 - [D-31: pql answers what is; the caller folds for what is absent](decisions/architecture.md#d-31-pql-answers-what-is-the-caller-folds-for-what-is-absent) — _architecture_
 - [D-32: Choose the default that makes an omission safe](decisions/testing.md#d-32-choose-the-default-that-makes-an-omission-safe) — _testing_
 - [D-33: CI scripts are the definition; callers invoke, never restate](decisions/process.md#d-33-ci-scripts-are-the-definition-callers-invoke-never-restate) — _process_
+- [D-34: Unreleased section; the version is chosen at release](decisions/process.md#d-34-unreleased-section-the-version-is-chosen-at-release) — _process_
 
 ## Open questions
 

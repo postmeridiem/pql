@@ -33,3 +33,23 @@ are.
   The enforcement test is homegrown and narrower than `actionlint`. It knowingly does not check expression syntax, deprecated action versions or runner labels. That was the trade: `actionlint` would be a fourth pinned binary for every contributor and CI job, and it cannot check either property that actually broke, because both require knowing what this repo's `ci/` directory means.
 
 - **Raised by:** T-70, generalising the `make lint` divergence that broke the 2.0.0 release. Both incidents were found by a human auditing files side by side; neither was caught by anything the repo runs.
+
+### D-34: Unreleased section; the version is chosen at release
+- **Date:** 2026-09-02
+- **Decision:** Unreleased work accumulates in `CHANGELOG.md` under `## [Unreleased]`, per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). No version number is invented for work in progress.
+
+  Releasing is **one commit**: rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, set `project.yaml`'s `version:` to the same `X.Y.Z`, update its `status:` summary, and open a fresh empty `## [Unreleased]` above. Pushing that to `main` is the release signal; `release.yaml` mints the tag and publishes. Tags are never created by hand.
+
+  It follows that **`project.yaml`'s `version:` is the last released version**, not the next one, so a build between releases stamps the version that last shipped.
+
+- **Rationale:** Naming the working section after a version requires knowing, before the work exists, which semver bump the work will eventually justify. That is a prediction, and predictions are wrong: a `2.2.1` section was minted in advance and then shipped as part of `2.3.0`, so its entries had to be hand-carried across at release time — recorded in the changelog itself, a few sections below the preamble that caused it. `[Unreleased]` moves the choice to the moment the section can be read and semver applied to what is actually in it, which is the only moment the choice can be made correctly.
+
+  The mechanism cost nothing. `release.yaml` looks for a dated section matching the declared version, and at release time the section *is* named for the version, so its logic is unchanged. What changed is which guard stops an accidental publish between releases: it used to be "the section is undated", and is now "the tag already exists". Both fail closed, and an absent section releases nothing — the same instinct as [D-32](testing.md#d-32-choose-the-default-that-makes-an-omission-safe), applied to the one workflow that publishes.
+
+  The preamble this replaces claimed to follow Keep a Changelog while doing the opposite, which is worth noting as its own failure: a convention that cites a standard it does not implement is harder to correct than one that never cited anything, because the citation reads as prior consideration.
+
+- **Cost:** A dev build stamps the last released version, so `pql --version` cannot distinguish a build from `main` from the release it names. This is not a new gap — `make binary-drift` exists precisely because `--version` has never been able to answer "was this built from HEAD", and its help says so. The alternative was a `-dev` suffixed next-version, which reintroduces the guessed number in visibly-provisional form and would need the release regex widened to ignore it; the guess is the thing being removed, so a tidier guess is not an improvement.
+
+  The operational steps live in three places — `CHANGELOG.md`'s preamble, the `git-commit` skill, and `release.yaml`'s header comment — because three different readers need them at three different moments. Each states what to do and points here for why, which is the split [D-33](#d-33-ci-scripts-are-the-definition-callers-invoke-never-restate) asks for; the rationale is not restated in any of them.
+
+- **Raised by:** Noticed immediately after the 2.3.0 release, when the post-release commit had to invent `2.3.1` with nothing yet in it — the prescience the old convention required, made visible by having to perform it.

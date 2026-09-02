@@ -19,6 +19,9 @@ name: release
 # deliberately ignores the pre-existing backlog of older dated sections
 # that were never tagged.
 #
+# Why the convention is shaped this way: D-34 in
+# governance/decisions/process.md.
+#
 # No PAT needed: the tag we push uses the built-in GITHUB_TOKEN. There is
 # no v*-tag trigger, so that push starts nothing — releases are gated on
 # main only.
