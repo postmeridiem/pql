@@ -147,13 +147,21 @@ the judgment `make help` has no room for.
   describing the previous build — while `pql skill status` reports "current"
   throughout, because it compares against that binary's own embed.
 
-CI substance lives in `ci/lint.sh` and `ci/test.sh`; the GitHub Actions
-workflows shell out to them rather than restating their steps, which keeps local
-and CI behaviour identical and lets the provider be swapped without rewriting
-the scripts. The rest of `ci/` is local-only: `ci/secrets.sh` runs from
-`make pre-push`, `ci/eval.sh` from `make eval` and nothing else. `ci/release.sh`
-is called by nothing at all — `release.yaml` invokes the goreleaser action
-directly — and reconciling that is T-70.
+CI substance lives in `ci/{lint,test,release}.sh`; the GitHub Actions workflows
+shell out to them rather than restating their steps, which keeps local and CI
+behaviour identical and lets the provider be swapped without rewriting the
+scripts. The release path held that property only on paper until T-70 —
+`release.yaml` ran `goreleaser-action` with `version: latest` while every other
+goreleaser invocation in the repo pinned v2.16.0, so the `goreleaser check` that
+gates a release and the `goreleaser release` that performs it could be different
+builds. It now installs the pinned version and runs `./ci/release.sh`.
+
+The other two scripts are deliberately local-only, and say so in their own
+headers: `ci/secrets.sh` runs from `make pre-push`, and `ci/eval.sh` from
+`make eval` and nothing else. **`ci/eval.sh` is a manual tool, not a gate** — no
+schedule, no metrics sink, and its golden set is currently red (T-120). Run it
+yourself when changing a signal, a weight or candidate generation, and read the
+numbers as a diff rather than a pass/fail.
 
 **Pre-push hook.** Opt in once per clone with `git config core.hooksPath .githooks`. The hook runs `make pre-push`; a failing check aborts the push locally so nothing reaches the remote.
 

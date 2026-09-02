@@ -106,8 +106,8 @@ pql/
 │   ├── test.sh                       # unit + race + integration                        (CI + `make ci-test`)
 │   ├── secrets.sh                    # gitleaks over the outgoing range                 (local only: `make pre-push`)
 │   ├── secrets-selftest.sh           # proves .gitleaks.toml still matches what it claims
-│   ├── eval.sh                       # ranking-quality eval                             (local only: `make eval`; nothing schedules it — T-70)
-│   └── release.sh                    # invokes goreleaser — DEAD: release.yaml calls the action directly (T-70)
+│   ├── eval.sh                       # ranking-quality eval                             (local only: `make eval`; not a gate)
+│   └── release.sh                    # goreleaser release --clean                       (release.yaml's release job)
 ├── .github/workflows/                # GitHub Actions wrappers around ci/*.sh (added with first CI run)
 ├── .goreleaser.yaml                  # GitHub Releases publisher
 ├── .golangci.yaml                    # errcheck, revive, gocritic, staticcheck, gosec, …
@@ -172,16 +172,20 @@ Fixture vaults: `testdata/council-snapshot/` (a committed frozen copy of the Cou
 
 **CI scripts in `ci/`, GitHub Actions wrappers in `.github/workflows/`:**
 
-The substance of CI lives in `ci/*.sh` so it can run identically locally and in CI. The workflows shell out to those scripts rather than restating their steps, so the provider can be replaced later without touching them. That property holds for lint and test, and is the reason a Makefile target which re-listed a script's stages is treated as a bug here.
+The substance of CI lives in `ci/*.sh` so it can run identically locally and in CI. The workflows shell out to those scripts rather than restating their steps, so the provider can be replaced later without touching them. That property now holds for every script a workflow runs, and is the reason a Makefile target which re-listed a script's stages is treated as a bug here.
+
+Which scripts a workflow runs, and which are local tools, is itself the distinction that drifted (T-70) — so each entry below states its caller.
 
 - `ci/lint.sh` — `golangci-lint run`, `goreleaser check`, `govulncheck ./...`. Under 1 min. Run by `ci.yaml`, by `release.yaml`'s lint job, and by `make lint`.
 - `ci/test.sh` — unit + `-race` + integration. Under 5 min budget on PR. Run by `ci.yaml` and by `make ci-test`.
-- `ci/secrets.sh` — gitleaks over `<upstream>..HEAD`, preceded by `ci/secrets-selftest.sh`. Local only, from `make secrets` / `make pre-push`; no workflow runs it. See `CLAUDE.md`, "This repo is public".
-- `ci/eval.sh` — ranking-quality eval. Its header calls it a scheduled job, but **no workflow schedules it**; `make eval` is its only caller. Not blocking either way. (T-70)
-- `ci/release.sh` — GoReleaser full pipeline on tag `v*`. **Dead code**: `release.yaml` uses `goreleaser/goreleaser-action@v6` with `args: release --clean` and never invokes this script. The two agree today by coincidence, not by construction. Whether to point the workflow at the script or delete the script is T-70; until then, read `.goreleaser.yaml` and `release.yaml` for what actually ships — 5 platforms (linux/{amd64,arm64}, darwin/{amd64,arm64}, windows/amd64), SHA256 sums, SBOM, cosign signatures, auto-generated notes, published to GitHub Releases.
+- `ci/release.sh` — `goreleaser release --clean`. Run by `release.yaml`'s release job, after that job installs goreleaser at the version pinned in the workflow's `env:` — the same one the lint job ran `goreleaser check` with, so the config that was validated is the config that publishes. Never run it by hand; `make snapshot` dry-runs the same config without publishing.
+- `ci/secrets.sh` — gitleaks over `<upstream>..HEAD`, preceded by `ci/secrets-selftest.sh`. **Local only**, from `make secrets` / `make pre-push`; no workflow runs it. See `CLAUDE.md`, "This repo is public".
+- `ci/eval.sh` — ranking-quality eval. **Local only and not a gate**: nothing schedules it, there is no metrics sink, and the golden set is currently red (T-120). `make eval` is its only caller. Run it when changing a signal, a weight or candidate generation, and read the output as a diff against the previous run.
+
+**What a release actually publishes**, per `.goreleaser.yaml`: 5 platforms (linux/{amd64,arm64}, darwin/{amd64,arm64}, windows/amd64), a `checksums.txt` of SHA256 sums, and git-derived release notes. **SBOM generation and cosign signing are configured but commented out** — they need `syft` and `cosign` installed in the release job, which is why the release path is a script that can grow those steps rather than an action invocation that cannot. The workflow's `id-token: write` permission is already in place for keyless signing when they are enabled.
 
 **Distribution channels:**
-- GitHub Releases — primary channel, signed binaries + SHA256SUMS + SBOM.
+- GitHub Releases — primary channel, binaries + SHA256SUMS. Signing and SBOM are configured-but-disabled in `.goreleaser.yaml`, not shipped; don't describe releases as signed until those blocks are uncommented and the release job installs `cosign` and `syft`.
 - `go install github.com/postmeridiem/pql/cmd/pql@latest` for developers with a Go toolchain.
 - `pql self-update` once v0.1 ships — hits the GitHub Releases API, downloads + replaces atomically, verifies SHA256.
 
@@ -204,6 +208,6 @@ End-to-end once each milestone lands:
 4. `make test-integration` against `testdata/council-snapshot/` → exit codes 0/65/66 all exercised (zero matches is part of `0`).
 5. `make eval` with a seeded 3-query golden set → produces NDCG@5/MRR/P@5 report + per-signal contribution table.
 6. Push a throwaway branch → `ci/lint.sh` + `ci/test.sh` complete locally under 5 min (the host pipeline shells out to these, so local-equals-CI by construction).
-7. Tag a pre-release `v0.0.1-rc1` and push it → `.github/workflows/release.yaml` runs the goreleaser action and produces signed binaries published to GitHub Releases; verify cosign signature locally. (Not `ci/release.sh` — nothing invokes it; see the CI-scripts list above and T-70.)
+7. Release rehearsal: `make snapshot` locally for the full 5-platform build without publishing. The real path is not a tag push — `release.yaml` triggers on a push to `main` whose CHANGELOG section for `project.yaml`'s current version carries a date, then mints and pushes the tag itself and runs `./ci/release.sh`. So the release signal is the dated-section commit, and an undated section is a no-op by design.
 8. Install binary + skill on a clean machine; run `pql files` in the Council vault → feels like a query engine (plain rows). Run an intent (`pql related <path>`) → same substrate, now with `connections[]` and `signals[]`. Confirms the simple-but-optionally-enriched surface.
 9. Run an intent command (`pql related members/vaasa/persona.md`) with and without `--flat-search`: without the flag returns enriched bundle; with the flag returns the bare query result and zero connections/provenance. Confirms the off-switch is reachable from every entry point.

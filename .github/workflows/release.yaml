@@ -25,6 +25,17 @@ permissions:
   packages: write
   id-token: write   # for keyless cosign signing once enabled
 
+env:
+  # One pin for both jobs in this workflow, because they are two halves of one
+  # claim: the lint job runs `goreleaser check` to validate .goreleaser.yaml,
+  # and the release job runs `goreleaser release` against that same config. If
+  # they are different builds of goreleaser, the check does not cover the
+  # publish. They were: the publish step used the action's `version: latest`
+  # while every other goreleaser invocation in this repo pinned v2.16.0 (T-70).
+  # ci.yaml pins the same two versions for its own jobs — bump them together.
+  GORELEASER_VERSION: v2.16.0
+  GOLANGCI_LINT_VERSION: v2.12.2
+
 jobs:
   # The gate. ci.yaml runs the same checks on every push, but `needs:` cannot
   # cross workflows, so a red lint there would not have stopped a publish here —
@@ -47,8 +58,8 @@ jobs:
         # the first fails the job on a missing binary rather than on a real
         # finding.
         run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
-          go install github.com/goreleaser/goreleaser/v2@v2.16.0
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ env.GOLANGCI_LINT_VERSION }}
+          go install github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: ./ci/lint.sh
 
@@ -95,11 +106,22 @@ jobs:
           check-latest: true
           cache: true
 
+      - name: install goreleaser
+        if: steps.tag.outputs.release == 'true'
+        # Installed the same way the lint job above installs it, so the binary
+        # that publishes is the one `goreleaser check` validated the config
+        # against. This is also where syft and cosign install steps land when
+        # the SBOM and signing blocks in .goreleaser.yaml are uncommented.
+        run: |
+          go install github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # Shells out to ci/release.sh rather than using goreleaser-action, so the
+      # release path holds the same property as lint and test: the script is
+      # what runs, locally and in CI, and swapping CI provider does not rewrite
+      # what a release does. (T-70)
       - name: goreleaser release
         if: steps.tag.outputs.release == 'true'
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: latest
-          args: release --clean
+        run: ./ci/release.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

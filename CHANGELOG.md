@@ -188,6 +188,28 @@ own release:
   before lint and tests over the outgoing commit range.
 - A pending **gofmt sweep** landed, with three doc comments it had broken
   corrected.
+- **Releases are published by `ci/release.sh` at a pinned goreleaser version**
+  (T-70). `release.yaml` invoked `goreleaser-action` with `version: latest`
+  while the lint job that gates the release — and both jobs in `ci.yaml` —
+  pinned v2.16.0. So `goreleaser check` validated `.goreleaser.yaml` against
+  one build of goreleaser and `goreleaser release` published with whatever was
+  latest at that moment: the gate did not cover the thing it gated. The two
+  versions now come from one `env:` block in the workflow, and the release step
+  runs the script, which restores the property the repo documents for lint and
+  test — what runs in CI is what runs locally, and changing CI provider does
+  not rewrite what a release does.
+
+  `ci/release.sh` had been dead code since the workflow was written, so this
+  also removes the second copy rather than adding one. It is where the `syft`
+  and `cosign` install steps go when the SBOM and signing blocks in
+  `.goreleaser.yaml` are uncommented — steps an action invocation had no room
+  for, which is the concrete reason to prefer the script.
+
+- **`ci/eval.sh` is documented as the manual tool it always was** (T-70). Its
+  header called it a scheduled job; nothing has ever scheduled it, there is no
+  metrics sink, and its golden set is currently failing (T-120). Calling it
+  scheduled read as a promise that ranking regressions were being caught
+  automatically. They are not.
 - **The build and test docs no longer contradict the Makefile, or each other**
   (T-115). `CLAUDE.md` and `docs/structure/project-structure.md` each carried a
   Makefile target table calling `make lint` "`golangci-lint run`" — one third
