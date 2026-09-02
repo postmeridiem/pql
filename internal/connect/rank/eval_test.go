@@ -79,8 +79,21 @@ func TestEval_Council(t *testing.T) {
 			t.Logf("NDCG@%d=%.3f  MRR=%.3f  P@%d=%.3f  (%s)",
 				tc.K, ndcg, mrr, tc.K, pk, tc.Notes)
 
-			if ndcg == 0 && len(tc.ExpectedTopK) > 0 {
-				t.Errorf("NDCG@%d = 0 — no expected results in top-%d", tc.K, tc.K)
+			// Every expected path must actually be in the top k.
+			//
+			// This used to assert `ndcg != 0`, which is satisfied by finding
+			// one of five expected results at rank five — so a case could lose
+			// most of what it claims and stay green, and the golden's
+			// expected_top_k would quietly stop being a claim about anything.
+			// That is the shape D-32 was written about, sitting in the harness
+			// whose job is to catch ranking regressions.
+			//
+			// The strict form makes a golden update the deliberate act it
+			// should be: if ranking legitimately improves, the expectations
+			// change in the same commit, with the reasoning in `notes`. The
+			// metrics above stay as the trend line; this is the gate.
+			if missing := missingFrom(paths, tc.ExpectedTopK, tc.K); len(missing) > 0 {
+				t.Errorf("not in top-%d: %v\ngot: %v", tc.K, missing, topN(paths, tc.K))
 			}
 		})
 	}
@@ -131,6 +144,29 @@ func runIntent(ctx context.Context, st *store.Store, tc goldenCase) ([]struct{ P
 		return out, nil
 	}
 	return nil, nil
+}
+
+// missingFrom returns the expected paths absent from the first k of got, in
+// the order the golden lists them. Empty means the case holds.
+func missingFrom(got, expected []string, k int) []string {
+	inTopK := make(map[string]bool, k)
+	for _, p := range topN(got, k) {
+		inTopK[p] = true
+	}
+	var missing []string
+	for _, want := range expected {
+		if !inTopK[want] {
+			missing = append(missing, want)
+		}
+	}
+	return missing
+}
+
+func topN(paths []string, n int) []string {
+	if n <= 0 || len(paths) <= n {
+		return paths
+	}
+	return paths[:n]
 }
 
 func findRepoRoot(t *testing.T) string {

@@ -1858,3 +1858,122 @@ THE SHIPPED SKILL HAS THE SAME GAP, and is the more reachable half of the fix. i
 DESIRED CONTRACT, not a design: someone who asks for a record by id, without knowing the surface, ends up holding the record. Several shapes would satisfy that — show''s help naming read as where the body lives; body becoming projectable through --fields; show emitting a pointer when it omits the body; or the two verbs collapsing with the card shape behind a flag. Which one is the maintainer''s call. The defect is that the obvious verb answers incompletely and is silent about having done so.
 
 Related: T-9 exposed heading anchors on decisions read, so the body path has had attention that the discoverability of it has not.', 'done', 'medium', NULL, NULL, NULL, '2026-09-02 12:48:54.187', '2026-09-02 15:40:02.025', NULL, 'e142c882f7a580e6a078776fe73dfca9', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G65T19H1A3JHSQ3T0KREGWXG', 'bug', NULL, 'The eval fixture cannot detect ranking regressions in four of five signals', NULL, 'backlog', 'medium', NULL, NULL, NULL, '2026-09-02 16:16:17.288', '2026-09-02 16:16:17.288', NULL, '6956a2621fb7a1c0cb5388aa0aaa0743', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G65T19H1A3JHSQ3T0KREGWXG', 'bug', NULL, 'The eval fixture cannot detect ranking regressions in four of five signals', 'Found 2026-09-02 while fixing T-120. `make eval` is green again, but green
+means less here than it looks, and the reason is the fixture rather than the
+harness.
+
+MEASURED, not inferred. From `search council --fields path,score,signals`
+against testdata/council-snapshot:
+
+- recency        raw=0 on every file in every case
+- link_overlap   raw=0
+- tag_overlap    raw=0
+- path_proximity raw=0
+- centrality     raw=1 on exactly one file, 0 on the rest
+
+So one signal separates one file, and the other four separate nothing. A
+weight change, a normalisation change, or an outright bug in four of the five
+signals would not move a single number the eval reports.
+
+TWO CAUSES, BOTH PROPERTIES OF THE SNAPSHOT
+
+1. Uniform mtimes. git sets every file''s mtime to checkout time, so the whole
+   fixture has one timestamp and recency - weighted 0.25 on search, the second
+   heaviest signal there - normalises to zero across the board. This affects
+   any consumer of the snapshot, not just the eval.
+
+2. One link in the entire vault. members/vaasa/persona.md links to
+   members/koskela/persona. That is the only edge, so centrality is 1 for the
+   target and 0 for all 25 other files, link_overlap can never be non-zero
+   (no file shares an edge with any other), and context''s candidate set is at
+   most one file for any target.
+
+WHY IT MATTERS MORE THAN A THIN FIXTURE USUALLY WOULD
+
+The eval exists to make ranking regressions as visible as test failures - that
+is its stated job in project-structure.md, and "ranking is the product" is the
+philosophy doc''s line. An eval that cannot move under four of five signals is
+not doing that job, and it reports NDCG=1.000 while not doing it, which is the
+most misleading result available.
+
+T-120 strengthened the harness assertion so a golden''s expectations must
+actually hold. That was the right fix for what T-120 was about and does not
+touch this: a stricter assertion over a fixture with no signal is still an
+assertion over no signal.
+
+DESIRED, not a design. Enough structure in the fixture that each weighted
+signal can be non-zero and can differ between files - some link density, some
+shared tags, and mtimes that vary. Options worth weighing rather than
+picking blind:
+
+- Refresh the snapshot from a richer source vault. `make refresh-fixtures`
+  already exists; the question is whether the source has the structure.
+- Author a synthetic fixture for eval specifically. internal/fixture/ is named
+  in project-structure.md for exactly this and was never built.
+- Set mtimes deliberately as a fixture step, since git will never preserve
+  them. Cheap and fixes recency on its own.
+
+The third is worth doing regardless of the other two - it is a few lines and
+recency is the second-heaviest weight on search.
+
+RELATED
+
+T-120 - fixed the two wrong golden expectations and the weak assertion.
+T-65  - build the FR-2 golden eval set; overlaps on what a good fixture is.', 'backlog', 'medium', NULL, NULL, NULL, '2026-09-02 16:16:17.288', '2026-09-02 16:16:36.555', NULL, '279e6cbecd6a1745655fa14600b4ae15', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G63Y5D09S38Q3YWRKPBGHN80', 'bug', NULL, 'make eval fails: the context golden expects an extensionless path', 'Found 2026-09-02 while working T-70, which asked whether ci/eval.sh should be
+scheduled. It cannot be scheduled as it stands, because it is red.
+
+`make eval` fails today, on a clean checkout, with no local state involved:
+
+    --- FAIL: TestEval_Council/context_members/vaasa/persona.md
+        NDCG@5=0.000  MRR=0.000  P@5=0.000
+        NDCG@5 = 0 - no expected results in top-5
+
+The other two cases (related, search) pass.
+
+CAUSE - A TYPO IN THE GOLDEN, NOT A RANKING REGRESSION
+
+internal/connect/rank/testdata/golden/council.json, the context case, expects:
+
+    "expected_top_k": [
+      "members/koskela/persona",        <- no .md
+      "members/vaasa/journal.md"
+    ]
+
+`pql context members/vaasa/persona.md` against testdata/council-snapshot
+returns:
+
+    members/koskela/persona.md    0.5000
+
+So the first expectation misses on the extension alone. This is the exact trap
+the pql skill documents for `outlinks`: its `target` is the raw link text, and
+a wikilink is written without `.md`, so a golden authored from outlink output
+carries the unresolved spelling. The eval compares strings, so it scores zero
+rather than reporting a near-miss.
+
+A SECOND, SEPARATE PROBLEM UNDERNEATH IT
+
+Fixing the extension is not the whole answer. `context` returns exactly ONE
+result for that target, so `members/vaasa/journal.md` is absent regardless of
+spelling. After the typo fix the case would pass - the assertion is only
+"NDCG@5 != 0" - while still returning half of what the golden says it should.
+
+That is worth deciding rather than papering over. Either the golden''s second
+expectation is wrong (journal.md is same-directory, which is `related`''s
+property, and context weights link overlap and path proximity differently), or
+context is under-returning on a link-sparse fixture. The note on the case says
+"koskela is linked from vaasa; journal is same directory", which suggests the
+author wanted both and got one.
+
+WHY THIS IS NOT FIXED IN T-70
+
+Correcting the golden is a ranking-quality judgement, not a typo sweep: it
+decides what `context` is supposed to return, which is the thing the eval
+exists to hold pql to. Changing a golden to match current output is how an
+eval stops being an eval - the strict form is to decide the expected set first
+and let the number fall out. See D-32.
+
+RELATED
+
+T-70 - decided ci/eval.sh is a manual local tool, partly because of this.', 'review', 'medium', NULL, NULL, NULL, '2026-09-02 11:54:42.306', '2026-09-02 16:16:49.388', NULL, '8a6e6fdb6f45b67c1476897c5e3d515d', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

@@ -16,21 +16,19 @@
     "intent": "search",
     "target_path": "",
     "expected_top_k": [
-      "README.md",
       "members/koskela/persona.md"
     ],
     "k": 5,
-    "notes": "README and linked personas are the most central council files"
+    "notes": "search weights centrality 0.40, and centrality is inlink count. koskela/persona.md is the only file anything links to in this snapshot, so it is the only file with a non-zero score. README.md was expected here on the intuition that a README is central; it has zero backlinks in this fixture, so ranking it would mean centrality measuring something other than inlinks. Removed against the signal definition, not against the output (T-120)."
   },
   {
     "query": "context members/vaasa/persona.md",
     "intent": "context",
     "target_path": "members/vaasa/persona.md",
     "expected_top_k": [
-      "members/koskela/persona",
-      "members/vaasa/journal.md"
+      "members/koskela/persona.md"
     ],
     "k": 5,
-    "notes": "koskela is linked from vaasa; journal is same directory"
+    "notes": "context gathers candidates from inlinks, resolved outlinks and shared tags. persona.md has one outlink and no tag-sharers, so one candidate is the whole correct answer. members/vaasa/journal.md was expected here because it is same-directory, but path proximity ranks candidates rather than producing them, and same-directory neighbours are what the related case above asserts. The koskela path also lacked its .md: the golden was written from outlink text, which is the raw wikilink, and context resolves targets against the index (T-120)."
   }
 ]

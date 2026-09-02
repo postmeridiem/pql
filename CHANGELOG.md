@@ -17,6 +17,29 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`make eval` passes again, and now asserts what its goldens claim** (T-120).
+  It had been failing on a `context` case scoring NDCG=0, MRR=0, P@5=0.
+
+  Two golden expectations were wrong, and both were corrected against the
+  contract rather than against the output — changing a golden to match what the
+  code does is how an eval stops being an eval. The `context` case expected
+  `members/koskela/persona` without its `.md`, having been written from outlink
+  text, which is the raw wikilink; `context` resolves targets against the index.
+  It also expected a same-directory file, but `context` gathers candidates from
+  inlinks, outlinks and shared tags — path proximity ranks candidates rather
+  than producing them, and same-directory neighbours are what the `related` case
+  asserts. The `search` case expected `README.md` on the intuition that a README
+  is central; centrality is inlink count and that file has no backlinks in the
+  fixture, so ranking it would require centrality to mean something else.
+
+  The harness assertion was `NDCG != 0`, which one expected result at rank five
+  satisfies — a case could lose most of what it claims and stay green, so
+  `expected_top_k` had quietly stopped being a claim. Every expected path must
+  now appear in the top k, and the failure names which are missing. That is the
+  D-32 shape, found in the harness whose job is catching regressions.
+
 ### Changed
 
 - **`docs/structure/initial-plan.md` and `docs/structure/planning.md` are

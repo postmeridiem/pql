@@ -677,3 +677,66 @@ INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, chang
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY1N5XNKDTCQ354QCFAPQAA4', 'status', 'review', 'done', NULL, '2026-09-02 15:39:43', '2026-09-02 15:39:43.084', '2026-09-02 15:39:43.084', NULL, '7ed9f2b68b4ed851379bb931e4f02ffe', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G64AGK5DW8R57VTSHEBM6BCC', 'status', 'review', 'done', NULL, '2026-09-02 15:39:55', '2026-09-02 15:39:55.216', '2026-09-02 15:39:55.216', NULL, 'ee7f231a3216bffa2334cb5bf3e0037d', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G64AJBN8ESS2889RXA8HVYW8', 'status', 'review', 'done', NULL, '2026-09-02 15:40:02', '2026-09-02 15:40:02.025', '2026-09-02 15:40:02.025', NULL, '1c2319fb2c28648f7fc6e24ebd22afd6', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G65T19H1A3JHSQ3T0KREGWXG', 'description', NULL, 'Found 2026-09-02 while fixing T-120. `make eval` is green again, but green
+means less here than it looks, and the reason is the fixture rather than the
+harness.
+
+MEASURED, not inferred. From `search council --fields path,score,signals`
+against testdata/council-snapshot:
+
+- recency        raw=0 on every file in every case
+- link_overlap   raw=0
+- tag_overlap    raw=0
+- path_proximity raw=0
+- centrality     raw=1 on exactly one file, 0 on the rest
+
+So one signal separates one file, and the other four separate nothing. A
+weight change, a normalisation change, or an outright bug in four of the five
+signals would not move a single number the eval reports.
+
+TWO CAUSES, BOTH PROPERTIES OF THE SNAPSHOT
+
+1. Uniform mtimes. git sets every file''s mtime to checkout time, so the whole
+   fixture has one timestamp and recency - weighted 0.25 on search, the second
+   heaviest signal there - normalises to zero across the board. This affects
+   any consumer of the snapshot, not just the eval.
+
+2. One link in the entire vault. members/vaasa/persona.md links to
+   members/koskela/persona. That is the only edge, so centrality is 1 for the
+   target and 0 for all 25 other files, link_overlap can never be non-zero
+   (no file shares an edge with any other), and context''s candidate set is at
+   most one file for any target.
+
+WHY IT MATTERS MORE THAN A THIN FIXTURE USUALLY WOULD
+
+The eval exists to make ranking regressions as visible as test failures - that
+is its stated job in project-structure.md, and "ranking is the product" is the
+philosophy doc''s line. An eval that cannot move under four of five signals is
+not doing that job, and it reports NDCG=1.000 while not doing it, which is the
+most misleading result available.
+
+T-120 strengthened the harness assertion so a golden''s expectations must
+actually hold. That was the right fix for what T-120 was about and does not
+touch this: a stricter assertion over a fixture with no signal is still an
+assertion over no signal.
+
+DESIRED, not a design. Enough structure in the fixture that each weighted
+signal can be non-zero and can differ between files - some link density, some
+shared tags, and mtimes that vary. Options worth weighing rather than
+picking blind:
+
+- Refresh the snapshot from a richer source vault. `make refresh-fixtures`
+  already exists; the question is whether the source has the structure.
+- Author a synthetic fixture for eval specifically. internal/fixture/ is named
+  in project-structure.md for exactly this and was never built.
+- Set mtimes deliberately as a fixture step, since git will never preserve
+  them. Cheap and fixes recency on its own.
+
+The third is worth doing regardless of the other two - it is a few lines and
+recency is the second-heaviest weight on search.
+
+RELATED
+
+T-120 - fixed the two wrong golden expectations and the weak assertion.
+T-65  - build the FR-2 golden eval set; overlaps on what a good fixture is.', NULL, '2026-09-02 16:16:36', '2026-09-02 16:16:36.555', '2026-09-02 16:16:36.555', NULL, '4f5eb798db22ebebe5a25a3982a87c5c', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G63Y5D09S38Q3YWRKPBGHN80', 'status', 'backlog', 'review', NULL, '2026-09-02 16:16:49', '2026-09-02 16:16:49.388', '2026-09-02 16:16:49.388', NULL, '05a26ac32c94f37e20bf088d1ad12689', 2) ON CONFLICT(hash) DO NOTHING;
