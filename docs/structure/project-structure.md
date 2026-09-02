@@ -18,7 +18,7 @@ This document is the canonical reference for `pql`'s repository layout, build pi
 - **Generate wide, rank careful, return sparingly.** Architecturally separate packages; neither imports the other.
 - **Provenance is data, not a cross-cutting concern.** Each signal returns its own `Contribution{Name, Raw, Normalized, Weight}`; the combiner aggregates. No central `explain.go`.
 - **Consumer-agnostic core.** `internal/intent/`, `internal/query/`, and `internal/planning/` must not import `internal/cli/`. CLI today, MCPs (plural) tomorrow — a query-surface MCP and a planning-surface MCP are different scopes, different permissions, different audiences; no reason to assume one fused server. Every consumer is an adapter.
-- **Two stores, two regimes.** `<vault>/.pql/index.db` is the regenerable cache — SQLite with FTS5; schema versioned; drop-and-rebuild on mismatch. `<vault>/.pql/pql.db` is user-authored state (planning, possibly other features later) — forward-only migrations, lazily created by the first writer. The split is codified in `decisions/architecture.md` (D-3).
+- **Two stores, two regimes.** `<vault>/.pql/index.db` is the regenerable cache — SQLite with FTS5; schema versioned; drop-and-rebuild on mismatch. `<vault>/.pql/pql.db` is user-authored state (planning, possibly other features later), lazily created by the first writer. The split is codified in `governance/decisions/architecture.md` (D-3). Note that D-3's own "forward-only migrations" phrase is superseded by **D-19**: there is no migration runner today, the schema lives in `CREATE TABLE IF NOT EXISTS` statements, and pql.db is regenerated from the committed changelog rather than altered in place. D-19 is the current authority on how pql.db evolves.
 
 ## Directory layout
 
@@ -82,7 +82,7 @@ pql/
 │   ├── skill/                        # Claude Code skill (SKILL.md + go:embed wrapper); `pql skill install` writes it to .claude/skills/pql/
 │   └── version/                      # ldflags-stamped build info; exposes schema_version for skill negotiation
 ├── testdata/                         # fixture vaults (Go toolchain ignores this dir specially)
-│   ├── council-snapshot/             # frozen snapshot of /var/mnt/data/projects/council/
+│   ├── council-snapshot/             # frozen snapshot of the Council vault (a sibling checkout)
 │   ├── minimal/
 │   └── mixed/                        # markdown + code, for future code-aware tests
 ├── tools/
@@ -101,11 +101,13 @@ pql/
 │   ├── skill.md
 │   └── adr/                          # ADRs: 0001-no-vectors, 0002-intents-not-primitives, 0003-pql-db-for-user-state
 ├── examples/
-├── ci/                               # entry scripts shelled out to by .github/workflows/*.yaml
-│   ├── lint.sh                       # golangci-lint + goreleaser check + govulncheck
-│   ├── test.sh                       # unit + race + integration
-│   ├── release.sh                    # invokes goreleaser; called on tag push
-│   └── eval.sh                       # ranking-quality eval; for scheduled job
+├── ci/                               # entry scripts; lint.sh + test.sh are what .github/workflows/*.yaml shells out to
+│   ├── lint.sh                       # golangci-lint + goreleaser check + govulncheck  (CI + `make lint`)
+│   ├── test.sh                       # unit + race + integration                        (CI + `make ci-test`)
+│   ├── secrets.sh                    # gitleaks over the outgoing range                 (local only: `make pre-push`)
+│   ├── secrets-selftest.sh           # proves .gitleaks.toml still matches what it claims
+│   ├── eval.sh                       # ranking-quality eval                             (local only: `make eval`; nothing schedules it — T-70)
+│   └── release.sh                    # invokes goreleaser — DEAD: release.yaml calls the action directly (T-70)
 ├── .github/workflows/                # GitHub Actions wrappers around ci/*.sh (added with first CI run)
 ├── .goreleaser.yaml                  # GitHub Releases publisher
 ├── .golangci.yaml                    # errcheck, revive, gocritic, staticcheck, gosec, …
@@ -148,7 +150,7 @@ cli/render                               ← stdout JSON; provenance inline in c
 | New signal | `internal/connect/signal/<name>.go` + weight entries per intent | 1 new file + N-line edits |
 | New extractor | `internal/index/extractor/<name>/` + registry registration | 1 new subpackage |
 | New planning verb | `internal/planning/repo/` method + `internal/cli/{decisions,ticket,plan}_<verb>.go` | 1 new CLI file + method on repo |
-| New pql.db table | `internal/planning/schema.go` forward migration + repo helpers | 1 migration step + repo additions |
+| New pql.db table | `CREATE TABLE IF NOT EXISTS` in `internal/planning/schema.go`, bump `CanonicalVersion`, + repo helpers | schema edit + repo additions (no migration runner — D-19) |
 | New consumer (MCPs) | `cmd/pql-mcp-query/` reusing `internal/intent/`+`internal/query/`; `cmd/pql-mcp-plan/` reusing `internal/planning/` | Bounded by consumer-agnostic core discipline; query surface and planning surface can ship as separate binaries |
 | Code-aware indexing | `internal/index/extractor/code/` with tree-sitter | No changes to `store/`, `connect/`, `query/`, `planning/` |
 
@@ -158,40 +160,25 @@ Three tiers, idiomatic Go placement:
 
 1. **Unit tests** — `_test.go` next to source. Includes fuzz targets for the DSL (`internal/query/dsl/lex/fuzz_test.go`, `internal/query/dsl/parse/fuzz_test.go`). Run via `make test`.
 2. **Integration tests** — `internal/cli/integration_test.go` gated by `//go:build integration`. Shells the built binary against fixture vaults in `testdata/`. Validates the full output contract (stdout JSON shape, stderr JSON diagnostics, exit codes). Run via `make test-integration`.
-3. **Ranking-quality eval** — `internal/connect/rank/eval_test.go` gated by `//go:build eval`. Goldens at `internal/connect/rank/testdata/golden/*.json` as `{query, intent, expected_top_k, notes}`. Computes NDCG@k / MRR / P@k, **plus per-signal contribution diffs vs. the previous run** (debuggability > metric). Run via `make eval` (`go test -tags=eval`); there is no separate `cmd/pql-eval/` binary.
+3. **Ranking-quality eval** — `internal/connect/rank/eval_test.go` gated by `//go:build eval`. Goldens at `internal/connect/rank/testdata/golden/*.json` as `{query, intent, expected_top_k, notes}`. Computes NDCG@k / MRR / P@k, **plus per-signal contribution diffs vs. the previous run** (debuggability > metric). Run via `make eval`, which delegates to `ci/eval.sh`; there is no separate `cmd/pql-eval/` binary.
 
-Fixture vaults: `testdata/council-snapshot/` (frozen copy of `/var/mnt/data/projects/council/`), plus synthetic vaults generated by `internal/fixture/` for eval corners.
+Fixture vaults: `testdata/council-snapshot/` (a committed frozen copy of the Council vault, refreshed from that sibling checkout by `make refresh-fixtures`), plus synthetic vaults generated by `internal/fixture/` for eval corners.
+
+**How to write the assertions inside these tiers is a decision, not a layout question**, and it lives in the DQR tree: **D-32** in `governance/decisions/testing.md` — choose the default that makes an omission safe. This section says which tests exist and how to run them; D-32 says how strong a claim each one should make.
 
 ## Build & release pipeline
 
-**Makefile targets** (see `Makefile` for the full list):
-
-| Target | Does |
-|---|---|
-| `make build` | `go build -ldflags='…version…' -o bin/pql ./cmd/pql` |
-| `make install` | Copy `bin/pql` to `~/.local/bin/` |
-| `make test` | Unit tests, fast |
-| `make test-race` | Unit tests with `-race` |
-| `make test-integration` | `go test -tags=integration ./internal/cli/...` |
-| `make eval` | `go test -tags=eval ./internal/connect/rank/...` |
-| `make eval-baseline` | Record current eval as baseline for next diff |
-| `make fuzz-dsl` | Run DSL fuzz corpus (10m default) |
-| `make lint` | `golangci-lint run` |
-| `make vuln` | `govulncheck ./...` |
-| `make fmt` | `gofmt -w` + `goimports -w` |
-| `make tidy` | `go mod tidy` |
-| `make snapshot` | `goreleaser release --snapshot --clean` |
-| `make profile-cpu` / `make profile-mem` | pprof against largest fixture |
-| `make clean` | `rm -rf bin/ dist/` |
+**Makefile targets: `make help` is the list.** It is generated from the Makefile's own `##` comments, so it is the one copy that cannot drift. This document deliberately does not restate it, and neither does `CLAUDE.md` — a table here said `make lint` was `golangci-lint run` for months after the target became the full three-stage gate, and contradicted a correct description of the same command twelve lines further down its own page (T-115). `CLAUDE.md`'s "Build & test" section carries the judgment that `make help` has no room for: which targets are gates, what each gate actually contains, and the order `make pre-push` runs them in.
 
 **CI scripts in `ci/`, GitHub Actions wrappers in `.github/workflows/`:**
 
-The substance of CI lives in `ci/*.sh` so it can run identically locally and in CI. GitHub Actions workflows are thin shell-out wrappers; they can be replaced with another provider later if needed without touching the scripts.
+The substance of CI lives in `ci/*.sh` so it can run identically locally and in CI. The workflows shell out to those scripts rather than restating their steps, so the provider can be replaced later without touching them. That property holds for lint and test, and is the reason a Makefile target which re-listed a script's stages is treated as a bug here.
 
-- `ci/lint.sh` — `golangci-lint run`, `goreleaser check`, `govulncheck ./...`. Under 1 min.
-- `ci/test.sh` — unit + `-race` + integration. Under 5 min budget on PR.
-- `ci/release.sh` — on tag `v*`: GoReleaser full pipeline. 5 platforms (linux/{amd64,arm64}, darwin/{amd64,arm64}, windows/amd64), SHA256 sums, SBOM, cosign signatures, auto-generated notes. Publishes to GitHub Releases per `.goreleaser.yaml`.
-- `ci/eval.sh` — scheduled job: `make eval`, post metrics. Not blocking; regressions surface as visible drift in the metrics record.
+- `ci/lint.sh` — `golangci-lint run`, `goreleaser check`, `govulncheck ./...`. Under 1 min. Run by `ci.yaml`, by `release.yaml`'s lint job, and by `make lint`.
+- `ci/test.sh` — unit + `-race` + integration. Under 5 min budget on PR. Run by `ci.yaml` and by `make ci-test`.
+- `ci/secrets.sh` — gitleaks over `<upstream>..HEAD`, preceded by `ci/secrets-selftest.sh`. Local only, from `make secrets` / `make pre-push`; no workflow runs it. See `CLAUDE.md`, "This repo is public".
+- `ci/eval.sh` — ranking-quality eval. Its header calls it a scheduled job, but **no workflow schedules it**; `make eval` is its only caller. Not blocking either way. (T-70)
+- `ci/release.sh` — GoReleaser full pipeline on tag `v*`. **Dead code**: `release.yaml` uses `goreleaser/goreleaser-action@v6` with `args: release --clean` and never invokes this script. The two agree today by coincidence, not by construction. Whether to point the workflow at the script or delete the script is T-70; until then, read `.goreleaser.yaml` and `release.yaml` for what actually ships — 5 platforms (linux/{amd64,arm64}, darwin/{amd64,arm64}, windows/amd64), SHA256 sums, SBOM, cosign signatures, auto-generated notes, published to GitHub Releases.
 
 **Distribution channels:**
 - GitHub Releases — primary channel, signed binaries + SHA256SUMS + SBOM.
@@ -205,7 +192,7 @@ The substance of CI lives in `ci/*.sh` so it can run identically locally and in 
 - **Catalog docs** sit at the top of `docs/`:
   - `docs/intents.md` — intent catalog + per-intent contract.
   - `docs/signals.md` — every signal: what it measures, where it shines, where it fails.
-  - `decisions/` — Decision records parsed by `pql decisions sync`.
+  - `governance/{decisions,questions,rejected}/<domain>.md` — the DQR tree, parsed by `pql decisions sync`. Per D-21; the flat `decisions/` this line used to name no longer exists. Domain is inferred from the filename stem, record type from the parent subdirectory.
 
 ## Verification
 
@@ -217,6 +204,6 @@ End-to-end once each milestone lands:
 4. `make test-integration` against `testdata/council-snapshot/` → exit codes 0/65/66 all exercised (zero matches is part of `0`).
 5. `make eval` with a seeded 3-query golden set → produces NDCG@5/MRR/P@5 report + per-signal contribution table.
 6. Push a throwaway branch → `ci/lint.sh` + `ci/test.sh` complete locally under 5 min (the host pipeline shells out to these, so local-equals-CI by construction).
-7. Tag a pre-release `v0.0.1-rc1` and run `ci/release.sh` (or push the tag and let `.github/workflows/release.yaml` invoke it) → produces signed binaries published to GitHub Releases; verify cosign signature locally.
+7. Tag a pre-release `v0.0.1-rc1` and push it → `.github/workflows/release.yaml` runs the goreleaser action and produces signed binaries published to GitHub Releases; verify cosign signature locally. (Not `ci/release.sh` — nothing invokes it; see the CI-scripts list above and T-70.)
 8. Install binary + skill on a clean machine; run `pql files` in the Council vault → feels like a query engine (plain rows). Run an intent (`pql related <path>`) → same substrate, now with `connections[]` and `signals[]`. Confirms the simple-but-optionally-enriched surface.
 9. Run an intent command (`pql related members/vaasa/persona.md`) with and without `--flat-search`: without the flag returns enriched bundle; with the flag returns the bare query result and zero connections/provenance. Confirms the off-switch is reachable from every entry point.

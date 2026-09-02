@@ -118,25 +118,42 @@ These are load-bearing — preserve them when implementing. Full rationale in th
 
 ## Build & test
 
-Go 1.25+ is installed on the dev machine (`go.mod`'s `go` directive declares the language floor); `make build`, `make test`, and the rest of the targets below run locally.
+Go 1.25+ is installed on the dev machine (`go.mod`'s `go` directive declares the language floor); `make build`, `make test`, and the rest of the targets run locally.
 
 `go.mod` also carries a `toolchain` directive pinning the **build** toolchain, currently `go1.26.6`. It is there for security, not features: four reachable stdlib advisories were fixed in that release, and CI resolves its Go version from `go.mod`, so the pin covers local and CI together. Raise it when `make vuln` reports a stdlib advisory — `go get toolchain@goX.Y.Z` — and leave the `go` directive alone unless the code actually needs newer language features, since that one is the floor consumers must meet.
 
-| Command | Does |
-|---|---|
-| `make build` | binary at `./bin/pql` with version stamped via ldflags |
-| `make test` | unit tests, fast |
-| `make test-race` | unit tests with `-race` |
-| `make test-integration` | `go test -tags=integration ./internal/cli/...` against fixture vaults (`internal/cli/integration_test.go`) |
-| `make eval` | ranking-quality eval, `go test -tags=eval ./internal/connect/rank/...` (goldens under `testdata/golden/`) |
-| `make lint` | `golangci-lint run` |
-| `make vuln` | `govulncheck ./...` (pinned to v1.2.0 via `go run`, no local install) |
-| `make pre-push` | lint + vuln + test + test-race. Wired by `.githooks/pre-push`; integration suite is deliberately excluded to keep the push gate fast |
-| `make snapshot` | `goreleaser release --snapshot --clean` (builds 5 platforms, no publish) |
+**`make help` is the target list.** It generates itself from the Makefile's own
+`##` comments, so it cannot go stale the way a table here can — and did: this
+section described `make lint` as `golangci-lint run` for months after the target
+became the full three-stage gate, which is how a release was verified against a
+check it had never run. Nothing below restates a target. What follows is only
+the judgment `make help` has no room for.
 
-`make help` lists everything.
+- **`make lint` is the whole gate**, not golangci-lint. It delegates to
+  `ci/lint.sh`: golangci-lint, then `goreleaser check`, then govulncheck.
+  Running `golangci-lint run` by hand passes one third of it. Same shape for
+  `make eval` → `ci/eval.sh`, `make ci-test` → `ci/test.sh`, `make secrets` →
+  `ci/secrets.sh` — the script is the definition, the target is a shortcut to
+  it, and a target that re-listed the steps is exactly what drifted.
+- **`make vuln` is govulncheck on its own**, pinned to v1.2.0 via `go run` so
+  nothing has to be installed. It already runs inside `make lint`; the separate
+  target exists for running it in isolation.
+- **`make pre-push` is the local gate**, wired by `.githooks/pre-push`: secrets,
+  lint, test, test-race, in that order. Secrets is first deliberately — it is
+  the only check whose failure cannot be undone by fixing it afterwards. The
+  integration suite is excluded to keep the push fast.
+- **`make install` also refreshes the skill.** `internal/skill/SKILL.md` is
+  `//go:embed`'d, so copying the binary without it leaves the installed copy
+  describing the previous build — while `pql skill status` reports "current"
+  throughout, because it compares against that binary's own embed.
 
-CI substance lives in `ci/{lint,test,release,eval}.sh`. GitHub Actions workflows in `.github/workflows/` are thin wrappers around these — keeps local and CI behaviour identical and lets the provider be swapped without rewriting the scripts.
+CI substance lives in `ci/lint.sh` and `ci/test.sh`; the GitHub Actions
+workflows shell out to them rather than restating their steps, which keeps local
+and CI behaviour identical and lets the provider be swapped without rewriting
+the scripts. The rest of `ci/` is local-only: `ci/secrets.sh` runs from
+`make pre-push`, `ci/eval.sh` from `make eval` and nothing else. `ci/release.sh`
+is called by nothing at all — `release.yaml` invokes the goreleaser action
+directly — and reconciling that is T-70.
 
 **Pre-push hook.** Opt in once per clone with `git config core.hooksPath .githooks`. The hook runs `make pre-push`; a failing check aborts the push locally so nothing reaches the remote.
 
@@ -163,13 +180,18 @@ matches no `Bash(make *)` rule. Consequences worth knowing:
 
 ## Test infrastructure
 
-Three tiers (see `docs/structure/project-structure.md` for full details):
+Three tiers, described in full in `docs/structure/project-structure.md` — that
+file is the canonical copy and this is a pointer, not a second one. The part
+worth carrying here is that two of the three are behind build tags and are
+invisible to a bare `go test ./...`:
 
-1. **Unit** — `_test.go` next to source, including DSL fuzz targets.
-2. **Integration** — `internal/cli/integration_test.go` gated by `//go:build integration`. Shells the binary against fixture vaults in `testdata/`.
-3. **Ranking-quality eval** — `internal/connect/rank/eval_test.go` gated by `//go:build eval`. Goldens at `internal/connect/rank/testdata/golden/*.json`. NDCG@k / MRR / P@k + per-signal contribution diffs vs baseline.
+1. **Unit** — `_test.go` next to source, including DSL fuzz targets. No tag.
+2. **Integration** — `//go:build integration`, via `make test-integration`.
+3. **Ranking-quality eval** — `//go:build eval`, via `make eval`.
 
-The Council vault at `/var/mnt/data/projects/council/` is the motivating fixture and the planned `testdata/council-snapshot/`.
+How to write the assertions inside them is a separate question, and it has its
+own home: **D-32** in `governance/decisions/testing.md` — choose the default
+that makes an omission safe.
 
 ## Growth (where new work lands)
 

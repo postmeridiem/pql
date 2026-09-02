@@ -188,6 +188,24 @@ own release:
   before lint and tests over the outgoing commit range.
 - A pending **gofmt sweep** landed, with three doc comments it had broken
   corrected.
+- **The build and test docs no longer contradict the Makefile, or each other**
+  (T-115). `CLAUDE.md` and `docs/structure/project-structure.md` each carried a
+  Makefile target table calling `make lint` "`golangci-lint run`" — one third
+  of what that target has run since it started delegating to `ci/lint.sh`, so a
+  contributor who read either and ran golangci-lint by hand believed they had
+  passed a gate they had not. That is the same drift that broke the 2.0.0
+  release; it was fixed in the Makefile and in neither doc. project-structure.md
+  additionally contradicted itself, describing `ci/lint.sh`'s three stages
+  correctly twelve lines below the table that denied them.
+
+  Neither document restates the target list now. `make help` generates it from
+  the Makefile's own `##` comments and is the one copy that cannot drift;
+  `CLAUDE.md` keeps only the judgment `make help` has no room for — which
+  targets are gates, what each contains, and why `make pre-push` runs secrets
+  first. Corrected in the same pass: the flat `decisions/` path D-21 replaced,
+  the pql.db "forward migration" growth step D-19 removed, the two local-only
+  `ci/` scripts that were missing from the layout, and the CI script list, which
+  advertised a release path and a scheduled eval that nothing invokes (T-70).
 
 ## [2.2.0] - 2026-08-08
 
