@@ -66,6 +66,24 @@ vulnerabilities at any level.
 
 ### Added
 
+- **D-32, "choose the default that makes an omission safe"** (T-114, T-115) —
+  the first record in a new `testing` domain of the DQR tree, the domain D-21
+  reserved and nothing had yet used. Default to failure and require a positive
+  success condition, rather than defaulting to success and enumerating the
+  failures you thought of, so that an unanticipated failure or a forgotten line
+  lands on the safe side. It states its own edge as part of the rule: where the
+  expected value could only be produced by reimplementing the thing under test,
+  a strict assertion passes whenever both copies share a bug, so assert a
+  property a wrong implementation cannot satisfy — and say in the test why the
+  weaker claim is the stronger one.
+
+  It also settles two questions T-114 raised rather than leaving them to be
+  re-derived at each site: the `x, _ := cmd.Flags().GetBool(…)` spelling is
+  sanctioned as written, because that error can only fire on an undefined flag,
+  and the ~128 negative assertions in the test suite are explicitly not a
+  mechanical sweep — a substantial fraction of them are correct, since the
+  absence is the property under test.
+
 - **`pql decisions close <id> --into <id> | --obsolete`** (T-99, T-118),
   recording a record's terminal disposition. pql could mint a record id with
   `decisions claim` but had no counterpart for closing one, so every vault

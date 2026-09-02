@@ -74,6 +74,7 @@ You might also want, project-permitting:
 - [D-29: An argument that names a thing is validated; a value that filters a set is not](decisions/architecture.md#d-29-an-argument-that-names-a-thing-is-validated-a-value-that-filters-a-set-is-not) — _architecture_
 - [D-30: Mutation verbs return the record they changed; projection stays on the read surface](decisions/architecture.md#d-30-mutation-verbs-return-the-record-they-changed-projection-stays-on-the-read-surface) — _architecture_
 - [D-31: pql answers what is; the caller folds for what is absent](decisions/architecture.md#d-31-pql-answers-what-is-the-caller-folds-for-what-is-absent) — _architecture_
+- [D-32: Choose the default that makes an omission safe](decisions/testing.md#d-32-choose-the-default-that-makes-an-omission-safe) — _testing_
 
 ## Open questions
 
