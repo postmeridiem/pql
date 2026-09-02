@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"slices"
@@ -2109,6 +2110,68 @@ func TestIntegration_ShowVerbs_FieldsProjection(t *testing.T) {
 	}
 	if len(dec) != 2 || dec["id"] != "D-1" {
 		t.Fatalf("decisions show projection wrong: %s", out)
+	}
+}
+
+// `decisions show` answered with a header and no body, said nothing about the
+// omission, and sent callers to slice line ranges out of the markdown by hand
+// — a fallback that truncates silently or runs into the next record (T-122).
+// The body now comes back by default and `read` is an alias of the same verb.
+func TestIntegration_DecisionsShow_ReturnsBodyAndReadIsAnAlias(t *testing.T) {
+	vault := initVaultIT(t)
+	writeFileIT(t, filepath.Join(vault, "governance", "decisions", "architecture.md"), `### D-1: Only decision
+- **Date:** 2026-08-08
+- **Decision:** The body has to survive the round trip.
+- **Rationale:** Otherwise this test proves nothing.
+`)
+	pqlIT(t, vault, "decisions", "sync")
+
+	// Assert the body's actual content, not merely that a key is present: a
+	// show that returned an empty string, or the wrong record's prose, would
+	// satisfy a presence check while being exactly as useless as the header
+	// this ticket was about (D-32).
+	var shown map[string]any
+	out := pqlIT(t, vault, "decisions", "show", "D-1")
+	if err := json.Unmarshal([]byte(out), &shown); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	body, ok := shown["body"].(string)
+	if !ok || strings.TrimSpace(body) == "" {
+		t.Fatalf("decisions show returned no body: %s", out)
+	}
+	if !strings.Contains(body, "**Decision:**") {
+		t.Errorf("body does not look like the record's prose: %q", body)
+	}
+
+	// The alias must be the same command, not a similar one.
+	var viaRead map[string]any
+	outRead := pqlIT(t, vault, "decisions", "read", "D-1")
+	if err := json.Unmarshal([]byte(outRead), &viaRead); err != nil {
+		t.Fatalf("invalid JSON from read alias: %v\n%s", err, outRead)
+	}
+	if !reflect.DeepEqual(shown, viaRead) {
+		t.Errorf("read alias diverged from show:\nshow=%s\nread=%s", out, outRead)
+	}
+
+	// Projecting the body away is how a caller asks for the old card shape,
+	// and is what keeps a batch from reading a file per record.
+	var card map[string]any
+	outCard := pqlIT(t, vault, "decisions", "show", "D-1", "--fields", "id,title")
+	if err := json.Unmarshal([]byte(outCard), &card); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, outCard)
+	}
+	if _, present := card["body"]; present {
+		t.Errorf("--fields id,title should not carry body: %s", outCard)
+	}
+
+	// body is part of the projection vocabulary, not a special case.
+	var projected map[string]any
+	outBody := pqlIT(t, vault, "decisions", "show", "D-1", "--fields", "id,body")
+	if err := json.Unmarshal([]byte(outBody), &projected); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, outBody)
+	}
+	if got, _ := projected["body"].(string); got != body {
+		t.Errorf("--fields id,body returned a different body than the full record")
 	}
 }
 

@@ -174,6 +174,28 @@ func renderShowRecords[T any](cmd *cobra.Command, records []T, fields string) er
 // splitFieldList parses the --fields value: comma-separated, whitespace
 // tolerated, duplicates collapsed to the first occurrence (a repeated
 // key would otherwise emit twice).
+// projectionWants reports whether a --fields value would still include any
+// of the named keys, so a caller can skip work whose only purpose is to
+// populate them.
+//
+// An unset or '*' projection wants everything, which is the default and the
+// safe answer: the skip is an optimisation, and a wrong "no" silently drops
+// data the caller asked for while a wrong "yes" only costs a read.
+func projectionWants(fields string, names ...string) bool {
+	if fields == "" || fields == "*" {
+		return true
+	}
+	requested := splitFieldList(fields)
+	for _, want := range names {
+		for _, got := range requested {
+			if got == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func splitFieldList(s string) []string {
 	seen := make(map[string]bool)
 	var out []string

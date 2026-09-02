@@ -39,7 +39,6 @@ in a decisions/ directory at the vault root and are indexed into
 	cmd.AddCommand(closeCmd)
 	cmd.AddCommand(newDecisionsListCmd())
 	cmd.AddCommand(newDecisionsShowCmd())
-	cmd.AddCommand(newDecisionsReadCmd())
 	cmd.AddCommand(newDecisionsRefsCmd())
 	return cmd
 }
@@ -292,18 +291,30 @@ same projection surface as ` + "`pql ticket list`" + ` (D-27).`,
 // through buildDecisionTree so the JSON shape stays uniform.
 type decisionShowTree struct {
 	*repo.Decision
-	Refs    []repo.DecisionRef   `json:"refs,omitempty"`
-	Tickets []repo.TicketSummary `json:"tickets,omitempty"`
+	// Body and Headings come from the markdown file, not pql.db — the
+	// record's prose has no column. They are part of the record rather
+	// than a join: asking for a decision by id and receiving everything
+	// except what it says was the defect in T-122, where `show` answered
+	// with a header, said nothing about the omission, and sent callers to
+	// slice line ranges out of the file by hand.
+	Body     string           `json:"body,omitempty"`
+	Headings []parser.Heading `json:"headings,omitempty"`
+	Refs     []repo.DecisionRef   `json:"refs,omitempty"`
+	Tickets  []repo.TicketSummary `json:"tickets,omitempty"`
 }
 
 // buildDecisionTree assembles the decision show-tree from the
 // requested joins. A nil decision returns an empty tree — callers
 // should treat that as "not found" upstream.
-func buildDecisionTree(ctx context.Context, db *sql.DB, d *repo.Decision, withRefs, withTickets bool) (*decisionShowTree, error) {
+func buildDecisionTree(ctx context.Context, db *sql.DB, d *repo.Decision, detail *repo.DecisionDetail, withRefs, withTickets bool) (*decisionShowTree, error) {
 	if d == nil {
 		return &decisionShowTree{}, nil
 	}
 	out := &decisionShowTree{Decision: d}
+	if detail != nil {
+		out.Body = detail.Body
+		out.Headings = detail.Headings
+	}
 	if withRefs {
 		refs, err := repo.RefsOf(ctx, db, d.ID)
 		if err != nil {
@@ -325,24 +336,45 @@ func newDecisionsShowCmd() *cobra.Command {
 	var withTickets, withRefs bool
 	var fields string
 	cmd := &cobra.Command{
-		Use:   "show <id[,id,...]>",
-		Short: "Show one or more decisions with optional joins",
-		Long: `Show decisions with optional joins. Use commas to batch:
+		Use:     "show <id[,id,...]>",
+		Aliases: []string{"read"},
+		Short:   "Show one or more decisions, including the record's markdown body",
+		Long: `Show decisions. Use commas to batch:
 
   pql decisions show D-1
   pql decisions show D-1,D-2,D-3 --with-tickets
+
+The record's markdown body and its heading anchors are included by
+default: asking for a record by id gives you the record, not a card
+about it. ` + "`read`" + ` is an alias of this command and behaves
+identically — the two verbs were folded together in T-122, where the
+obvious verb answered incompletely and was silent about having done so.
+
+The body is read from the source markdown rather than pql.db, which has
+no column for it. That read is skipped when --fields is given and names
+neither ` + "`body`" + ` nor ` + "`headings`" + `, so the compact card
+costs no file access:
+
+  pql decisions show D-1,D-2,D-3 --fields id,title,status
 
 A single ID renders a single show-tree object; multiple IDs render an
 array of show-trees in the order given. Any unknown ID fails the call.
 Same batching rule as ` + "`pql ticket show`" + `.
 
 --fields narrows each record to the named keys, same vocabulary as
-` + "`decisions list`" + `. It projects the top level only: the refs and
-tickets joins are all-or-nothing.`,
+` + "`decisions list`" + ` plus ` + "`body`" + ` and ` + "`headings`" + `.
+It projects the top level only: the refs and tickets joins are
+all-or-nothing.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			ids := parseIDs(args[0])
+
+			// The body is the expensive part — one file read and parse per
+			// record. A caller who projected it away has said they do not
+			// want it, so a batched card query stays as cheap as it was
+			// before the body became a default.
+			needBody := projectionWants(fields, "body", "headings")
 
 			cfg, err := config.Load(loadOptsFromFlags(cmd))
 			if err != nil {
@@ -357,14 +389,28 @@ tickets joins are all-or-nothing.`,
 
 			trees := make([]*decisionShowTree, 0, len(ids))
 			for _, id := range ids {
-				d, err := repo.GetDecision(ctx, pdb.SQL(), id)
-				if err != nil {
-					return &exitError{code: diag.Software, msg: err.Error()}
+				var (
+					d      *repo.Decision
+					detail *repo.DecisionDetail
+				)
+				if needBody {
+					detail, err = repo.ReadDecision(ctx, pdb.SQL(), cfg.Vault.Path, id)
+					if err != nil {
+						return &exitError{code: diag.Software, msg: err.Error()}
+					}
+					if detail != nil {
+						d = &detail.Decision
+					}
+				} else {
+					d, err = repo.GetDecision(ctx, pdb.SQL(), id)
+					if err != nil {
+						return &exitError{code: diag.Software, msg: err.Error()}
+					}
 				}
 				if d == nil {
 					return &exitError{code: diag.NoInput, msg: fmt.Sprintf("decision %s not found", id)}
 				}
-				tree, err := buildDecisionTree(ctx, pdb.SQL(), d, withRefs, withTickets)
+				tree, err := buildDecisionTree(ctx, pdb.SQL(), d, detail, withRefs, withTickets)
 				if err != nil {
 					return &exitError{code: diag.Software, msg: err.Error()}
 				}
@@ -383,46 +429,11 @@ tickets joins are all-or-nothing.`,
 	return cmd
 }
 
-// --- read ---
-
-func newDecisionsReadCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "read <id>",
-		Short: "Read a record with its full markdown body",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			cfg, err := config.Load(loadOptsFromFlags(cmd))
-			if err != nil {
-				return &exitError{code: diag.NoInput, msg: err.Error()}
-			}
-
-			pdb, err := openPlanningDB(ctx, cfg)
-			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
-			}
-			defer func() { _ = pdb.Close() }()
-
-			d, err := repo.ReadDecision(ctx, pdb.SQL(), cfg.Vault.Path, args[0])
-			if err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			if d == nil {
-				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("decision %s not found", args[0])}
-			}
-
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(d, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
-		},
-	}
-}
+// `read` is no longer a command of its own. It is an alias on `show`, which
+// now returns the body by default — see newDecisionsShowCmd and T-122. The
+// alias is kept rather than dropped because every skill copy installed in the
+// field still documents `decisions read`, and an agent running one would get
+// exit 64 on a verb that had simply moved.
 
 // --- refs ---
 

@@ -193,8 +193,8 @@ anything the planning core needs to do without cobra lives under
 | `pql decisions validate [--no-style]` | Parser dry-run; structural errors (duplicate IDs, empty titles, broken refs) exit non-zero, style issues warn (`--no-style` to suppress). Cheap; safe for pre-push hooks. |
 | `pql decisions claim D\|Q\|R <domain> "title"` | Print next-available ID. No side effects. |
 | `pql decisions list [--domain X] [--type confirmed\|question\|rejected] [--status active\|resolved\|…] [--fields F] [--oneline]` | JSON array (default); `--pretty`/`--jsonl` for shape. `--fields id,status,title` projects to the named keys; `--oneline` emits a plain `id<TAB>status<TAB>title` index (D-27). Whole rows stay the default — decision rows are light. |
-| `pql decisions show <id> [--with-tickets] [--with-refs]` | Render the decision; optional joins pull linked tickets / cross-refs. |
-| `pql decisions read <id>` | Render the decision with its full markdown body. |
+| `pql decisions show <id[,id,…]> [--with-tickets] [--with-refs] [--fields F]` | Render the decision **including its `body` markdown and `headings`**; optional joins pull linked tickets / cross-refs. The body is read from the source file, not `pql.db`, and that read is skipped when `--fields` names neither `body` nor `headings` — so `--fields id,title,status` is the cheap card shape (T-122). |
+| `pql decisions read <id>` | Alias of `show`; identical behaviour. Kept because installed skill copies in the field still name it. |
 | `pql decisions refs <id>` | Graph-walk `decision_refs` in both directions. |
 
 (`pql decisions coverage` was removed per D-20 — implementation status is tracked via initiative tickets and `show --with-tickets`, not a coverage report.)

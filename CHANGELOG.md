@@ -185,6 +185,26 @@ vulnerabilities at any level.
 
 ### Changed
 
+- **`pql decisions show` returns the record, not a card about it** (T-122). The
+  markdown `body` and its `headings` now come back by default, and
+  `decisions read` is an alias of `show` rather than a separate verb — the two
+  are folded into one command.
+
+  The old split was a trap because it succeeded. `ticket show` returns the
+  ticket's description, so a caller reasonably expected `decisions show` to
+  return the record's prose; it returned a header, said nothing about the
+  omission, and `--fields '*'` did not add one. The documented workaround
+  existed, but callers who missed it fell back to slicing line ranges out of
+  the markdown, which truncates silently when a record is longer than the range
+  guessed and can run past a record boundary into the next one — producing a
+  confident wrong answer rather than an error.
+
+  The body is read from the source markdown rather than `pql.db`, which has no
+  column for it, so it costs one file read per record. **Project it away to get
+  the old compact shape and skip the read entirely**:
+  `decisions show D-1,D-2,D-3 --fields id,title,status` touches no files. The
+  card is now what you ask for rather than what you get.
+
 - **Global output flags are validated before a subcommand runs**, in the root
   `PersistentPreRunE` rather than at the point of rendering. Found while
   building the above: the render options are read at the *end* of `RunE`, so a

@@ -288,8 +288,8 @@ they live in SQLite and travel via the changelog described below.
 | `pql decisions sync [--no-style]` | Parse the DQR tree into pql.db. Also reports style problems (filename, subdir/type mismatch, domain conflicts) unless suppressed |
 | `pql decisions validate [--no-style]` | Dry run. Structural errors exit non-zero; style issues only warn |
 | `pql decisions list [--type T] [--domain D] [--status S]` | List records. `--type confirmed\|question\|rejected`, `--status active\|superseded\|resolved\|open` |
-| `pql decisions show <id[,id,…]> [--with-refs] [--with-tickets] [--fields …]` | One or more records, optionally with cross-references or the tickets implementing them. `--fields` narrows the top level; the joins are all-or-nothing |
-| `pql decisions read <id>` | The record's full markdown body |
+| `pql decisions show <id[,id,…]> [--with-refs] [--with-tickets] [--fields …]` | One or more records **including the `body` markdown and its `headings`**, optionally with cross-references or the tickets implementing them. `--fields` narrows the top level; the joins are all-or-nothing |
+| `pql decisions read <id>` | Alias of `show`. Identical behaviour — the two were folded together |
 | `pql decisions refs <id>` | Cross-references involving a record |
 | `pql decisions claim <D\|Q\|R> <domain> "title"` | Print the next free id. No side effects |
 | `pql decisions close <id> --into <id> \| --obsolete` | Record a terminal disposition: resolved, superseded, or obsolete |
@@ -298,6 +298,23 @@ Record type is `confirmed`, `question` or `rejected` — the D/Q/R of the tree �
 and status is `active`, `superseded`, `resolved` or `open`. Passing `--type Q`
 or `--status OPEN` is not an error; it returns an empty list at exit 0. See
 the filter-value warning under Contracts.
+
+**`show` gives you the record, not a card about it.** The `body` is the
+record's markdown prose and comes back by default, so there is no second verb
+to discover and no reason to open the file and slice line ranges — a habit that
+truncates silently or runs past the record boundary into the next one. `read`
+still resolves, as an alias.
+
+The body is read from the source markdown, not from `pql.db`, so it costs one
+file read per record. **Project it away when you only want the header** and the
+read is skipped entirely:
+
+```bash
+pql decisions show D-1,D-2,D-3 --fields id,title,status   # no file access
+```
+
+That is the compact shape `show` used to return; it is now what you ask for
+rather than what you get.
 
 ### Which type to reach for
 
@@ -457,8 +474,8 @@ The changelog carries a format version. An older one replays with a loud
   things" return an array; everything else returns a single object.** Arrays
   come from `files`, `tags`, `backlinks`, `outlinks`, `schema`, `base`, `query`,
   the ranked verbs, and the `list` verbs. Objects come from everything else —
-  one record (`meta`, `ticket show <one-id>`, `decisions show <one-id>`,
-  `decisions read`), a dashboard (`plan status`, `doctor`, `version
+  one record (`meta`, `ticket show <one-id>`, `decisions show <one-id>`),
+  a dashboard (`plan status`, `doctor`, `version
   --build-info`, `watch status`), or a summary of what a command did
   (`ticket new`, `decisions sync`, `plan export`).
 
@@ -555,7 +572,8 @@ Valid field names, since guessing them costs a round trip:
   (`--with-children`), `blockers` (`--with-blockers`), `subtree` (`--tree`),
   `decisions` (`--with-context`), and `message` for the empty-result shape.
 - **decisions** — `id`, `type`, `domain`, `title`, `status`, `date`,
-  `file_path`, `synced_at`; joins `tickets` (`--with-tickets`) and `refs`
+  `file_path`, `synced_at`, `body`, `headings`; joins `tickets`
+  (`--with-tickets`) and `refs`
   (`--with-refs`).
 - **ranked results** — `path`, `score`, `signals`, `connections`. Under
   `--flat-search` there is no ranking, so `path` is the only valid name.
