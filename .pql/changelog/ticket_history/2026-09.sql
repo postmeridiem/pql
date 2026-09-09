@@ -862,3 +862,144 @@ Worth noting the diagnostic already proves the list was available — ''no asset
 RETRACTING THE THIRD OPTION offered above, so this ticket stops recommending a worse path than the one it later argues for.
 
 ''Reading checksums.txt as the manifest'' was written before noticing that rel.Assets is already fetched and already iterated in the same function. It costs a second request to obtain a list the code is holding, and it makes the checksum file load-bearing for asset discovery as well as verification — coupling two concerns that are currently independent. There are two shapes, not three, and the suffix match is the one that stops describing the filename twice.', NULL, '2026-09-02 18:03:32', '2026-09-02 18:03:32.103', '2026-09-02 18:03:32.103', NULL, '102fe46ce8fde38838cd8ff3d00439f3', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QDBQTD7E1H8XZ8B4BDEQ8', 'description', NULL, '`internal/connect/signal/recency.go:23` scores from `time.Since(time.Unix(mtime, 0))`.
+The reference point is the moment the query runs, so an unchanged vault produces
+different scores on every invocation.
+
+This is not merely cosmetic drift — it reorders results, via D-11''s
+max-normalization.
+
+Mechanism. With `raw_i = 1 - age_i/2160` and `normalized_i = raw_i / max(raw)`,
+let all files age by the same δ. Both numerator and denominator shrink by δ, and
+for any candidate below the maximum that ratio *falls*:
+
+    (raw_i - δ) / (raw_max - δ)  <  raw_i / raw_max     for raw_i < raw_max
+
+So the normalized recency spread widens monotonically over time while every
+other signal stays fixed. In a weighted sum against centrality and the rest,
+two candidates whose totals sat close together will eventually swap. Nothing
+about the vault changed.
+
+The 90-day clamp compounds it: files aging past `decayHours` pin to 0 and
+collapse into ties, which then hit the unstable sort in the sibling ticket.
+
+D-11 accepts that "the same file can score differently in different queries…
+rankings are always relative". That reasoning covers batch-relative scoring and
+does not extend to this: here the same file scores differently in *the same*
+query at a different time, and the relative order changes with it.
+
+Exposure is high because recency carries weight 0.25 on `search` and is often
+the only non-zero signal. Observed on pql''s own vault:
+
+    pql search architecture --full
+    → top hit scores exactly 0.25, every signal zero except recency
+
+That result is ordered purely by a float derived from the current time.
+
+Possible directions, cheapest first:
+
+1. Make the reference time injectable — a clock on `signal.Context`, defaulting
+   to `time.Now()`. Tests pin it; production is unchanged. Fixes reproducibility
+   without touching semantics.
+2. Derive the reference from the corpus (e.g. max mtime in the candidate batch)
+   rather than wall-clock, making recency purely a function of the vault.
+3. Let a vault zero the recency weight in its profile. Purely additive, useful
+   for authored corpora where mtime is an install artifact rather than a date.
+
+(1) and (3) are compatible and neither changes behaviour for existing callers.
+(2) is a semantic change and wants its own decision.
+
+Note this touches only the ranking signal. It is independent of the other two
+mtime consumers — `index/indexer.go` change detection and
+`planning/changelog/importer.go` cross-repo sync — which read mtime from
+`os.FileInfo` and the files table directly and never go through this path.', NULL, '2026-09-09 06:34:06', '2026-09-09 06:34:06.575', '2026-09-09 06:34:06.575', NULL, '485cd77ed830c0206ac0ee63a644ac6a', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QXQ7QBFKMY53RAXEGYP1C', 'description', NULL, '`internal/connect/rank.go:52` sorts with `sort.Slice` and a comparator that
+compares `Score` alone:
+
+    sort.Slice(enriched, func(i, j int) bool {
+        return enriched[i].Score > enriched[j].Score
+    })
+
+`sort.Slice` is not stable, and the comparator defines only a partial order, so
+tied candidates come out in whatever arrangement pdqsort leaves them in. That is
+a function of the input order, which the sibling ticket shows is itself not
+pinned.
+
+Ties are common rather than exotic. Any link-sparse vault gives centrality,
+link_overlap and tag_overlap of 0 across the whole batch, so the score collapses
+onto one or two signals and clusters. Files aged past the 90-day recency clamp
+tie at exactly 0.
+
+Fix is two lines — a total order plus a stable sort:
+
+    sort.SliceStable(enriched, func(i, j int) bool {
+        if enriched[i].Score != enriched[j].Score {
+            return enriched[i].Score > enriched[j].Score
+        }
+        return enriched[i].Path < enriched[j].Path
+    })
+
+The `Path` tie-break is the load-bearing half: it makes the ordering total, so
+the result no longer depends on candidate order at all. That is worth having
+regardless of what the sibling ticket does about ORDER BY, and it is the cheapest
+way to make ranked output reproducible.
+
+`SliceStable` on its own would only preserve an input order that is not
+guaranteed, so prefer the explicit tie-break over relying on stability.', NULL, '2026-09-09 06:34:34', '2026-09-09 06:34:34.968', '2026-09-09 06:34:34.968', NULL, 'dc8a8dae43d9507abd5a2a1f144f6fb6', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89R15HFKK0Y3EFGJXDAQEBG', 'description', NULL, 'None of the three `gatherCandidates` functions pins row order:
+
+- `internal/intent/search/search.go:43`
+- `internal/intent/related/related.go:41`
+- `internal/intent/context/context.go:57`
+
+Each is a `SELECT DISTINCT path FROM ( ... UNION ... )` with no ORDER BY. SQLite
+does not guarantee row order without one.
+
+In practice the order is stable today: `UNION` (as opposed to `UNION ALL`)
+requires deduplication, which SQLite currently implements with a temporary
+B-tree, and that happens to emit rows sorted. So this is latent, not an active
+bug — which is precisely why it is worth pinning explicitly rather than leaving
+to chance. The behaviour rests on a query-planner implementation detail, and a
+SQLite upgrade, an added index, or different ANALYZE stats can change it with no
+change to this code. That failure would be silent: results shift, nothing errors.
+
+Fix is `ORDER BY path` on the outer SELECT in all three.
+
+Worth doing even after the tie-break in the sibling ticket lands. The tie-break
+makes the final output order independent of candidate order, so the two are not
+redundant defences of the same thing:
+
+- ORDER BY pins what the ranking layer *receives*, which matters for debugging,
+  for reproducible `--full` signal output, and for anything that reads
+  candidates before scoring.
+- The tie-break pins what callers *see*.
+
+Cost is negligible: these batches are small and the temp B-tree is already
+sorting.', NULL, '2026-09-09 06:34:51', '2026-09-09 06:34:51.932', '2026-09-09 06:34:51.932', NULL, '750165e7b0c6e66e873c97103d1bf572', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89R35V3EJQDYRRW7K98VWZG', 'description', NULL, '`search`, `related` and `context` can return different results for an unchanged
+vault, across three independent causes. None is a scoring-quality question — the
+issue is that the same inputs do not reliably produce the same output.
+
+Found 2026-09-06 while evaluating pql as the corpus substrate for another
+project that needs byte-reproducible query results for headless testing. That
+project has since gone its own way, so this is filed purely on pql''s own merits:
+several consuming repos call the ranked verbs today, so unreproducible output is
+a live problem rather than a hypothetical one.
+
+Children:
+
+- Recency signal derives from wall-clock (the one that actively changes results)
+- Rank sorts with an unstable sort and no tie-break
+- gatherCandidates has no ORDER BY in any of the three verbs
+
+The last two are latent rather than active: SQLite''s UNION dedup currently emits
+rows in sorted order via a temp B-tree, so candidate order happens to be stable
+today. That is a query-planner implementation detail, not a contract — a SQLite
+upgrade, a new index, or ANALYZE stats can change it with no code change here.
+
+Suggested order of work: the two ordering fixes first (cheap, self-contained,
+and together they make ranking total-ordered regardless of what SQLite does),
+then the recency clock, which needs a design call rather than a patch.', NULL, '2026-09-09 06:34:55', '2026-09-09 06:34:55.717', '2026-09-09 06:34:55.717', NULL, '6a5ed125c6d563c13ec0f8956ae5a1f0', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QDBQTD7E1H8XZ8B4BDEQ8', 'parent_id', NULL, 'T-129', NULL, '2026-09-09 06:34:58', '2026-09-09 06:34:58.166', '2026-09-09 06:34:58.166', NULL, '750b6f0d1256d064eaaa05a26d1785fe', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89R15HFKK0Y3EFGJXDAQEBG', 'parent_id', NULL, 'T-129', NULL, '2026-09-09 06:34:58', '2026-09-09 06:34:58.174', '2026-09-09 06:34:58.174', NULL, '21d9be37ee3d22792d1a3b68bdb1a68b', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QXQ7QBFKMY53RAXEGYP1C', 'parent_id', NULL, 'T-129', NULL, '2026-09-09 06:34:58', '2026-09-09 06:34:58.174', '2026-09-09 06:34:58.174', NULL, '93a7008d7f59eaf9f715d5ea5d0c2ff0', 2) ON CONFLICT(hash) DO NOTHING;
