@@ -77,6 +77,7 @@ You might also want, project-permitting:
 - [D-32: Choose the default that makes an omission safe](decisions/testing.md#d-32-choose-the-default-that-makes-an-omission-safe) — _testing_
 - [D-33: CI scripts are the definition; callers invoke, never restate](decisions/process.md#d-33-ci-scripts-are-the-definition-callers-invoke-never-restate) — _process_
 - [D-34: Unreleased section; the version is chosen at release](decisions/process.md#d-34-unreleased-section-the-version-is-chosen-at-release) — _process_
+- [D-35: The changelog is a log; the push boundary is the rewrite rule](decisions/architecture.md#d-35-the-changelog-is-a-log-the-push-boundary-is-the-rewrite-rule) — _architecture_
 
 ## Open questions
 
