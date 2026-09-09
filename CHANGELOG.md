@@ -19,16 +19,21 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ### Fixed
 
-- **A ticket mutation can no longer silently re-mint labels from T-1.** On a
-  clone whose committed changelog held history but whose replica had never
-  replayed it (typically: hooks not planted, so the clone-time import never
-  fired), any ticket mutation would create an empty `pql.db` and hand out
-  `T-1` again — a collision that surfaced only at the next replay, after the
-  wrong label had been cited in prose, commits, and consuming repos. Every
-  ticket mutation now runs a guard first and refuses that state with exit 65
-  and a hint naming the remedy (`pql plan import`, then retry). The guard
-  lives in the changelog package, so future writing consumers (the planning
-  MCP) inherit it (T-96).
+- **A ticket mutation can no longer silently re-mint an already-used label.**
+  Two stale-replica states allowed it: a clone whose committed changelog held
+  history but whose replica never replayed it (hooks not planted, so the
+  clone-time import never fired) would hand out `T-1` again, and a replica
+  the changelog had moved past (pulled, but the post-merge import never
+  fired) would re-mint whatever came after its stale maximum. Either
+  collision surfaced only at the next replay, after the wrong label had been
+  cited in prose, commits, and consuming repos. Every ticket mutation now
+  runs a guard first: it reads the changelog's ever-minted labels the way
+  replay does (staged through SQLite, per D-28) and refuses both states with
+  exit 65, the diagnostic naming both label positions and the hint naming
+  the remedy (`pql plan import`, then retry). A replica *ahead* of the
+  changelog — write-through with an export pending — passes. The guard lives
+  in the changelog package, so future writing consumers (the planning MCP)
+  inherit it (T-96, T-123).
 
 - **Tied scores in ranked results now order by path instead of by accident.**
   The ranker sorted on score alone with an unstable sort, so candidates with

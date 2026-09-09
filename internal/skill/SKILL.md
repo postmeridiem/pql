@@ -473,11 +473,14 @@ The changelog carries a format version. An older one replays with a loud
 *newer* than the binary is refused outright, and the fix is to upgrade pql.
 `pql version --build-info` reports every version axis the binary speaks.
 
-**A ticket mutation against an empty replica beside a populated changelog
-is refused** (exit 65): that state means the clone never replayed — usually
-because the hooks were never planted — and writing would re-mint labels
-from T-1. The diagnostic's hint names the fix: `pql plan import`, then
-retry. Read verbs are unaffected.
+**A ticket mutation against a replica behind the committed changelog is
+refused** (exit 65). Two flavours of the same state: an empty replica
+beside a populated changelog (the clone never replayed — usually the
+hooks were never planted), or a populated replica the changelog has moved
+past (pulled, but the post-merge import never fired). Writing in either
+would re-mint an already-used label. The diagnostic names both label
+positions and the hint names the fix: `pql plan import`, then retry.
+Read verbs are unaffected.
 
 ---
 

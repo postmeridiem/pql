@@ -61,6 +61,63 @@ func TestGuard_EmptyReplicaWithHistoryRefuses(t *testing.T) {
 	}
 }
 
+// The T-123 state: a populated replica the changelog has moved past — the
+// clone pulled newer changelog files but the post-merge import never fired.
+// Allocation would hand out max+1 over the stale replica, re-minting a
+// label the changelog already holds.
+func TestGuard_BehindReplicaRefuses(t *testing.T) {
+	ctx := context.Background()
+
+	// Upstream mints two tickets and exports.
+	srcVault, srcDB := setupVault(t)
+	seedTicket(t, srcDB, "T-1", "2025-05-08 11:00:00")
+	seedTicket(t, srcDB, "T-2", "2025-05-08 11:01:00")
+	if _, err := Export(ctx, srcDB, srcVault); err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+
+	// The clone replayed only up to T-1, then pulled upstream's changelog.
+	dstVault, dstDB := setupVault(t)
+	seedTicket(t, dstDB, "T-1", "2025-05-08 11:00:00")
+	copyTree(t,
+		filepath.Join(srcVault, ".pql", "changelog"),
+		filepath.Join(dstVault, ".pql", "changelog"),
+	)
+
+	err := GuardReplicaCurrent(ctx, dstDB, dstVault)
+	if err == nil {
+		t.Fatal("guard on behind replica: nil, want refusal")
+	}
+	if !strings.Contains(err.Error(), "behind") ||
+		!strings.Contains(err.Error(), "T-1") || !strings.Contains(err.Error(), "T-2") {
+		t.Errorf("refusal should name both label positions, got: %v", err)
+	}
+
+	// Import closes the gap; the guard passes.
+	if _, err := Import(ctx, dstDB, dstVault); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if err := GuardReplicaCurrent(ctx, dstDB, dstVault); err != nil {
+		t.Errorf("guard after import: %v, want nil", err)
+	}
+}
+
+// A replica ahead of the changelog is write-through with an export pending,
+// not staleness — it must pass.
+func TestGuard_AheadReplicaPasses(t *testing.T) {
+	ctx := context.Background()
+	vault, db := setupVault(t)
+	seedTicket(t, db, "T-1", "2025-05-08 11:00:00")
+	if _, err := Export(ctx, db, vault); err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	seedTicket(t, db, "T-2", "2025-05-08 11:02:00") // written, not yet exported
+
+	if err := GuardReplicaCurrent(ctx, db, vault); err != nil {
+		t.Errorf("guard on ahead replica: %v, want nil", err)
+	}
+}
+
 // Empty .sql files carry no history — a replica beside them is genuinely
 // fresh, not stale.
 func TestGuard_EmptyChangelogFilesPass(t *testing.T) {
