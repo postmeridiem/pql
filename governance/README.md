@@ -92,6 +92,7 @@ You might also want, project-permitting:
 - [Q-11: Comment / discussion threads on tickets (and decisions?)](questions/architecture.md#q-11-comment--discussion-threads-on-tickets-and-decisions) — _architecture_
 - [Q-12: External tracker (JIRA) as a pql ticket backend — proxy or separate tool?](questions/architecture.md#q-12-external-tracker-jira-as-a-pql-ticket-backend--proxy-or-separate-tool) — _architecture_
 - [Q-13: GitHub/Gitea issue backend for ID claiming and one-way mirror](questions/architecture.md#q-13-githubgitea-issue-backend-for-id-claiming-and-one-way-mirror) — _architecture_
+- [Q-14: Corpus-derived reference time for the recency signal](questions/architecture.md#q-14-corpus-derived-reference-time-for-the-recency-signal) — _architecture_
 
 ## Resolved questions
 
