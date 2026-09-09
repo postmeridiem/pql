@@ -17,6 +17,8 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-09-09
+
 ### Changed
 
 - **Batch mutation verbs now return one summary, never N whole records**
