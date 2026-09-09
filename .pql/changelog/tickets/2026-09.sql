@@ -2462,3 +2462,337 @@ RELATED
 
 D-15, D-16 - changelog replication and the guards that make replay safe.
 T-123     - the other place the single-writer assumption shows at the seam.', 'backlog', 'medium', NULL, NULL, NULL, '2026-09-09 06:38:53.722', '2026-09-09 06:39:18.723', NULL, '45998b48df550fb66a0bbb9ddc7bbea8', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G8AYTGD7JX35YTJSCAP1PEBG', 'bug', NULL, 'decisions sync and close write plain-text warnings to stderr, violating the JSON-per-line contract', 'The output contract (docs/output-contract.md) mandates that stderr carry JSON-per-line diagnostics: {level, code, msg, hint}. Three call sites emit plain ''warn: ...'' text instead: internal/cli/decisions.go:112 and :121 (style warnings and README-regeneration failure during sync) and internal/cli/decisions_close.go:150. Any caller parsing stderr as line-delimited JSON fails on these lines. Fix: route through diag.Warn() (internal/diag) like every other diagnostic. Found by a convention audit of the CLI surface; the same audit confirmed all other stderr paths conform.', 'backlog', 'high', NULL, NULL, NULL, '2026-09-09 09:24:06.378', '2026-09-09 09:24:06.378', NULL, '6a2df4a3992c7075143fca103bfdf533', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G8AYVAEYNTR8A2QFV3ZPGS0C', 'task', NULL, 'output-contract polish: sanction version''s plain text, settle the shell REPL stderr format, align --status help', 'Three small contract/help inconsistencies from the same CLI audit, none a behaviour bug. (1) Bare ''pql version'' prints plain text (internal/cli/root.go:134) but docs/output-contract.md names only two sanctioned plain-text exceptions (--id-only, --oneline) — document version as the third; do not change the output, the clean version string is deliberate. (2) The interactive shell''s REPL errors are plain text on stderr (internal/cli/shell.go:94,99,104,108) — decide whether an interactive REPL is exempt from the JSON-per-line stderr rule and write the answer into the contract, or convert to diag JSON. (3) --status help text drifts between siblings: ''ticket list --status'' says ''filter by status'' (ticket.go:419), ''decisions list --status'' enumerates its vocabulary (decisions.go:277), and only ''ticket board --status'' documents its exit-64 validation (ticket.go:1304) — align the wording, keeping the deliberate D-29 semantic difference (board validates, list does not) stated where it applies.', 'backlog', 'medium', NULL, NULL, NULL, '2026-09-09 09:24:13.047', '2026-09-09 09:24:13.047', NULL, '0570be824ab271042acc3a1d733322f6', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G8AYX5XJWXT91BZHE2A8JYAG', 'epic', NULL, 'the changelog is the log of record — make mutations honor it', 'Four shipped defects share one root: pql mutates planning state as if the local replica (.pql/pql.db) were authoritative, when the committed changelog is the log of record (D-15, D-28). T-96: a mutation against a populated changelog with an empty db silently relabels from T-1. T-105: scrubbing a changelog file does not survive the next mutation, because export is watermark-driven and re-emits the unscrubbed row. T-123: ticket new allocates a label from a replica it never checks is current. T-130: plan export cannot regenerate the changelog, so redaction means rebuild-and-refile by hand. Each child is fixable alone, but the durable fix is one discipline: before allocating or emitting, a mutation consults the changelog side, not just the replica. Adjacent but out of scope: T-111 (the pre-commit hook exports whatever vault the environment names) — that is an init/hook defect, not a replica-trust one.', 'backlog', 'high', NULL, NULL, NULL, '2026-09-09 09:24:28.268', '2026-09-09 09:24:28.268', NULL, '1f776093ed61deaea1445aed4bfe7546', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY7JHX6RH2BQK3R9VVP1ZX68', 'bug', '06G8AYX5XJWXT91BZHE2A8JYAG', 'a mutation against a populated changelog with an empty db silently relabels from T-1', 'Observed 2026-08-09 in pql''s own repo. Running ''pql --vault <repo> ticket new'' where .pql/pql.db does not exist but .pql/changelog/ holds a full history does NOT import the changelog first. It creates an empty db and mints the new ticket as T-1, colliding with the existing T-1. The vault already ran to T-94. Nothing is corrupted - identity is the ULID and the changelog is append-only - but the label collision is silent at creation time. It surfaced only on the next plan rebuild, which reported it correctly and clearly. Two contributing gaps. First, the docs say plan import runs automatically on a fresh clone; that holds only where pql init has planted the hooks. pql''s own repo has never been inited (doctor reports config.loaded false, no .pql/config.yaml), so nothing auto-imports there. Second, and the real fix: any planning mutation should detect changelog-present-but-db-empty and either import first or refuse with a diagnostic. Silently starting the label sequence at 1 is the one behaviour that produces a collision. Recovery, for the record: plan rebuild --verify restores everything and reports the collision, then relabel by record_id. Note relabel T-1 fails with a circular message telling you to run relabel; the ambiguous label cannot address either record, so the ULID is required. Worth a clearer diagnostic there too.
+
+CORRECTION to the paragraph above about this repo never having been inited.
+
+That claim was overstated and was used to explain the wrong thing. What is true: this repo has no .pql/config.yaml and no planted hooks, and that is still why the clone-time import never fires, which is the substance of this ticket. What is not true is the inference drawn from it at the time - that the vault held no decisions. It holds 44, in governance/decisions/architecture.md, D-1 through D-31 plus questions and rejected records. They were simply never synced into the database; one decisions sync populated all of them and reported 69 cross-references and nothing broken.
+
+The mistake underneath it is worth recording because it is the same shape as this ticket''s own subject. pql doctor reports db.exists for index.db, the query cache. Planning state is a different database, pql.db, and it did exist. Reading one field as evidence about the other produced a confident and wrong conclusion about the repo''s state - exactly the way an empty label sequence produced a confident and wrong T-1 above.
+
+Nothing about the proposed fix changes. The guard still belongs in the mutation path rather than in the hooks, for the reason already given: the hooks are what is missing whenever this bites.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-08 23:51:49.814', '2026-09-09 09:24:32.579', NULL, '9e4d7bf6dc13c3555002129aee91827c', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4FHC4YQRSRC071QNEWM64G', 'bug', '06G8AYX5XJWXT91BZHE2A8JYAG', 'Scrubbing a changelog file does not survive the next mutation', 'A value removed from a committed changelog file is re-published by the next ticket mutation, because pql.db still holds the original row and the write-through export (D-23) re-derives the file from it.
+
+OBSERVED 2026-08-11. A ticket_history row had been scrubbed by hand — one line edited — before the commit that introduced it. Creating an unrelated ticket months later triggered the export, which re-appended that same row: byte-identical to the committed one apart from the scrubbed line, which came back in full. Same content hash on both. It was caught in review and removed from the working tree before staging, so nothing was published, but only because someone happened to diff the export before committing it.
+
+TWO MECHANISMS COMPOUND, and either alone would be survivable.
+
+1. The export boundary appears to be inclusive. The re-appended row''s updated_at equalled last_export_marker exactly, so a row already exported was exported again. A row that has not changed since the last export has nothing new to say, and re-emitting it is what turned a stale row into a live one.
+
+2. The changelog is derived, and a scrub edits only the derivation. pql.db is the source the export reads. Editing the artefact leaves the source untouched, so the edit survives exactly until the next write — which is the least intuitive moment for it to be undone, because nothing about creating an unrelated ticket suggests it will rewrite history.
+
+WHY THIS MATTERS MORE THAN IT LOOKS. This repo''s own CLAUDE.md states that everything committed here is published and indexed, that ticket prose is published prose, and that the changelog is committed by design so tickets travel with a clone. It also documents that history already carries findings resolved by untracking a file rather than rewriting the past. So scrubbing-before-commit is an established practice here, and this makes that practice unreliable in a way its user cannot see.
+
+The pre-push gate scans the outgoing range, so it can catch a re-published value — but only for patterns its ruleset knows. A consuming repo''s name, a project path, or anything else specific to an operator''s environment is not a secret by any default ruleset, and those are precisely what the scrub-before-commit habit exists to remove.
+
+WHAT ACTUALLY WORKED, and is worth documenting either way: `rm .pql/pql.db && pql plan rebuild` rebuilt the database from the scrubbed changelog and dropped the row. The repo''s documented recovery path is also its scrub-completion path, which is not obvious from either description. Verified: the row was present before the rebuild and absent after, with no ticket lost.
+
+DIRECTIONS, not a prescription:
+  - Make the export boundary exclusive, so an unchanged row is not re-emitted. Necessary, not sufficient: it fixes recurrence, not the divergence.
+  - Treat a changelog edit as a database edit, or refuse it — the artefact and its source must not be independently editable if one regenerates the other.
+  - At minimum, document that a scrub is incomplete until the database is rebuilt from the scrubbed file, and say so where the scrub-before-commit practice is described rather than only under recovery.
+
+Distinct from T-96, which is about a mutation against a populated changelog with an empty database. This is the reverse: a populated database re-deriving over an edited changelog.
+
+CORRECTION (T-106/T-107 round, 2026-08-11). The first prescribed direction here —
+"make the export boundary exclusive" — is wrong and must not be implemented as
+written.
+
+The boundary is inclusive (`updated_at >= marker`) by design, not by oversight.
+`exporter.go:26-33` documents why: write-through (D-23) calls Export after every
+mutation, advancing the marker to "now" at second granularity. A mutation landing
+in the SAME second as the marker would be silently skipped under a strict `>` —
+which is exactly the data-loss class write-through exists to close. Making the
+boundary exclusive trades this ticket''s re-emission-of-a-stale-row problem for
+silent non-persistence of a live one. The second problem is worse: this ticket''s
+symptom is noise a diff can catch (as this one was); the exclusive-boundary
+failure mode is data that was never written and gives no signal that it is
+missing.
+
+The actual mechanism, confirmed by tracing `fileSink.appendLine` /
+`fileSink.loadSeen` (`exporter.go:108-157`): a re-scanned row that is
+byte-identical to what is already in the file is deduped and never written twice
+— dedup is by content, not by marker exclusion. This ticket''s failure case is
+narrower than "the boundary re-emits": it is specifically the scrub case, where
+the row on disk and the row in pql.db have *diverged* (the file was hand-edited,
+the database was not), so the re-scanned line is no longer byte-identical to what
+loadSeen has on record and gets written as new content. An exclusive boundary
+would not touch this at all, because the row that re-appears was never re-scanned
+by the exclusive/inclusive distinction in the failing case that matters —
+it would only stop the *harmless* re-scan-of-identical-content case T-107
+separately (and also wrongly) worried about.
+
+Second and third directions stand. "Treat a changelog edit as a database edit,
+or refuse it" is the real fix and is still undecided — out of scope for the
+T-106/T-107 round, which fixed the two rebuild-side defects (T-106: decisions
+lost on recovery; T-107: investigated and found already fixed by T-26, see that
+ticket''s closing note) without touching the export-boundary question this
+ticket raises. "Document that a scrub is incomplete until rebuilt" is now true
+by construction where it matters: `pql plan rebuild` (this ticket''s own
+documented recovery) now also restores decisions (T-106''s fix), so the rebuild
+path is a more complete scrub-completion step than it was when this ticket was
+filed, but the underlying editable-artefact-vs-source divergence this ticket
+names is unresolved and open.', 'backlog', 'high', NULL, NULL, NULL, '2026-08-11 19:13:08.647', '2026-09-09 09:24:32.587', NULL, '6202b0585181075194cc83da03e6eb5a', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G64CE0WTT40RJ9TE0VT95FYW', 'task', '06G8AYX5XJWXT91BZHE2A8JYAG', 'ticket new allocates a label from a replica it never checks is current', 'Label collisions are detected at replay and repaired by `ticket relabel --fix-prose`. Nothing checks before the label is handed out, so the window between allocation and replay is where the damage happens.
+
+THE SEQUENCE. A clone whose .pql/changelog is behind its remote still has a local pql.db that answers ''the next free label is T-N''. `ticket new` takes it and succeeds. The label is then used immediately — in the ticket''s own prose, in a commit message, and in a consuming project that cites the upstream ticket by label. Only later, when the changelog is pulled and replayed, does the collision surface. By then the wrong label has been published in places replay cannot see.
+
+WHY --fix-prose DOES NOT CLOSE IT. That flag rewrites whole-word mentions in the DQR tree, which is the right scope for the vault it runs in. A label also travels outward: into commit bodies, and into other repositories that cite this one''s tickets. Those are not rewritable — a pushed commit message cannot be corrected without rewriting history, and the citing repo may not even be checked out. Observed: a consuming project committed ''filed upstream as T-<n>'' where <n> had been allocated from a stale replica; the ticket now carries a different label, upstream''s real T-<n> is an unrelated ticket, and the citing commit is already published.
+
+THE DESIGN IS NOT THE PROBLEM. record_id is stable (D-26), the friendly label is explicitly not authoritative, collisions are anticipated, and the repair verb is thorough. The gap is that the only signal arrives after the label has been used, and the caller had no way to know the replica was stale — `pql doctor` reports config, db, skills, vault and version, and nothing about whether the replica is behind what is tracked.
+
+DESIRED, not a design: someone about to file learns that this vault''s replica is behind before a label is allocated, not after it has been cited. A warning or refusal from `ticket new` when the changelog on disk holds labels the db does not, a staleness line in `doctor`, or an allocation that consults the changelog rather than only the replica would each do it. Refusing outright may be too strong for a vault with no remote at all, so the check probably has to be conditional on there being something to be behind.
+
+This is the single-writer assumption showing at the seam rather than a bug in any one verb: with one clone, allocating from local state is always right and replay is a formality. With two, it is optimistic locking without the check, and the failure is silent.', 'backlog', 'medium', NULL, NULL, NULL, '2026-09-02 12:57:02.950', '2026-09-09 09:24:32.588', NULL, '299e10e078f8a4809df5a9faf176b789', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89S0F3600NPD1978YNJP9CR', 'task', '06G8AYX5XJWXT91BZHE2A8JYAG', 'plan export cannot regenerate the changelog, so redacting ticket prose means rebuild-and-refile', 'Found 2026-09-09 while removing sibling-repo names and a hostname from a ticket
+description before pushing. `make secrets` caught it, which is the system
+working — CLAUDE.md is explicit that ticket prose is published prose, and the
+gate ran before anything left the machine. What is missing is the route from
+"caught it" back to a clean changelog.
+
+WHY THE OBVIOUS FIXES DO NOT WORK
+
+Fixing forward makes it worse. `ticket refine write` appends a ticket_history
+row whose `old_value` is the previous description, so correcting a leaked
+description writes the leaked text into the changelog a second time. The
+outgoing diff then contains two copies rather than none.
+
+Wiping and re-exporting does not work either. `plan export` emits "every
+replicated planning row that has been modified since the last export", so it is
+watermark-driven. Restoring the changelog files to an earlier state and
+re-running it re-emits only rows touched since the watermark — in this case two
+rows out of the fifteen or so that were needed. The rest stayed in pql.db,
+absent from the changelog, with no supported way to get them back out.
+
+WHAT IT ACTUALLY TOOK
+
+    git reset --soft origin/main
+    git checkout origin/main -- .pql/changelog
+    rm .pql/pql.db
+    pql plan rebuild --verify
+    # then re-create four tickets by hand, re-entering every description,
+    # and re-attach the parent links
+
+That works and `--verify` reported 0 rows lost, but it is a hand-rolled
+procedure recovered from reading the exporter''s help text under time pressure,
+and the re-entry step is transcription with no check on it. Anyone hitting this
+without the descriptions still in front of them loses the prose.
+
+THE ASYMMETRY
+
+`plan rebuild` reconstructs pql.db from the changelog and can be forced at any
+time. There is no inverse. The pair is documented as replication, but only one
+direction can be regenerated on demand — the other is append-only and
+watermarked, so pql.db''s current state cannot be re-expressed as changelog
+content once the watermark has passed it.
+
+THE DESIGN QUESTION UNDERNEATH, which is why this is not just a missing flag
+
+Is the changelog an append-only *log*, or a materialised *replica*?
+
+- As a log, redaction is illegitimate by construction and the honest answer is
+  that scrubbing prose requires rewriting git history, with the D-16 hashes and
+  LWW guards recomputed. A `--force-full` export would be a footgun that
+  silently rewrites replicated history other clones have already replayed.
+- As a replica, regenerating it from pql.db is the natural operation and its
+  absence is the defect.
+
+D-15 and D-16 lean toward log (monthly append files, inline LWW guards, content
+hashes, ON CONFLICT DO NOTHING on replay), but `plan rebuild` treats pql.db as
+fully derivable from it, which is replica-shaped. The two readings have not had
+to disagree until now.
+
+Worth noting the blast radius differs by case. Redacting a ticket that has never
+been pushed — this case — touches nothing another clone has seen, and a full
+regeneration is safe. Redacting one that has been replayed elsewhere is a
+distributed-state problem and probably out of scope for any flag.
+
+DESIRED, not a design
+
+Someone who has just been told by `make secrets` that a ticket description
+leaks should have a supported route to fix it that does not involve re-entering
+prose. Shapes worth weighing:
+
+- A full/forced export that rewrites the month''s files from pql.db, refusing (or
+  loudly warning) when the affected rows appear in commits already pushed.
+- A redact verb scoped to descriptions, which rewrites the row and its history
+  entries in place rather than appending.
+- Nothing in the tool, and instead a documented procedure in CLAUDE.md next to
+  the "ticket prose is published prose" table — cheapest, and honest if the log
+  reading wins.
+
+The third is a legitimate outcome. What is not legitimate is the current state,
+where the gate reliably catches the problem and the recovery is undocumented.
+
+RELATED
+
+D-15, D-16 - changelog replication and the guards that make replay safe.
+T-123     - the other place the single-writer assumption shows at the seam.', 'backlog', 'medium', NULL, NULL, NULL, '2026-09-09 06:38:53.722', '2026-09-09 09:24:32.589', NULL, '6ebca60e4737871275c0a8dc8c7fec0e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4CTAFNM4369HAGBYS2F728', 'task', NULL, 'ticket list has no filter for the terminal distinction it already models', '`pql ticket statuslist` already returns `is_terminal` per status. D-24 made the status vocabulary configurable and had the engine reason about *classes* rather than literal names, precisely so consumers would stop mirroring pql''s enum. So "is this ticket still open" is expressible in pql''s own model, and pql already computes it internally: the terminal set clears blockers, is excluded from `--unblocked` and from refine, and is what `plan whatsnext` keys off.
+
+`ticket list` cannot ask it. `--status` takes one literal name and there is no flag for the distinction, so every caller reimplements the concept. The obvious implementation is to exclude the names `done` and `cancelled` — which are the *default* vocabulary, not the guaranteed one. A vault that configures its own statuses, which is the entire point of D-24, gets a silently wrong answer from that filter: closed work counted as open, no error, nothing spelled wrong anywhere. The failure is invisible in exactly the vaults the configurability was added for.
+
+Suggested shape:
+
+    pql ticket list --open      # status is_terminal = false
+    pql ticket list --closed    # the complement
+
+Composing with the existing filters the way `--leaf` and `--unblocked` already do.
+
+The complement is worth naming separately, because it is the more thoroughly missing half. There is no way to ask "what reached a terminal status", so "what got closed" — the question a review or a release note is assembled from — has no expression at all. Note honestly that `--closed` alone does not finish that job: there is no date axis on `ticket list` either, so "closed in this period" still needs something `--closed` does not provide. Worth recording as the adjacent gap rather than smuggling into this one.
+
+A generalisation to weigh before implementing: D-24 models four classes, not two, so a `--class terminal|review|active|initial` filter would cover this plus "what is in flight" with one flag rather than a pair, and would stay correct if a vault''s vocabulary grows. Against it: `--open` is the word callers actually reach for, and the terminal split is the one the engine treats as load-bearing everywhere else. Either is defensible; picking the class filter and documenting `--open` as its common case would be the more conservative choice.
+
+This is not the absence filter D-31 declined, and the distinction is worth stating so the ticket is not read as relitigating it. Every filter D-31 refused is a join predicate in disguise — "has no linked ticket", "has no label" — a claim about the absence of rows in another table. `--open` is a predicate on a column this row already carries, resolved through a vocabulary pql itself defines and publishes via `statuslist`. It is nearer to `--status` than to `--unimplemented`: same axis, coarser grain, and it opens no door to `--untagged` or `--childless` because those are still about other tables. If that reading is wrong then this should be closed against D-31 rather than implemented — but the line D-31 draws looks stable under it.
+
+One observation about what pql does today, because it argues for the flag rather than against the contract. A caller reaching for `--open` gets exit 64 and `{"level":"error","code":"cli.error","msg":"unknown flag: --open"}`. That is correct in every respect: an unknown flag is a caller mistake, the diagnostic names it, stdout stays empty. The failure observed was one layer up — a wrapper invoking pql with stderr suppressed, reading the empty stdout as "no open tickets", and reporting a clean board. pql said what was wrong and the caller discarded the channel it said it on. The interesting part is *why* the caller guessed that flag: because the concept exists in the model and is simply not reachable from the read surface. People reach for `--open` because pql already knows what open means.
+
+Backward compatibility: an additive optional flag. Absent, nothing changes — no default projection change, unlike D-27.
+
+AUDIT NOTE (2026-09-09). Half of this shipped in v2.1: ''ticket board --open'' exists (internal/cli/ticket.go:1304-1305) and drops terminal columns. ''ticket list'' still has no --open — its filters are --status, --team, --assigned, --decision, --label, --under, --leaf, --unblocked (ticket.go:419-426). Remaining scope narrows to the list verb: an --open flag (or equivalent terminal-class filter) so a caller can ask for actionable tickets without naming every non-terminal status. The status-class vocabulary from D-27 already models the distinction; this is surface, not model.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-11 19:01:15.518', '2026-09-09 09:24:43.015', NULL, 'e0a0f8c8387ca324c5de1a3731658dd9', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FYCKFVEFFH2DPVB97FM1NF6W', 'task', NULL, 'Tickets cannot be searched by text, so duplicates are cheap to file', 'There is no way to ask ''has this already been raised?''. ''ticket list'' filters by status, team, assignee, label, decision, parent, leaf and unblocked - every axis except the words. So the check costs reading every row by eye, or a pipe to grep, and in an agent harness a pipe defeats prefix allowlisting and triggers a permission prompt. A check that expensive gets skipped, and then duplicates get filed. That happened in a vault I maintain on 2026-08-09: a new ticket restated an existing one that had already recorded, triaged and suppressed the same finding, at 41 tickets. This vault is at 99.
+
+The gap looks coherent rather than accidental, which is why it is worth naming. ''pql search'' exists but searches the vault - paths, tags, frontmatter, headings - and tickets have no markdown source at all, they live only in SQLite and travel via the changelog. So the one search surface structurally cannot reach them, and the planning surface never grew its own.
+
+I am aware of T-92 and the no-fake-filters principle, and I do not think this falls foul of it. The rejected spellings there are negative filters and join predicates in disguise, which do not compose and which an empty result would misrepresent as an answer. A substring match over title and description is neither: it is the same primitive ''pql search'' already applies to the vault, it composes with the existing filters rather than replacing them, and an empty result means what it says.
+
+Suggested shape, matching what search already does elsewhere:
+
+  pql ticket list --matching "gitea password"
+
+One literal lowercase substring against title and description, combinable with --status and the rest. The caveat that applies to ''pql search'' applies here too and should be documented the same way: it is a substring filter, not a search engine, so a multi-word query is one literal string and an empty result is not evidence of absence.
+
+Worth considering alongside: the same absence applies to decisions. ''decisions list'' filters by type, domain and status, so ''did we already decide this?'' has the identical problem, and it is the question most likely to be asked before writing a new record.
+
+AUDIT NOTE (2026-09-09). Cross-link: open question Q-2 (FTS for ticket/decision search, governance/decisions/architecture.md) asks the same thing from the design side — whichever implementation lands should answer Q-2 and close both. Also note --grep shipped in v2.3 (T-113) and covers part of this: ''pql ticket list --grep <regex>'' filters any projected field case-insensitively. What it does not reach is description text unless projected, ranked results, or fuzzy match — the duplicate-detection use case this ticket names still stands, but the body should be read net of --grep.', 'backlog', 'medium', NULL, NULL, NULL, '2026-08-09 11:34:58.163', '2026-09-09 09:24:48.464', NULL, 'fb45d3f29d751ffbbfcaee270b37b7ed', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G65T19H1A3JHSQ3T0KREGWXG', 'bug', NULL, 'The eval fixture cannot detect ranking regressions in four of five signals', 'Found 2026-09-02 while fixing T-120. `make eval` is green again, but green
+means less here than it looks, and the reason is the fixture rather than the
+harness.
+
+MEASURED, not inferred. From `search council --fields path,score,signals`
+against testdata/council-snapshot:
+
+- recency        raw=0 on every file in every case
+- link_overlap   raw=0
+- tag_overlap    raw=0
+- path_proximity raw=0
+- centrality     raw=1 on exactly one file, 0 on the rest
+
+So one signal separates one file, and the other four separate nothing. A
+weight change, a normalisation change, or an outright bug in four of the five
+signals would not move a single number the eval reports.
+
+TWO CAUSES, BOTH PROPERTIES OF THE SNAPSHOT
+
+1. Uniform mtimes. git sets every file''s mtime to checkout time, so the whole
+   fixture has one timestamp and recency - weighted 0.25 on search, the second
+   heaviest signal there - normalises to zero across the board. This affects
+   any consumer of the snapshot, not just the eval.
+
+2. One link in the entire vault. members/vaasa/persona.md links to
+   members/koskela/persona. That is the only edge, so centrality is 1 for the
+   target and 0 for all 25 other files, link_overlap can never be non-zero
+   (no file shares an edge with any other), and context''s candidate set is at
+   most one file for any target.
+
+WHY IT MATTERS MORE THAN A THIN FIXTURE USUALLY WOULD
+
+The eval exists to make ranking regressions as visible as test failures - that
+is its stated job in project-structure.md, and "ranking is the product" is the
+philosophy doc''s line. An eval that cannot move under four of five signals is
+not doing that job, and it reports NDCG=1.000 while not doing it, which is the
+most misleading result available.
+
+T-120 strengthened the harness assertion so a golden''s expectations must
+actually hold. That was the right fix for what T-120 was about and does not
+touch this: a stricter assertion over a fixture with no signal is still an
+assertion over no signal.
+
+DESIRED, not a design. Enough structure in the fixture that each weighted
+signal can be non-zero and can differ between files - some link density, some
+shared tags, and mtimes that vary. Options worth weighing rather than
+picking blind:
+
+- Refresh the snapshot from a richer source vault. `make refresh-fixtures`
+  already exists; the question is whether the source has the structure.
+- Author a synthetic fixture for eval specifically. internal/fixture/ is named
+  in project-structure.md for exactly this and was never built.
+- Set mtimes deliberately as a fixture step, since git will never preserve
+  them. Cheap and fixes recency on its own.
+
+The third is worth doing regardless of the other two - it is a few lines and
+recency is the second-heaviest weight on search.
+
+RELATED
+
+T-120 - fixed the two wrong golden expectations and the weak assertion.
+T-65  - build the FR-2 golden eval set; overlaps on what a good fixture is.
+
+AUDIT NOTE (2026-09-09). Concrete evidence from a structure audit: testdata/council-snapshot is checked out by git, so every file shares the clone''s mtime — the recency signal is a constant across the corpus — and the fixture''s link graph is近 empty, so link_overlap, tag_overlap and path_proximity contribute (near-)constant scores too. Four of five signals flat means the eval can only detect regressions in the textual signal. Cross-links: T-129 (ranked-verb reproducibility epic — a fixture that exercises all signals is also what makes those fixes verifiable) and T-120 (the golden set is currently red, so eval output is read as a diff, not pass/fail).', 'backlog', 'medium', NULL, NULL, NULL, '2026-09-02 16:16:17.288', '2026-09-09 09:24:57.620', NULL, 'e63f65cf04f3eaf1d5d2628c032be922', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G65T19H1A3JHSQ3T0KREGWXG', 'bug', NULL, 'The eval fixture cannot detect ranking regressions in four of five signals', 'Found 2026-09-02 while fixing T-120. `make eval` is green again, but green
+means less here than it looks, and the reason is the fixture rather than the
+harness.
+
+MEASURED, not inferred. From `search council --fields path,score,signals`
+against testdata/council-snapshot:
+
+- recency        raw=0 on every file in every case
+- link_overlap   raw=0
+- tag_overlap    raw=0
+- path_proximity raw=0
+- centrality     raw=1 on exactly one file, 0 on the rest
+
+So one signal separates one file, and the other four separate nothing. A
+weight change, a normalisation change, or an outright bug in four of the five
+signals would not move a single number the eval reports.
+
+TWO CAUSES, BOTH PROPERTIES OF THE SNAPSHOT
+
+1. Uniform mtimes. git sets every file''s mtime to checkout time, so the whole
+   fixture has one timestamp and recency - weighted 0.25 on search, the second
+   heaviest signal there - normalises to zero across the board. This affects
+   any consumer of the snapshot, not just the eval.
+
+2. One link in the entire vault. members/vaasa/persona.md links to
+   members/koskela/persona. That is the only edge, so centrality is 1 for the
+   target and 0 for all 25 other files, link_overlap can never be non-zero
+   (no file shares an edge with any other), and context''s candidate set is at
+   most one file for any target.
+
+WHY IT MATTERS MORE THAN A THIN FIXTURE USUALLY WOULD
+
+The eval exists to make ranking regressions as visible as test failures - that
+is its stated job in project-structure.md, and "ranking is the product" is the
+philosophy doc''s line. An eval that cannot move under four of five signals is
+not doing that job, and it reports NDCG=1.000 while not doing it, which is the
+most misleading result available.
+
+T-120 strengthened the harness assertion so a golden''s expectations must
+actually hold. That was the right fix for what T-120 was about and does not
+touch this: a stricter assertion over a fixture with no signal is still an
+assertion over no signal.
+
+DESIRED, not a design. Enough structure in the fixture that each weighted
+signal can be non-zero and can differ between files - some link density, some
+shared tags, and mtimes that vary. Options worth weighing rather than
+picking blind:
+
+- Refresh the snapshot from a richer source vault. `make refresh-fixtures`
+  already exists; the question is whether the source has the structure.
+- Author a synthetic fixture for eval specifically. internal/fixture/ is named
+  in project-structure.md for exactly this and was never built.
+- Set mtimes deliberately as a fixture step, since git will never preserve
+  them. Cheap and fixes recency on its own.
+
+The third is worth doing regardless of the other two - it is a few lines and
+recency is the second-heaviest weight on search.
+
+RELATED
+
+T-120 - fixed the two wrong golden expectations and the weak assertion.
+T-65  - build the FR-2 golden eval set; overlaps on what a good fixture is.
+
+AUDIT NOTE (2026-09-09). Concrete evidence from a structure audit: testdata/council-snapshot is checked out by git, so every file shares the clone''s mtime — the recency signal is a constant across the corpus — and the fixture''s link graph is near-empty, so link_overlap, tag_overlap and path_proximity contribute (near-)constant scores too. Four of five signals flat means the eval can only detect regressions in the textual signal. Cross-links: T-129 (ranked-verb reproducibility epic — a fixture that exercises all signals is also what makes those fixes verifiable) and T-120 (the golden set is currently red, so eval output is read as a diff, not pass/fail).', 'backlog', 'medium', NULL, NULL, NULL, '2026-09-02 16:16:17.288', '2026-09-09 09:25:12.890', NULL, 'd8a2ecdbf24f23042fc8e3478eb251f5', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

@@ -1087,3 +1087,327 @@ RELATED
 
 D-15, D-16 - changelog replication and the guards that make replay safe.
 T-123     - the other place the single-writer assumption shows at the seam.', NULL, '2026-09-09 06:39:18', '2026-09-09 06:39:18.723', '2026-09-09 06:39:18.723', NULL, 'f1ef7d75cdc7ca3d4decb1f264db022b', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY7JHX6RH2BQK3R9VVP1ZX68', 'parent_id', NULL, 'T-133', NULL, '2026-09-09 09:24:32', '2026-09-09 09:24:32.580', '2026-09-09 09:24:32.580', NULL, 'd5ba67be89d81c65dc531067a603f452', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4FHC4YQRSRC071QNEWM64G', 'parent_id', NULL, 'T-133', NULL, '2026-09-09 09:24:32', '2026-09-09 09:24:32.588', '2026-09-09 09:24:32.588', NULL, 'ab0619c93591a2217dce2802b46dde0a', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G64CE0WTT40RJ9TE0VT95FYW', 'parent_id', NULL, 'T-133', NULL, '2026-09-09 09:24:32', '2026-09-09 09:24:32.589', '2026-09-09 09:24:32.589', NULL, '8ec506982e9f728588e9126ea917b48d', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89S0F3600NPD1978YNJP9CR', 'parent_id', NULL, 'T-133', NULL, '2026-09-09 09:24:32', '2026-09-09 09:24:32.590', '2026-09-09 09:24:32.590', NULL, '8e1c0f3b8396bc3eb8fb5d3095b9fdcb', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4CTAFNM4369HAGBYS2F728', 'description', '`pql ticket statuslist` already returns `is_terminal` per status. D-24 made the status vocabulary configurable and had the engine reason about *classes* rather than literal names, precisely so consumers would stop mirroring pql''s enum. So "is this ticket still open" is expressible in pql''s own model, and pql already computes it internally: the terminal set clears blockers, is excluded from `--unblocked` and from refine, and is what `plan whatsnext` keys off.
+
+`ticket list` cannot ask it. `--status` takes one literal name and there is no flag for the distinction, so every caller reimplements the concept. The obvious implementation is to exclude the names `done` and `cancelled` — which are the *default* vocabulary, not the guaranteed one. A vault that configures its own statuses, which is the entire point of D-24, gets a silently wrong answer from that filter: closed work counted as open, no error, nothing spelled wrong anywhere. The failure is invisible in exactly the vaults the configurability was added for.
+
+Suggested shape:
+
+    pql ticket list --open      # status is_terminal = false
+    pql ticket list --closed    # the complement
+
+Composing with the existing filters the way `--leaf` and `--unblocked` already do.
+
+The complement is worth naming separately, because it is the more thoroughly missing half. There is no way to ask "what reached a terminal status", so "what got closed" — the question a review or a release note is assembled from — has no expression at all. Note honestly that `--closed` alone does not finish that job: there is no date axis on `ticket list` either, so "closed in this period" still needs something `--closed` does not provide. Worth recording as the adjacent gap rather than smuggling into this one.
+
+A generalisation to weigh before implementing: D-24 models four classes, not two, so a `--class terminal|review|active|initial` filter would cover this plus "what is in flight" with one flag rather than a pair, and would stay correct if a vault''s vocabulary grows. Against it: `--open` is the word callers actually reach for, and the terminal split is the one the engine treats as load-bearing everywhere else. Either is defensible; picking the class filter and documenting `--open` as its common case would be the more conservative choice.
+
+This is not the absence filter D-31 declined, and the distinction is worth stating so the ticket is not read as relitigating it. Every filter D-31 refused is a join predicate in disguise — "has no linked ticket", "has no label" — a claim about the absence of rows in another table. `--open` is a predicate on a column this row already carries, resolved through a vocabulary pql itself defines and publishes via `statuslist`. It is nearer to `--status` than to `--unimplemented`: same axis, coarser grain, and it opens no door to `--untagged` or `--childless` because those are still about other tables. If that reading is wrong then this should be closed against D-31 rather than implemented — but the line D-31 draws looks stable under it.
+
+One observation about what pql does today, because it argues for the flag rather than against the contract. A caller reaching for `--open` gets exit 64 and `{"level":"error","code":"cli.error","msg":"unknown flag: --open"}`. That is correct in every respect: an unknown flag is a caller mistake, the diagnostic names it, stdout stays empty. The failure observed was one layer up — a wrapper invoking pql with stderr suppressed, reading the empty stdout as "no open tickets", and reporting a clean board. pql said what was wrong and the caller discarded the channel it said it on. The interesting part is *why* the caller guessed that flag: because the concept exists in the model and is simply not reachable from the read surface. People reach for `--open` because pql already knows what open means.
+
+Backward compatibility: an additive optional flag. Absent, nothing changes — no default projection change, unlike D-27.', '`pql ticket statuslist` already returns `is_terminal` per status. D-24 made the status vocabulary configurable and had the engine reason about *classes* rather than literal names, precisely so consumers would stop mirroring pql''s enum. So "is this ticket still open" is expressible in pql''s own model, and pql already computes it internally: the terminal set clears blockers, is excluded from `--unblocked` and from refine, and is what `plan whatsnext` keys off.
+
+`ticket list` cannot ask it. `--status` takes one literal name and there is no flag for the distinction, so every caller reimplements the concept. The obvious implementation is to exclude the names `done` and `cancelled` — which are the *default* vocabulary, not the guaranteed one. A vault that configures its own statuses, which is the entire point of D-24, gets a silently wrong answer from that filter: closed work counted as open, no error, nothing spelled wrong anywhere. The failure is invisible in exactly the vaults the configurability was added for.
+
+Suggested shape:
+
+    pql ticket list --open      # status is_terminal = false
+    pql ticket list --closed    # the complement
+
+Composing with the existing filters the way `--leaf` and `--unblocked` already do.
+
+The complement is worth naming separately, because it is the more thoroughly missing half. There is no way to ask "what reached a terminal status", so "what got closed" — the question a review or a release note is assembled from — has no expression at all. Note honestly that `--closed` alone does not finish that job: there is no date axis on `ticket list` either, so "closed in this period" still needs something `--closed` does not provide. Worth recording as the adjacent gap rather than smuggling into this one.
+
+A generalisation to weigh before implementing: D-24 models four classes, not two, so a `--class terminal|review|active|initial` filter would cover this plus "what is in flight" with one flag rather than a pair, and would stay correct if a vault''s vocabulary grows. Against it: `--open` is the word callers actually reach for, and the terminal split is the one the engine treats as load-bearing everywhere else. Either is defensible; picking the class filter and documenting `--open` as its common case would be the more conservative choice.
+
+This is not the absence filter D-31 declined, and the distinction is worth stating so the ticket is not read as relitigating it. Every filter D-31 refused is a join predicate in disguise — "has no linked ticket", "has no label" — a claim about the absence of rows in another table. `--open` is a predicate on a column this row already carries, resolved through a vocabulary pql itself defines and publishes via `statuslist`. It is nearer to `--status` than to `--unimplemented`: same axis, coarser grain, and it opens no door to `--untagged` or `--childless` because those are still about other tables. If that reading is wrong then this should be closed against D-31 rather than implemented — but the line D-31 draws looks stable under it.
+
+One observation about what pql does today, because it argues for the flag rather than against the contract. A caller reaching for `--open` gets exit 64 and `{"level":"error","code":"cli.error","msg":"unknown flag: --open"}`. That is correct in every respect: an unknown flag is a caller mistake, the diagnostic names it, stdout stays empty. The failure observed was one layer up — a wrapper invoking pql with stderr suppressed, reading the empty stdout as "no open tickets", and reporting a clean board. pql said what was wrong and the caller discarded the channel it said it on. The interesting part is *why* the caller guessed that flag: because the concept exists in the model and is simply not reachable from the read surface. People reach for `--open` because pql already knows what open means.
+
+Backward compatibility: an additive optional flag. Absent, nothing changes — no default projection change, unlike D-27.
+
+AUDIT NOTE (2026-09-09). Half of this shipped in v2.1: ''ticket board --open'' exists (internal/cli/ticket.go:1304-1305) and drops terminal columns. ''ticket list'' still has no --open — its filters are --status, --team, --assigned, --decision, --label, --under, --leaf, --unblocked (ticket.go:419-426). Remaining scope narrows to the list verb: an --open flag (or equivalent terminal-class filter) so a caller can ask for actionable tickets without naming every non-terminal status. The status-class vocabulary from D-27 already models the distinction; this is surface, not model.', NULL, '2026-09-09 09:24:43', '2026-09-09 09:24:43.016', '2026-09-09 09:24:43.016', NULL, '26f263b1cc1df7086bf5b650260efdf4', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FYCKFVEFFH2DPVB97FM1NF6W', 'description', 'There is no way to ask ''has this already been raised?''. ''ticket list'' filters by status, team, assignee, label, decision, parent, leaf and unblocked - every axis except the words. So the check costs reading every row by eye, or a pipe to grep, and in an agent harness a pipe defeats prefix allowlisting and triggers a permission prompt. A check that expensive gets skipped, and then duplicates get filed. That happened in a vault I maintain on 2026-08-09: a new ticket restated an existing one that had already recorded, triaged and suppressed the same finding, at 41 tickets. This vault is at 99.
+
+The gap looks coherent rather than accidental, which is why it is worth naming. ''pql search'' exists but searches the vault - paths, tags, frontmatter, headings - and tickets have no markdown source at all, they live only in SQLite and travel via the changelog. So the one search surface structurally cannot reach them, and the planning surface never grew its own.
+
+I am aware of T-92 and the no-fake-filters principle, and I do not think this falls foul of it. The rejected spellings there are negative filters and join predicates in disguise, which do not compose and which an empty result would misrepresent as an answer. A substring match over title and description is neither: it is the same primitive ''pql search'' already applies to the vault, it composes with the existing filters rather than replacing them, and an empty result means what it says.
+
+Suggested shape, matching what search already does elsewhere:
+
+  pql ticket list --matching "gitea password"
+
+One literal lowercase substring against title and description, combinable with --status and the rest. The caveat that applies to ''pql search'' applies here too and should be documented the same way: it is a substring filter, not a search engine, so a multi-word query is one literal string and an empty result is not evidence of absence.
+
+Worth considering alongside: the same absence applies to decisions. ''decisions list'' filters by type, domain and status, so ''did we already decide this?'' has the identical problem, and it is the question most likely to be asked before writing a new record.', 'There is no way to ask ''has this already been raised?''. ''ticket list'' filters by status, team, assignee, label, decision, parent, leaf and unblocked - every axis except the words. So the check costs reading every row by eye, or a pipe to grep, and in an agent harness a pipe defeats prefix allowlisting and triggers a permission prompt. A check that expensive gets skipped, and then duplicates get filed. That happened in a vault I maintain on 2026-08-09: a new ticket restated an existing one that had already recorded, triaged and suppressed the same finding, at 41 tickets. This vault is at 99.
+
+The gap looks coherent rather than accidental, which is why it is worth naming. ''pql search'' exists but searches the vault - paths, tags, frontmatter, headings - and tickets have no markdown source at all, they live only in SQLite and travel via the changelog. So the one search surface structurally cannot reach them, and the planning surface never grew its own.
+
+I am aware of T-92 and the no-fake-filters principle, and I do not think this falls foul of it. The rejected spellings there are negative filters and join predicates in disguise, which do not compose and which an empty result would misrepresent as an answer. A substring match over title and description is neither: it is the same primitive ''pql search'' already applies to the vault, it composes with the existing filters rather than replacing them, and an empty result means what it says.
+
+Suggested shape, matching what search already does elsewhere:
+
+  pql ticket list --matching "gitea password"
+
+One literal lowercase substring against title and description, combinable with --status and the rest. The caveat that applies to ''pql search'' applies here too and should be documented the same way: it is a substring filter, not a search engine, so a multi-word query is one literal string and an empty result is not evidence of absence.
+
+Worth considering alongside: the same absence applies to decisions. ''decisions list'' filters by type, domain and status, so ''did we already decide this?'' has the identical problem, and it is the question most likely to be asked before writing a new record.
+
+AUDIT NOTE (2026-09-09). Cross-link: open question Q-2 (FTS for ticket/decision search, governance/decisions/architecture.md) asks the same thing from the design side — whichever implementation lands should answer Q-2 and close both. Also note --grep shipped in v2.3 (T-113) and covers part of this: ''pql ticket list --grep <regex>'' filters any projected field case-insensitively. What it does not reach is description text unless projected, ranked results, or fuzzy match — the duplicate-detection use case this ticket names still stands, but the body should be read net of --grep.', NULL, '2026-09-09 09:24:48', '2026-09-09 09:24:48.464', '2026-09-09 09:24:48.464', NULL, 'd0f9d08726b260fc57cae12041892390', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G65T19H1A3JHSQ3T0KREGWXG', 'description', 'Found 2026-09-02 while fixing T-120. `make eval` is green again, but green
+means less here than it looks, and the reason is the fixture rather than the
+harness.
+
+MEASURED, not inferred. From `search council --fields path,score,signals`
+against testdata/council-snapshot:
+
+- recency        raw=0 on every file in every case
+- link_overlap   raw=0
+- tag_overlap    raw=0
+- path_proximity raw=0
+- centrality     raw=1 on exactly one file, 0 on the rest
+
+So one signal separates one file, and the other four separate nothing. A
+weight change, a normalisation change, or an outright bug in four of the five
+signals would not move a single number the eval reports.
+
+TWO CAUSES, BOTH PROPERTIES OF THE SNAPSHOT
+
+1. Uniform mtimes. git sets every file''s mtime to checkout time, so the whole
+   fixture has one timestamp and recency - weighted 0.25 on search, the second
+   heaviest signal there - normalises to zero across the board. This affects
+   any consumer of the snapshot, not just the eval.
+
+2. One link in the entire vault. members/vaasa/persona.md links to
+   members/koskela/persona. That is the only edge, so centrality is 1 for the
+   target and 0 for all 25 other files, link_overlap can never be non-zero
+   (no file shares an edge with any other), and context''s candidate set is at
+   most one file for any target.
+
+WHY IT MATTERS MORE THAN A THIN FIXTURE USUALLY WOULD
+
+The eval exists to make ranking regressions as visible as test failures - that
+is its stated job in project-structure.md, and "ranking is the product" is the
+philosophy doc''s line. An eval that cannot move under four of five signals is
+not doing that job, and it reports NDCG=1.000 while not doing it, which is the
+most misleading result available.
+
+T-120 strengthened the harness assertion so a golden''s expectations must
+actually hold. That was the right fix for what T-120 was about and does not
+touch this: a stricter assertion over a fixture with no signal is still an
+assertion over no signal.
+
+DESIRED, not a design. Enough structure in the fixture that each weighted
+signal can be non-zero and can differ between files - some link density, some
+shared tags, and mtimes that vary. Options worth weighing rather than
+picking blind:
+
+- Refresh the snapshot from a richer source vault. `make refresh-fixtures`
+  already exists; the question is whether the source has the structure.
+- Author a synthetic fixture for eval specifically. internal/fixture/ is named
+  in project-structure.md for exactly this and was never built.
+- Set mtimes deliberately as a fixture step, since git will never preserve
+  them. Cheap and fixes recency on its own.
+
+The third is worth doing regardless of the other two - it is a few lines and
+recency is the second-heaviest weight on search.
+
+RELATED
+
+T-120 - fixed the two wrong golden expectations and the weak assertion.
+T-65  - build the FR-2 golden eval set; overlaps on what a good fixture is.', 'Found 2026-09-02 while fixing T-120. `make eval` is green again, but green
+means less here than it looks, and the reason is the fixture rather than the
+harness.
+
+MEASURED, not inferred. From `search council --fields path,score,signals`
+against testdata/council-snapshot:
+
+- recency        raw=0 on every file in every case
+- link_overlap   raw=0
+- tag_overlap    raw=0
+- path_proximity raw=0
+- centrality     raw=1 on exactly one file, 0 on the rest
+
+So one signal separates one file, and the other four separate nothing. A
+weight change, a normalisation change, or an outright bug in four of the five
+signals would not move a single number the eval reports.
+
+TWO CAUSES, BOTH PROPERTIES OF THE SNAPSHOT
+
+1. Uniform mtimes. git sets every file''s mtime to checkout time, so the whole
+   fixture has one timestamp and recency - weighted 0.25 on search, the second
+   heaviest signal there - normalises to zero across the board. This affects
+   any consumer of the snapshot, not just the eval.
+
+2. One link in the entire vault. members/vaasa/persona.md links to
+   members/koskela/persona. That is the only edge, so centrality is 1 for the
+   target and 0 for all 25 other files, link_overlap can never be non-zero
+   (no file shares an edge with any other), and context''s candidate set is at
+   most one file for any target.
+
+WHY IT MATTERS MORE THAN A THIN FIXTURE USUALLY WOULD
+
+The eval exists to make ranking regressions as visible as test failures - that
+is its stated job in project-structure.md, and "ranking is the product" is the
+philosophy doc''s line. An eval that cannot move under four of five signals is
+not doing that job, and it reports NDCG=1.000 while not doing it, which is the
+most misleading result available.
+
+T-120 strengthened the harness assertion so a golden''s expectations must
+actually hold. That was the right fix for what T-120 was about and does not
+touch this: a stricter assertion over a fixture with no signal is still an
+assertion over no signal.
+
+DESIRED, not a design. Enough structure in the fixture that each weighted
+signal can be non-zero and can differ between files - some link density, some
+shared tags, and mtimes that vary. Options worth weighing rather than
+picking blind:
+
+- Refresh the snapshot from a richer source vault. `make refresh-fixtures`
+  already exists; the question is whether the source has the structure.
+- Author a synthetic fixture for eval specifically. internal/fixture/ is named
+  in project-structure.md for exactly this and was never built.
+- Set mtimes deliberately as a fixture step, since git will never preserve
+  them. Cheap and fixes recency on its own.
+
+The third is worth doing regardless of the other two - it is a few lines and
+recency is the second-heaviest weight on search.
+
+RELATED
+
+T-120 - fixed the two wrong golden expectations and the weak assertion.
+T-65  - build the FR-2 golden eval set; overlaps on what a good fixture is.
+
+AUDIT NOTE (2026-09-09). Concrete evidence from a structure audit: testdata/council-snapshot is checked out by git, so every file shares the clone''s mtime — the recency signal is a constant across the corpus — and the fixture''s link graph is近 empty, so link_overlap, tag_overlap and path_proximity contribute (near-)constant scores too. Four of five signals flat means the eval can only detect regressions in the textual signal. Cross-links: T-129 (ranked-verb reproducibility epic — a fixture that exercises all signals is also what makes those fixes verifiable) and T-120 (the golden set is currently red, so eval output is read as a diff, not pass/fail).', NULL, '2026-09-09 09:24:57', '2026-09-09 09:24:57.620', '2026-09-09 09:24:57.620', NULL, 'f55b91a441b59349a4e85a63d391e6e9', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G65T19H1A3JHSQ3T0KREGWXG', 'description', 'Found 2026-09-02 while fixing T-120. `make eval` is green again, but green
+means less here than it looks, and the reason is the fixture rather than the
+harness.
+
+MEASURED, not inferred. From `search council --fields path,score,signals`
+against testdata/council-snapshot:
+
+- recency        raw=0 on every file in every case
+- link_overlap   raw=0
+- tag_overlap    raw=0
+- path_proximity raw=0
+- centrality     raw=1 on exactly one file, 0 on the rest
+
+So one signal separates one file, and the other four separate nothing. A
+weight change, a normalisation change, or an outright bug in four of the five
+signals would not move a single number the eval reports.
+
+TWO CAUSES, BOTH PROPERTIES OF THE SNAPSHOT
+
+1. Uniform mtimes. git sets every file''s mtime to checkout time, so the whole
+   fixture has one timestamp and recency - weighted 0.25 on search, the second
+   heaviest signal there - normalises to zero across the board. This affects
+   any consumer of the snapshot, not just the eval.
+
+2. One link in the entire vault. members/vaasa/persona.md links to
+   members/koskela/persona. That is the only edge, so centrality is 1 for the
+   target and 0 for all 25 other files, link_overlap can never be non-zero
+   (no file shares an edge with any other), and context''s candidate set is at
+   most one file for any target.
+
+WHY IT MATTERS MORE THAN A THIN FIXTURE USUALLY WOULD
+
+The eval exists to make ranking regressions as visible as test failures - that
+is its stated job in project-structure.md, and "ranking is the product" is the
+philosophy doc''s line. An eval that cannot move under four of five signals is
+not doing that job, and it reports NDCG=1.000 while not doing it, which is the
+most misleading result available.
+
+T-120 strengthened the harness assertion so a golden''s expectations must
+actually hold. That was the right fix for what T-120 was about and does not
+touch this: a stricter assertion over a fixture with no signal is still an
+assertion over no signal.
+
+DESIRED, not a design. Enough structure in the fixture that each weighted
+signal can be non-zero and can differ between files - some link density, some
+shared tags, and mtimes that vary. Options worth weighing rather than
+picking blind:
+
+- Refresh the snapshot from a richer source vault. `make refresh-fixtures`
+  already exists; the question is whether the source has the structure.
+- Author a synthetic fixture for eval specifically. internal/fixture/ is named
+  in project-structure.md for exactly this and was never built.
+- Set mtimes deliberately as a fixture step, since git will never preserve
+  them. Cheap and fixes recency on its own.
+
+The third is worth doing regardless of the other two - it is a few lines and
+recency is the second-heaviest weight on search.
+
+RELATED
+
+T-120 - fixed the two wrong golden expectations and the weak assertion.
+T-65  - build the FR-2 golden eval set; overlaps on what a good fixture is.
+
+AUDIT NOTE (2026-09-09). Concrete evidence from a structure audit: testdata/council-snapshot is checked out by git, so every file shares the clone''s mtime — the recency signal is a constant across the corpus — and the fixture''s link graph is近 empty, so link_overlap, tag_overlap and path_proximity contribute (near-)constant scores too. Four of five signals flat means the eval can only detect regressions in the textual signal. Cross-links: T-129 (ranked-verb reproducibility epic — a fixture that exercises all signals is also what makes those fixes verifiable) and T-120 (the golden set is currently red, so eval output is read as a diff, not pass/fail).', 'Found 2026-09-02 while fixing T-120. `make eval` is green again, but green
+means less here than it looks, and the reason is the fixture rather than the
+harness.
+
+MEASURED, not inferred. From `search council --fields path,score,signals`
+against testdata/council-snapshot:
+
+- recency        raw=0 on every file in every case
+- link_overlap   raw=0
+- tag_overlap    raw=0
+- path_proximity raw=0
+- centrality     raw=1 on exactly one file, 0 on the rest
+
+So one signal separates one file, and the other four separate nothing. A
+weight change, a normalisation change, or an outright bug in four of the five
+signals would not move a single number the eval reports.
+
+TWO CAUSES, BOTH PROPERTIES OF THE SNAPSHOT
+
+1. Uniform mtimes. git sets every file''s mtime to checkout time, so the whole
+   fixture has one timestamp and recency - weighted 0.25 on search, the second
+   heaviest signal there - normalises to zero across the board. This affects
+   any consumer of the snapshot, not just the eval.
+
+2. One link in the entire vault. members/vaasa/persona.md links to
+   members/koskela/persona. That is the only edge, so centrality is 1 for the
+   target and 0 for all 25 other files, link_overlap can never be non-zero
+   (no file shares an edge with any other), and context''s candidate set is at
+   most one file for any target.
+
+WHY IT MATTERS MORE THAN A THIN FIXTURE USUALLY WOULD
+
+The eval exists to make ranking regressions as visible as test failures - that
+is its stated job in project-structure.md, and "ranking is the product" is the
+philosophy doc''s line. An eval that cannot move under four of five signals is
+not doing that job, and it reports NDCG=1.000 while not doing it, which is the
+most misleading result available.
+
+T-120 strengthened the harness assertion so a golden''s expectations must
+actually hold. That was the right fix for what T-120 was about and does not
+touch this: a stricter assertion over a fixture with no signal is still an
+assertion over no signal.
+
+DESIRED, not a design. Enough structure in the fixture that each weighted
+signal can be non-zero and can differ between files - some link density, some
+shared tags, and mtimes that vary. Options worth weighing rather than
+picking blind:
+
+- Refresh the snapshot from a richer source vault. `make refresh-fixtures`
+  already exists; the question is whether the source has the structure.
+- Author a synthetic fixture for eval specifically. internal/fixture/ is named
+  in project-structure.md for exactly this and was never built.
+- Set mtimes deliberately as a fixture step, since git will never preserve
+  them. Cheap and fixes recency on its own.
+
+The third is worth doing regardless of the other two - it is a few lines and
+recency is the second-heaviest weight on search.
+
+RELATED
+
+T-120 - fixed the two wrong golden expectations and the weak assertion.
+T-65  - build the FR-2 golden eval set; overlaps on what a good fixture is.
+
+AUDIT NOTE (2026-09-09). Concrete evidence from a structure audit: testdata/council-snapshot is checked out by git, so every file shares the clone''s mtime — the recency signal is a constant across the corpus — and the fixture''s link graph is near-empty, so link_overlap, tag_overlap and path_proximity contribute (near-)constant scores too. Four of five signals flat means the eval can only detect regressions in the textual signal. Cross-links: T-129 (ranked-verb reproducibility epic — a fixture that exercises all signals is also what makes those fixes verifiable) and T-120 (the golden set is currently red, so eval output is read as a diff, not pass/fail).', NULL, '2026-09-09 09:25:12', '2026-09-09 09:25:12.891', '2026-09-09 09:25:12.891', NULL, '0305fcd972091bb9c3e7bc8dccc4710a', 2) ON CONFLICT(hash) DO NOTHING;
