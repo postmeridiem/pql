@@ -18,14 +18,15 @@ This document is the canonical reference for `pql`'s repository layout, build pi
 - **Generate wide, rank careful, return sparingly.** Architecturally separate packages; neither imports the other.
 - **Provenance is data, not a cross-cutting concern.** Each signal returns its own `Contribution{Name, Raw, Normalized, Weight}`; the combiner aggregates. No central `explain.go`.
 - **Consumer-agnostic core.** `internal/intent/`, `internal/query/`, and `internal/planning/` must not import `internal/cli/`. CLI today, MCPs (plural) tomorrow — a query-surface MCP and a planning-surface MCP are different scopes, different permissions, different audiences; no reason to assume one fused server. Every consumer is an adapter.
-- **Two stores, two regimes.** `<vault>/.pql/index.db` is the regenerable cache — SQLite with FTS5; schema versioned; drop-and-rebuild on mismatch. `<vault>/.pql/pql.db` is user-authored state (planning, possibly other features later), lazily created by the first writer. The split is codified in `governance/decisions/architecture.md` (D-3). Note that D-3's own "forward-only migrations" phrase is superseded by **D-19**: there is no migration runner today, the schema lives in `CREATE TABLE IF NOT EXISTS` statements, and pql.db is regenerated from the committed changelog rather than altered in place. D-19 is the current authority on how pql.db evolves.
+- **Two stores, two regimes.** `<vault>/.pql/index.db` is the regenerable cache — SQLite with FTS5; schema versioned; drop-and-rebuild on mismatch. `<vault>/.pql/pql.db` is user-authored state (planning, possibly other features later), lazily created by the first writer. The split is codified in `governance/decisions/architecture.md` (D-3). How pql.db *evolves* has moved twice since: D-19 removed the migration runner ("schema lives in `CREATE TABLE IF NOT EXISTS` statements, regenerate from the changelog rather than alter in place"), and **D-28** then superseded D-19's no-runner clause — pql's versioned artefacts now share one forward-migration runner (`internal/planning/migrate/`), because the changelog format itself needed migrating and the changelog is not regenerable. What survives of D-19: the schema still lives in one set of CREATE statements, and `rm .pql/pql.db && pql plan rebuild` is still the recovery for a database no forward step can reach. D-28 is the current authority.
 
 ## Directory layout
 
 ```
 pql/
 ├── cmd/
-│   └── pql/main.go                   # tiny entrypoint: version stamp, calls internal/cli
+│   ├── pql/main.go                   # tiny entrypoint: version stamp, calls internal/cli
+│   └── migrate-ids/                  # one-off D-26 changelog migrator; deliberately NOT shipped in the pql binary
 ├── internal/
 │   ├── cli/                          # cobra root, flag parsing, subcommand wiring
 │   │   ├── root.go
@@ -34,7 +35,7 @@ pql/
 │   │   ├── dsl.go                    # `pql query <DSL>` escape hatch
 │   │   ├── decisions_*.go            # planning: `pql decisions …`
 │   │   ├── ticket_*.go               # planning: `pql ticket …`
-│   │   ├── plan_*.go                 # planning: `pql plan …` (cross-cutting)
+│   │   ├── plan.go                   # planning: `pql plan …` (cross-cutting; + planning_writethrough.go helper)
 │   │   ├── render/                   # JSON / JSONL / table / CSV; exit-code mapping
 │   │   └── integration_test.go       # //go:build integration — shells the binary
 │   ├── query/                        # primitive query surface (query engine feel)
@@ -58,7 +59,9 @@ pql/
 │   │   └── …                         # NEW INTENT = NEW SUBPACKAGE + one cli/intent_*.go file
 │   ├── planning/                     # decisions + tickets; writes to pql.db (D-3; schema.go is the schema of record)
 │   │   ├── db.go                     # opens <vault>/.pql/pql.db; creates schema if missing
-│   │   ├── schema.go                 # CREATE TABLE IF NOT EXISTS + CanonicalVersion (no migration runner, D-19)
+│   │   ├── schema.go                 # CREATE TABLE IF NOT EXISTS + CanonicalVersion
+│   │   ├── schema_migrate.go         # pql.db axis of the shared runner: schema_migrations ledger, empty step list (D-28)
+│   │   ├── migrate/                  # shared forward-migration runner across pql's version axes (D-28)
 │   │   ├── parser/                   # DQR markdown → []Record (decisions.go, headings.go)
 │   │   ├── repo/                     # decisions.go, tickets.go, meta.go, snapshot.go
 │   │   └── changelog/                # exporter/importer/rebuild: git-committed replication (D-15/D-16)
@@ -68,6 +71,7 @@ pql/
 │   │   │   ├── markdown/             # frontmatter, wikilinks, tags, headings (v1 scope)
 │   │   │   ├── code/                 # placeholder; tree-sitter later
 │   │   │   └── registry.go
+│   │   ├── ignore/                   # .pqlignore parsing (docs/pqlignore.md)
 │   │   └── incremental.go            # change detection, mtime + content_hash
 │   ├── store/                        # SQLite layer for index.db (the cache)
 │   │   ├── schema/                   # versioned SQL
@@ -80,6 +84,7 @@ pql/
 │   ├── telemetry/                    # per-phase timings (generate_ms, rank_ms, per-signal ms) on --verbose
 │   ├── fixture/                      # synthetic vault generators for eval
 │   ├── skill/                        # Claude Code skill (SKILL.md + go:embed wrapper); `pql skill install` writes it to .claude/skills/pql/
+│   ├── watch/                        # `pql watch` toggle: pidfile + watcher (docs/watching.md)
 │   └── version/                      # ldflags-stamped build info; exposes schema_version for skill negotiation
 ├── testdata/                         # fixture vaults (Go toolchain ignores this dir specially)
 │   ├── council-snapshot/             # frozen snapshot of the Council vault (a sibling checkout)
@@ -121,7 +126,7 @@ pql/
 └── LICENSE                           # MIT
 ```
 
-> **Layout status (as of v1.6).** The tree above is the *intended* canonical layout; most of it now exists — `internal/query/`, `internal/connect/`, `internal/intent/`, `internal/planning/`, `internal/store/`, `internal/index/` are all shipped and populated, and `internal/watch/` (the `pql watch` toggle) is live but not drawn above. Still **not built / aspirational**, despite appearing in the tree: `internal/query/result/`, `internal/planning/format/` (rendering lives in `internal/cli/render` + `planning/repo`), `internal/index/incremental.go` (change detection is in `indexer.go`/`walker.go`), `internal/fixture/`, `tools/eval-report/`, `cmd/pql-eval/`, and `docs/adr/` (ADRs became decision records under `governance/decisions/`). New packages still land alongside their first feature.
+> **Layout status (as of v2.3).** The tree above is the *intended* canonical layout; most of it now exists — `internal/query/`, `internal/connect/`, `internal/intent/`, `internal/planning/` (including `migrate/` + `schema_migrate.go`, D-28), `internal/store/`, `internal/index/` (including `ignore/`), and `internal/watch/` are all shipped and populated. Still **not built / aspirational**, despite appearing in the tree: `internal/query/result/`, `internal/planning/format/` (rendering lives in `internal/cli/render` + `planning/repo`), `internal/index/incremental.go` (change detection is in `indexer.go`/`walker.go`), `internal/fixture/`, `tools/eval-report/`, and `docs/adr/` (ADRs became decision records under `governance/decisions/`). New packages still land alongside their first feature.
 
 ## The query → connect → bundle pipeline
 
@@ -151,7 +156,7 @@ cli/render                               ← stdout JSON; provenance inline in c
 | New signal | `internal/connect/signal/<name>.go` + weight entries per intent | 1 new file + N-line edits |
 | New extractor | `internal/index/extractor/<name>/` + registry registration | 1 new subpackage |
 | New planning verb | `internal/planning/repo/` method + `internal/cli/{decisions,ticket,plan}_<verb>.go` | 1 new CLI file + method on repo |
-| New pql.db table | `CREATE TABLE IF NOT EXISTS` in `internal/planning/schema.go`, bump `CanonicalVersion`, + repo helpers | schema edit + repo additions (no migration runner — D-19) |
+| New pql.db table | `CREATE TABLE IF NOT EXISTS` in `internal/planning/schema.go`, bump `CanonicalVersion`, + repo helpers | schema edit + repo additions; existing DBs get a step in the shared runner if regeneration won't do (D-28) |
 | New consumer (MCPs) | `cmd/pql-mcp-query/` reusing `internal/intent/`+`internal/query/`; `cmd/pql-mcp-plan/` reusing `internal/planning/` | Bounded by consumer-agnostic core discipline; query surface and planning surface can ship as separate binaries |
 | Code-aware indexing | `internal/index/extractor/code/` with tree-sitter | No changes to `store/`, `connect/`, `query/`, `planning/` |
 
