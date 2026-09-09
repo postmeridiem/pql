@@ -6,7 +6,7 @@ description: Build and install the pql binary on a Windows dev machine (Git Bash
 # Build & install pql on Windows
 
 This is the Windows execution of the `build` skill. **Steps 0–1 there (doc
-sync, version bump) are judgment calls that apply unchanged — run them first.**
+sync, version-stays-put per D-34) apply unchanged — run them first.**
 Only the mechanical steps below differ, because the Makefile and install path
 assume a Unix host.
 

@@ -7,8 +7,8 @@ description: >-
   the pre-build sync: the embedded skill doc and CHANGELOG must be brought into
   line with any user-facing surface change BEFORE building, because
   internal/skill/SKILL.md is //go:embed'd into the binary and nothing verifies
-  its accuracy. Encodes that judgment step plus the version-bump → make build →
-  install ritual, including when NOT to install.
+  its accuracy. Encodes that judgment step plus the make build → install
+  ritual, including when NOT to install.
 ---
 
 # Build & ship pql
@@ -70,12 +70,15 @@ release. Use the `pql-skill-auditor` agent (procedure in
 roughly 100k tokens and half an hour, so it is a release-time step, not a
 per-edit one; `make skill-drift` covers the everyday case.
 
-## Step 1 — Version bump
+## Step 1 — Version stays put (D-34)
 
-Bump the **fix** version in `project.yaml` (e.g. `1.6.0` → `1.6.1`) unless the
-user asked for a minor/major bump, and update the `status:` line to describe the
-change. Skip the bump only on a no-op rebuild (no code/doc change since the last
-build). See the `install-after-build` memory for the rationale.
+Do **not** bump `project.yaml`'s `version:` for a dev build. Per **D-34**
+(`governance/decisions/process.md`), it holds the *last released* version and
+moves only in the release commit that dates the CHANGELOG section; between
+releases a dev build stamps the released number and `make binary-drift`
+answers "was this built from HEAD". The change itself is already recorded
+under `## [Unreleased]` from Step 0 — that entry, not a version bump, is what
+marks the binary as carrying new work.
 
 ## Step 2 — Gate
 
