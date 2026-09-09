@@ -17,7 +17,22 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ## [Unreleased]
 
-### Fixed
+### Added
+
+- **`pql ticket redact <id> <value> <replacement>`** — the supported route
+  from "the pre-push scan caught a leak" back to a clean changelog, which
+  until now was a hand-rolled reset-restore-rebuild that re-entered prose
+  from memory (T-130). It removes the value from the ticket row, every
+  history row (including `old_value` copies — fixing a description forward
+  writes the leak a second time), and the committed changelog lines carrying
+  them, rewriting database and files together so a scrub can no longer be
+  silently undone by the next mutation (T-105). Per D-35 the changelog is a
+  log and the push boundary is the rewrite rule: if the value already
+  appears in a remote's copy, the command refuses — that history is
+  published, and rewriting it is a git operation pql documents but does not
+  perform. The changelog rewrite runs through the same staged-SQLite path
+  replay uses, so untouched lines come back byte-identical and the
+  rewritten file replays with verifying hashes.
 
 - **A ticket mutation can no longer silently re-mint an already-used label.**
   Two stale-replica states allowed it: a clone whose committed changelog held

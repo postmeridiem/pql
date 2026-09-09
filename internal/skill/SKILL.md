@@ -403,6 +403,7 @@ side.
 | `pql ticket new <type> "title" [--parent T-N] [--decision D-N] [--priority P] [--assign A] [--team T] [--description ...] [--id-only]` | Create. Types: initiative, epic, story, task, bug. Returns `{"id":"T-N"}` and nothing else — confirming the other fields landed needs a follow-up `show`. `--id-only` drops the JSON wrapper and prints the bare id |
 | `pql ticket refine write <id> <json\|--file\|--stdin>` | Patch title, description, priority or type from a JSON payload |
 | `pql ticket append <id> <text\|--file\|--stdin>` | Append to the description, blank-line separated. Never rewrites existing text |
+| `pql ticket redact <id> <value> <replacement>` | Remove a leaked value from the ticket's prose *and* its changelog history, together — the supported route when a pre-push scan catches something. Refuses (exit 65) if the value is already in a remote's copy of the changelog; that is published history (D-35) |
 | `pql ticket refine list` / `refine next [--skip N]` | The queue of tickets with empty descriptions |
 
 **Structure** — each of these is repairable after the fact; none is

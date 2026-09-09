@@ -2041,3 +2041,312 @@ filed, but the underlying editable-artefact-vs-source divergence this ticket
 names is unresolved and open.
 
 DECIDED (2026-09-09): D-35 resolves the editable-artefact-vs-source divergence this ticket named as the real fix. Direction two (''treat a changelog edit as a database edit, or refuse it'') is adopted in both halves: the redact verb (implementation under T-130) moves both sides together so divergence is unrepresentable, and a detected hand-edit divergence is a defect state whose report names the verb. The scrub-completion documentation direction is superseded by the same record: unpushed scrubs get the verb, pushed scrubs get the documented git-rewrite procedure.', NULL, '2026-09-09 10:34:06', '2026-09-09 10:34:06.722', '2026-09-09 10:34:06.722', NULL, 'f86f29b5c8f07ae1daebbf9a156affe3', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89S0F3600NPD1978YNJP9CR', 'status', 'backlog', 'in_progress', NULL, '2026-09-09 10:38:13', '2026-09-09 10:38:13.720', '2026-09-09 10:38:13.720', NULL, 'ed559545b4bafc3b9470ad3ab02d174f', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89S0F3600NPD1978YNJP9CR', 'description', 'Found 2026-09-09 while removing sibling-repo names and a hostname from a ticket
+description before pushing. `make secrets` caught it, which is the system
+working — CLAUDE.md is explicit that ticket prose is published prose, and the
+gate ran before anything left the machine. What is missing is the route from
+"caught it" back to a clean changelog.
+
+WHY THE OBVIOUS FIXES DO NOT WORK
+
+Fixing forward makes it worse. `ticket refine write` appends a ticket_history
+row whose `old_value` is the previous description, so correcting a leaked
+description writes the leaked text into the changelog a second time. The
+outgoing diff then contains two copies rather than none.
+
+Wiping and re-exporting does not work either. `plan export` emits "every
+replicated planning row that has been modified since the last export", so it is
+watermark-driven. Restoring the changelog files to an earlier state and
+re-running it re-emits only rows touched since the watermark — in this case two
+rows out of the fifteen or so that were needed. The rest stayed in pql.db,
+absent from the changelog, with no supported way to get them back out.
+
+WHAT IT ACTUALLY TOOK
+
+    git reset --soft origin/main
+    git checkout origin/main -- .pql/changelog
+    rm .pql/pql.db
+    pql plan rebuild --verify
+    # then re-create four tickets by hand, re-entering every description,
+    # and re-attach the parent links
+
+That works and `--verify` reported 0 rows lost, but it is a hand-rolled
+procedure recovered from reading the exporter''s help text under time pressure,
+and the re-entry step is transcription with no check on it. Anyone hitting this
+without the descriptions still in front of them loses the prose.
+
+THE ASYMMETRY
+
+`plan rebuild` reconstructs pql.db from the changelog and can be forced at any
+time. There is no inverse. The pair is documented as replication, but only one
+direction can be regenerated on demand — the other is append-only and
+watermarked, so pql.db''s current state cannot be re-expressed as changelog
+content once the watermark has passed it.
+
+THE DESIGN QUESTION UNDERNEATH, which is why this is not just a missing flag
+
+Is the changelog an append-only *log*, or a materialised *replica*?
+
+- As a log, redaction is illegitimate by construction and the honest answer is
+  that scrubbing prose requires rewriting git history, with the D-16 hashes and
+  LWW guards recomputed. A `--force-full` export would be a footgun that
+  silently rewrites replicated history other clones have already replayed.
+- As a replica, regenerating it from pql.db is the natural operation and its
+  absence is the defect.
+
+D-15 and D-16 lean toward log (monthly append files, inline LWW guards, content
+hashes, ON CONFLICT DO NOTHING on replay), but `plan rebuild` treats pql.db as
+fully derivable from it, which is replica-shaped. The two readings have not had
+to disagree until now.
+
+Worth noting the blast radius differs by case. Redacting a ticket that has never
+been pushed — this case — touches nothing another clone has seen, and a full
+regeneration is safe. Redacting one that has been replayed elsewhere is a
+distributed-state problem and probably out of scope for any flag.
+
+DESIRED, not a design
+
+Someone who has just been told by `make secrets` that a ticket description
+leaks should have a supported route to fix it that does not involve re-entering
+prose. Shapes worth weighing:
+
+- A full/forced export that rewrites the month''s files from pql.db, refusing (or
+  loudly warning) when the affected rows appear in commits already pushed.
+- A redact verb scoped to descriptions, which rewrites the row and its history
+  entries in place rather than appending.
+- Nothing in the tool, and instead a documented procedure in CLAUDE.md next to
+  the "ticket prose is published prose" table — cheapest, and honest if the log
+  reading wins.
+
+The third is a legitimate outcome. What is not legitimate is the current state,
+where the gate reliably catches the problem and the recovery is undocumented.
+
+RELATED
+
+D-15, D-16 - changelog replication and the guards that make replay safe.
+T-123     - the other place the single-writer assumption shows at the seam.
+
+DECIDED (2026-09-09): D-35 settles the log-or-replica question this ticket raised — log, with the push boundary as the rewrite rule. Of the three shapes weighed here, the outcome is closest to the first, narrowed: not a force-full export, but a redact-class verb that rewrites the affected rows in pql.db, ticket_history (old_value copies included) and the changelog lines together, refusing when any affected line is already in a pushed commit. Pushed-history redaction stays a documented git-rewrite procedure, per the record. This ticket becomes the implementation carrier for that verb.', 'Found 2026-09-09 while removing sibling-repo names and a hostname from a ticket
+description before pushing. `make secrets` caught it, which is the system
+working — CLAUDE.md is explicit that ticket prose is published prose, and the
+gate ran before anything left the machine. What is missing is the route from
+"caught it" back to a clean changelog.
+
+WHY THE OBVIOUS FIXES DO NOT WORK
+
+Fixing forward makes it worse. `ticket refine write` appends a ticket_history
+row whose `old_value` is the previous description, so correcting a leaked
+description writes the leaked text into the changelog a second time. The
+outgoing diff then contains two copies rather than none.
+
+Wiping and re-exporting does not work either. `plan export` emits "every
+replicated planning row that has been modified since the last export", so it is
+watermark-driven. Restoring the changelog files to an earlier state and
+re-running it re-emits only rows touched since the watermark — in this case two
+rows out of the fifteen or so that were needed. The rest stayed in pql.db,
+absent from the changelog, with no supported way to get them back out.
+
+WHAT IT ACTUALLY TOOK
+
+    git reset --soft origin/main
+    git checkout origin/main -- .pql/changelog
+    rm .pql/pql.db
+    pql plan rebuild --verify
+    # then re-create four tickets by hand, re-entering every description,
+    # and re-attach the parent links
+
+That works and `--verify` reported 0 rows lost, but it is a hand-rolled
+procedure recovered from reading the exporter''s help text under time pressure,
+and the re-entry step is transcription with no check on it. Anyone hitting this
+without the descriptions still in front of them loses the prose.
+
+THE ASYMMETRY
+
+`plan rebuild` reconstructs pql.db from the changelog and can be forced at any
+time. There is no inverse. The pair is documented as replication, but only one
+direction can be regenerated on demand — the other is append-only and
+watermarked, so pql.db''s current state cannot be re-expressed as changelog
+content once the watermark has passed it.
+
+THE DESIGN QUESTION UNDERNEATH, which is why this is not just a missing flag
+
+Is the changelog an append-only *log*, or a materialised *replica*?
+
+- As a log, redaction is illegitimate by construction and the honest answer is
+  that scrubbing prose requires rewriting git history, with the D-16 hashes and
+  LWW guards recomputed. A `--force-full` export would be a footgun that
+  silently rewrites replicated history other clones have already replayed.
+- As a replica, regenerating it from pql.db is the natural operation and its
+  absence is the defect.
+
+D-15 and D-16 lean toward log (monthly append files, inline LWW guards, content
+hashes, ON CONFLICT DO NOTHING on replay), but `plan rebuild` treats pql.db as
+fully derivable from it, which is replica-shaped. The two readings have not had
+to disagree until now.
+
+Worth noting the blast radius differs by case. Redacting a ticket that has never
+been pushed — this case — touches nothing another clone has seen, and a full
+regeneration is safe. Redacting one that has been replayed elsewhere is a
+distributed-state problem and probably out of scope for any flag.
+
+DESIRED, not a design
+
+Someone who has just been told by `make secrets` that a ticket description
+leaks should have a supported route to fix it that does not involve re-entering
+prose. Shapes worth weighing:
+
+- A full/forced export that rewrites the month''s files from pql.db, refusing (or
+  loudly warning) when the affected rows appear in commits already pushed.
+- A redact verb scoped to descriptions, which rewrites the row and its history
+  entries in place rather than appending.
+- Nothing in the tool, and instead a documented procedure in CLAUDE.md next to
+  the "ticket prose is published prose" table — cheapest, and honest if the log
+  reading wins.
+
+The third is a legitimate outcome. What is not legitimate is the current state,
+where the gate reliably catches the problem and the recovery is undocumented.
+
+RELATED
+
+D-15, D-16 - changelog replication and the guards that make replay safe.
+T-123     - the other place the single-writer assumption shows at the seam.
+
+DECIDED (2026-09-09): D-35 settles the log-or-replica question this ticket raised — log, with the push boundary as the rewrite rule. Of the three shapes weighed here, the outcome is closest to the first, narrowed: not a force-full export, but a redact-class verb that rewrites the affected rows in pql.db, ticket_history (old_value copies included) and the changelog lines together, refusing when any affected line is already in a pushed commit. Pushed-history redaction stays a documented git-rewrite procedure, per the record. This ticket becomes the implementation carrier for that verb.
+
+RESOLVED (2026-09-09). pql ticket redact <id> <value> <replacement> is the supported route this ticket asked for. Shape: closest to the second option weighed here (a redact verb scoped to prose, rewriting rows in place rather than appending), governed by D-35 rather than a force-full export — the changelog stays a log, and the push boundary is the rewrite rule. It reaches the tickets row, every ticket_history row including old_value copies (the fix-forward duplication this ticket documented), and the changelog lines carrying them, through the D-28 staged-SQLite path with hashes recomputed by the same canonical projection the db side uses — so untouched lines return byte-identical and the rewritten file replays with verifying hashes (tested: replay into a fresh replica, rehash, compare). The asymmetry stands by design: plan export still cannot regenerate the changelog, because regeneration is exactly the replica reading D-35 rejected; what redaction needed was never regeneration, only a rewrite that moves both sides together. Pushed history refuses with the documented git-rewrite procedure as the named remedy. Verified live: leak planted via ticket append, caught in both tickets/ and ticket_history/ files, redacted in one command, plan rebuild --verify reports 0 rows lost.', NULL, '2026-09-09 10:43:30', '2026-09-09 10:43:30.310', '2026-09-09 10:43:30.310', NULL, 'c12c359cbac75e5822ea3d1815e68d67', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89S0F3600NPD1978YNJP9CR', 'status', 'in_progress', 'done', NULL, '2026-09-09 10:43:30', '2026-09-09 10:43:30.331', '2026-09-09 10:43:30.331', NULL, '430f9c1a16b129b880e2a2c2626bb32e', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4FHC4YQRSRC071QNEWM64G', 'description', 'A value removed from a committed changelog file is re-published by the next ticket mutation, because pql.db still holds the original row and the write-through export (D-23) re-derives the file from it.
+
+OBSERVED 2026-08-11. A ticket_history row had been scrubbed by hand — one line edited — before the commit that introduced it. Creating an unrelated ticket months later triggered the export, which re-appended that same row: byte-identical to the committed one apart from the scrubbed line, which came back in full. Same content hash on both. It was caught in review and removed from the working tree before staging, so nothing was published, but only because someone happened to diff the export before committing it.
+
+TWO MECHANISMS COMPOUND, and either alone would be survivable.
+
+1. The export boundary appears to be inclusive. The re-appended row''s updated_at equalled last_export_marker exactly, so a row already exported was exported again. A row that has not changed since the last export has nothing new to say, and re-emitting it is what turned a stale row into a live one.
+
+2. The changelog is derived, and a scrub edits only the derivation. pql.db is the source the export reads. Editing the artefact leaves the source untouched, so the edit survives exactly until the next write — which is the least intuitive moment for it to be undone, because nothing about creating an unrelated ticket suggests it will rewrite history.
+
+WHY THIS MATTERS MORE THAN IT LOOKS. This repo''s own CLAUDE.md states that everything committed here is published and indexed, that ticket prose is published prose, and that the changelog is committed by design so tickets travel with a clone. It also documents that history already carries findings resolved by untracking a file rather than rewriting the past. So scrubbing-before-commit is an established practice here, and this makes that practice unreliable in a way its user cannot see.
+
+The pre-push gate scans the outgoing range, so it can catch a re-published value — but only for patterns its ruleset knows. A consuming repo''s name, a project path, or anything else specific to an operator''s environment is not a secret by any default ruleset, and those are precisely what the scrub-before-commit habit exists to remove.
+
+WHAT ACTUALLY WORKED, and is worth documenting either way: `rm .pql/pql.db && pql plan rebuild` rebuilt the database from the scrubbed changelog and dropped the row. The repo''s documented recovery path is also its scrub-completion path, which is not obvious from either description. Verified: the row was present before the rebuild and absent after, with no ticket lost.
+
+DIRECTIONS, not a prescription:
+  - Make the export boundary exclusive, so an unchanged row is not re-emitted. Necessary, not sufficient: it fixes recurrence, not the divergence.
+  - Treat a changelog edit as a database edit, or refuse it — the artefact and its source must not be independently editable if one regenerates the other.
+  - At minimum, document that a scrub is incomplete until the database is rebuilt from the scrubbed file, and say so where the scrub-before-commit practice is described rather than only under recovery.
+
+Distinct from T-96, which is about a mutation against a populated changelog with an empty database. This is the reverse: a populated database re-deriving over an edited changelog.
+
+CORRECTION (T-106/T-107 round, 2026-08-11). The first prescribed direction here —
+"make the export boundary exclusive" — is wrong and must not be implemented as
+written.
+
+The boundary is inclusive (`updated_at >= marker`) by design, not by oversight.
+`exporter.go:26-33` documents why: write-through (D-23) calls Export after every
+mutation, advancing the marker to "now" at second granularity. A mutation landing
+in the SAME second as the marker would be silently skipped under a strict `>` —
+which is exactly the data-loss class write-through exists to close. Making the
+boundary exclusive trades this ticket''s re-emission-of-a-stale-row problem for
+silent non-persistence of a live one. The second problem is worse: this ticket''s
+symptom is noise a diff can catch (as this one was); the exclusive-boundary
+failure mode is data that was never written and gives no signal that it is
+missing.
+
+The actual mechanism, confirmed by tracing `fileSink.appendLine` /
+`fileSink.loadSeen` (`exporter.go:108-157`): a re-scanned row that is
+byte-identical to what is already in the file is deduped and never written twice
+— dedup is by content, not by marker exclusion. This ticket''s failure case is
+narrower than "the boundary re-emits": it is specifically the scrub case, where
+the row on disk and the row in pql.db have *diverged* (the file was hand-edited,
+the database was not), so the re-scanned line is no longer byte-identical to what
+loadSeen has on record and gets written as new content. An exclusive boundary
+would not touch this at all, because the row that re-appears was never re-scanned
+by the exclusive/inclusive distinction in the failing case that matters —
+it would only stop the *harmless* re-scan-of-identical-content case T-107
+separately (and also wrongly) worried about.
+
+Second and third directions stand. "Treat a changelog edit as a database edit,
+or refuse it" is the real fix and is still undecided — out of scope for the
+T-106/T-107 round, which fixed the two rebuild-side defects (T-106: decisions
+lost on recovery; T-107: investigated and found already fixed by T-26, see that
+ticket''s closing note) without touching the export-boundary question this
+ticket raises. "Document that a scrub is incomplete until rebuilt" is now true
+by construction where it matters: `pql plan rebuild` (this ticket''s own
+documented recovery) now also restores decisions (T-106''s fix), so the rebuild
+path is a more complete scrub-completion step than it was when this ticket was
+filed, but the underlying editable-artefact-vs-source divergence this ticket
+names is unresolved and open.
+
+DECIDED (2026-09-09): D-35 resolves the editable-artefact-vs-source divergence this ticket named as the real fix. Direction two (''treat a changelog edit as a database edit, or refuse it'') is adopted in both halves: the redact verb (implementation under T-130) moves both sides together so divergence is unrepresentable, and a detected hand-edit divergence is a defect state whose report names the verb. The scrub-completion documentation direction is superseded by the same record: unpushed scrubs get the verb, pushed scrubs get the documented git-rewrite procedure.', 'A value removed from a committed changelog file is re-published by the next ticket mutation, because pql.db still holds the original row and the write-through export (D-23) re-derives the file from it.
+
+OBSERVED 2026-08-11. A ticket_history row had been scrubbed by hand — one line edited — before the commit that introduced it. Creating an unrelated ticket months later triggered the export, which re-appended that same row: byte-identical to the committed one apart from the scrubbed line, which came back in full. Same content hash on both. It was caught in review and removed from the working tree before staging, so nothing was published, but only because someone happened to diff the export before committing it.
+
+TWO MECHANISMS COMPOUND, and either alone would be survivable.
+
+1. The export boundary appears to be inclusive. The re-appended row''s updated_at equalled last_export_marker exactly, so a row already exported was exported again. A row that has not changed since the last export has nothing new to say, and re-emitting it is what turned a stale row into a live one.
+
+2. The changelog is derived, and a scrub edits only the derivation. pql.db is the source the export reads. Editing the artefact leaves the source untouched, so the edit survives exactly until the next write — which is the least intuitive moment for it to be undone, because nothing about creating an unrelated ticket suggests it will rewrite history.
+
+WHY THIS MATTERS MORE THAN IT LOOKS. This repo''s own CLAUDE.md states that everything committed here is published and indexed, that ticket prose is published prose, and that the changelog is committed by design so tickets travel with a clone. It also documents that history already carries findings resolved by untracking a file rather than rewriting the past. So scrubbing-before-commit is an established practice here, and this makes that practice unreliable in a way its user cannot see.
+
+The pre-push gate scans the outgoing range, so it can catch a re-published value — but only for patterns its ruleset knows. A consuming repo''s name, a project path, or anything else specific to an operator''s environment is not a secret by any default ruleset, and those are precisely what the scrub-before-commit habit exists to remove.
+
+WHAT ACTUALLY WORKED, and is worth documenting either way: `rm .pql/pql.db && pql plan rebuild` rebuilt the database from the scrubbed changelog and dropped the row. The repo''s documented recovery path is also its scrub-completion path, which is not obvious from either description. Verified: the row was present before the rebuild and absent after, with no ticket lost.
+
+DIRECTIONS, not a prescription:
+  - Make the export boundary exclusive, so an unchanged row is not re-emitted. Necessary, not sufficient: it fixes recurrence, not the divergence.
+  - Treat a changelog edit as a database edit, or refuse it — the artefact and its source must not be independently editable if one regenerates the other.
+  - At minimum, document that a scrub is incomplete until the database is rebuilt from the scrubbed file, and say so where the scrub-before-commit practice is described rather than only under recovery.
+
+Distinct from T-96, which is about a mutation against a populated changelog with an empty database. This is the reverse: a populated database re-deriving over an edited changelog.
+
+CORRECTION (T-106/T-107 round, 2026-08-11). The first prescribed direction here —
+"make the export boundary exclusive" — is wrong and must not be implemented as
+written.
+
+The boundary is inclusive (`updated_at >= marker`) by design, not by oversight.
+`exporter.go:26-33` documents why: write-through (D-23) calls Export after every
+mutation, advancing the marker to "now" at second granularity. A mutation landing
+in the SAME second as the marker would be silently skipped under a strict `>` —
+which is exactly the data-loss class write-through exists to close. Making the
+boundary exclusive trades this ticket''s re-emission-of-a-stale-row problem for
+silent non-persistence of a live one. The second problem is worse: this ticket''s
+symptom is noise a diff can catch (as this one was); the exclusive-boundary
+failure mode is data that was never written and gives no signal that it is
+missing.
+
+The actual mechanism, confirmed by tracing `fileSink.appendLine` /
+`fileSink.loadSeen` (`exporter.go:108-157`): a re-scanned row that is
+byte-identical to what is already in the file is deduped and never written twice
+— dedup is by content, not by marker exclusion. This ticket''s failure case is
+narrower than "the boundary re-emits": it is specifically the scrub case, where
+the row on disk and the row in pql.db have *diverged* (the file was hand-edited,
+the database was not), so the re-scanned line is no longer byte-identical to what
+loadSeen has on record and gets written as new content. An exclusive boundary
+would not touch this at all, because the row that re-appears was never re-scanned
+by the exclusive/inclusive distinction in the failing case that matters —
+it would only stop the *harmless* re-scan-of-identical-content case T-107
+separately (and also wrongly) worried about.
+
+Second and third directions stand. "Treat a changelog edit as a database edit,
+or refuse it" is the real fix and is still undecided — out of scope for the
+T-106/T-107 round, which fixed the two rebuild-side defects (T-106: decisions
+lost on recovery; T-107: investigated and found already fixed by T-26, see that
+ticket''s closing note) without touching the export-boundary question this
+ticket raises. "Document that a scrub is incomplete until rebuilt" is now true
+by construction where it matters: `pql plan rebuild` (this ticket''s own
+documented recovery) now also restores decisions (T-106''s fix), so the rebuild
+path is a more complete scrub-completion step than it was when this ticket was
+filed, but the underlying editable-artefact-vs-source divergence this ticket
+names is unresolved and open.
+
+DECIDED (2026-09-09): D-35 resolves the editable-artefact-vs-source divergence this ticket named as the real fix. Direction two (''treat a changelog edit as a database edit, or refuse it'') is adopted in both halves: the redact verb (implementation under T-130) moves both sides together so divergence is unrepresentable, and a detected hand-edit divergence is a defect state whose report names the verb. The scrub-completion documentation direction is superseded by the same record: unpushed scrubs get the verb, pushed scrubs get the documented git-rewrite procedure.
+
+RESOLVED (2026-09-09), via D-35 and the redact verb (T-130). The re-publication mechanism this ticket documented — a hand-scrubbed file silently re-derived from an unscrubbed pql.db — is closed from both ends. Forward: pql ticket redact rewrites db and changelog together, so the scrub-then-diverge state is never created; the verb is the supported form of ''treat a changelog edit as a database edit''. Backward: a hand-edit remains illegitimate per D-35, and its failure mode is unchanged but now documented as such — the record names hand-editing a defect state and the verb the remedy. The export boundary was left inclusive per this ticket''s own correction (an exclusive boundary trades visible noise for silent data loss). The third direction (document that a scrub is incomplete until rebuilt) is superseded: with the verb, a scrub is complete when the command returns.', NULL, '2026-09-09 10:43:37', '2026-09-09 10:43:37.404', '2026-09-09 10:43:37.404', NULL, '1e7fff9842fd86fe2db91f8d17328d14', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FZ4FHC4YQRSRC071QNEWM64G', 'status', 'backlog', 'done', NULL, '2026-09-09 10:43:37', '2026-09-09 10:43:37.427', '2026-09-09 10:43:37.427', NULL, '5e6fc388b27f2b15c4a188f92c420c8e', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G8AYX5XJWXT91BZHE2A8JYAG', 'description', 'Four shipped defects share one root: pql mutates planning state as if the local replica (.pql/pql.db) were authoritative, when the committed changelog is the log of record (D-15, D-28). T-96: a mutation against a populated changelog with an empty db silently relabels from T-1. T-105: scrubbing a changelog file does not survive the next mutation, because export is watermark-driven and re-emits the unscrubbed row. T-123: ticket new allocates a label from a replica it never checks is current. T-130: plan export cannot regenerate the changelog, so redaction means rebuild-and-refile by hand. Each child is fixable alone, but the durable fix is one discipline: before allocating or emitting, a mutation consults the changelog side, not just the replica. Adjacent but out of scope: T-111 (the pre-commit hook exports whatever vault the environment names) — that is an init/hook defect, not a replica-trust one.', 'Four shipped defects share one root: pql mutates planning state as if the local replica (.pql/pql.db) were authoritative, when the committed changelog is the log of record (D-15, D-28). T-96: a mutation against a populated changelog with an empty db silently relabels from T-1. T-105: scrubbing a changelog file does not survive the next mutation, because export is watermark-driven and re-emits the unscrubbed row. T-123: ticket new allocates a label from a replica it never checks is current. T-130: plan export cannot regenerate the changelog, so redaction means rebuild-and-refile by hand. Each child is fixable alone, but the durable fix is one discipline: before allocating or emitting, a mutation consults the changelog side, not just the replica. Adjacent but out of scope: T-111 (the pre-commit hook exports whatever vault the environment names) — that is an init/hook defect, not a replica-trust one.
+
+CLOSED (2026-09-09). All four children done in one arc, plus the decision that unblocked the last two. T-96/T-123: GuardReplicaCurrent refuses mutations against a replica that is empty or behind the changelog''s ever-minted labels — allocation can no longer outrun the log. D-35 settled the log-or-replica ambiguity: the changelog is a log, and the push boundary is the rewrite rule. T-105/T-130: pql ticket redact rewrites db and changelog together for unpushed history, refusing on published values — the discipline this epic named (''before allocating or emitting, consult the changelog side'') is now enforced on both the allocation seam and the redaction seam. Adjacent and still open: T-111 (hook exports whatever vault the environment names), out of scope here as an init/hook defect.', NULL, '2026-09-09 10:43:50', '2026-09-09 10:43:50.493', '2026-09-09 10:43:50.493', NULL, 'dfc642994115e51d3dfba28ff8f96c4e', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G8AYX5XJWXT91BZHE2A8JYAG', 'status', 'backlog', 'done', NULL, '2026-09-09 10:43:50', '2026-09-09 10:43:50.515', '2026-09-09 10:43:50.515', NULL, 'c5e367f7ba937a531106e29237cec2cf', 2) ON CONFLICT(hash) DO NOTHING;

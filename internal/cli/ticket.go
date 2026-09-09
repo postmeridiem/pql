@@ -191,7 +191,7 @@ func newTicketCmd() *cobra.Command {
 		newTicketNewCmd(), newTicketStatusCmd(), newTicketRelabelCmd(),
 		newTicketAssignCmd(), newTicketSetParentCmd(), newTicketDecisionCmd(),
 		newTicketBlockCmd(), newTicketUnblockCmd(), newTicketTeamCmd(),
-		newTicketLabelCmd(), newTicketAppendCmd(),
+		newTicketLabelCmd(), newTicketAppendCmd(), newTicketRedactCmd(),
 	}
 	markMutation(mutating...)
 	for _, c := range append(read, mutating...) {
