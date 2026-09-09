@@ -19,6 +19,18 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ### Fixed
 
+- **Tied scores in ranked results now order by path instead of by accident.**
+  The ranker sorted on score alone with an unstable sort, so candidates with
+  equal scores — common, since a link-sparse vault zeroes several signals at
+  once — came out in whatever arrangement the sort left, a function of
+  candidate arrival order. The comparator now breaks ties on path, making the
+  order total: the same query returns the same order every time (T-127).
+- **Candidate generation pins its row order.** The three ranked verbs'
+  candidate queries had no `ORDER BY` and leaned on a SQLite implementation
+  detail (the UNION dedup B-tree happening to emit sorted rows) that a SQLite
+  upgrade could silently change. All three now order by path explicitly, so
+  what the ranking layer receives is pinned too (T-128).
+
 - **`pql self-update` can now actually update.** It constructed the release
   asset's name without the version segment goreleaser has always published
   (`pql_Linux_x86_64.tar.gz` vs `pql_2.3.0_Linux_x86_64.tar.gz`), so no

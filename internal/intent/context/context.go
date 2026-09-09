@@ -80,6 +80,7 @@ func gatherCandidates(ctx context.Context, db *sql.DB, targetPath string) ([]str
 			JOIN tags b ON a.tag = b.tag
 			WHERE a.path = ? AND b.path != ?
 		)
+		ORDER BY path
 	`, targetPath, targetPath, targetPath, targetPath,
 		targetPath, targetPath,
 		targetPath, targetPath)

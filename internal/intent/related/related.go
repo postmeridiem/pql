@@ -52,6 +52,7 @@ func gatherCandidates(ctx context.Context, db *sql.DB, targetPath string) ([]str
 			SELECT path FROM files
 			WHERE path != ? AND path LIKE ? || '%'
 		)
+		ORDER BY path
 	`, targetPath, targetPath, targetPath, targetPath,
 		targetPath, targetPath,
 		targetPath, dirOf(targetPath))

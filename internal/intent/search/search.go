@@ -50,6 +50,7 @@ func gatherCandidates(ctx context.Context, db *sql.DB, query string) ([]string, 
 			UNION
 			SELECT path FROM headings WHERE LOWER(text) LIKE ?
 		)
+		ORDER BY path
 	`, pattern, pattern, pattern, pattern)
 	if err != nil {
 		return nil, fmt.Errorf("search: gather candidates: %w", err)

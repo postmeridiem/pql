@@ -3016,3 +3016,33 @@ way to make ranked output reproducible.
 
 `SliceStable` on its own would only preserve an input order that is not
 guaranteed, so prefer the explicit tie-break over relying on stability.', 'done', 'medium', NULL, NULL, NULL, '2026-09-09 06:34:09.085', '2026-09-09 09:46:10.086', NULL, '65e030ace029922ab14b652c93e009be', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89R15HFKK0Y3EFGJXDAQEBG', 'bug', '06G89R35V3EJQDYRRW7K98VWZG', 'gatherCandidates has no ORDER BY in any of the three ranked verbs', 'None of the three `gatherCandidates` functions pins row order:
+
+- `internal/intent/search/search.go:43`
+- `internal/intent/related/related.go:41`
+- `internal/intent/context/context.go:57`
+
+Each is a `SELECT DISTINCT path FROM ( ... UNION ... )` with no ORDER BY. SQLite
+does not guarantee row order without one.
+
+In practice the order is stable today: `UNION` (as opposed to `UNION ALL`)
+requires deduplication, which SQLite currently implements with a temporary
+B-tree, and that happens to emit rows sorted. So this is latent, not an active
+bug — which is precisely why it is worth pinning explicitly rather than leaving
+to chance. The behaviour rests on a query-planner implementation detail, and a
+SQLite upgrade, an added index, or different ANALYZE stats can change it with no
+change to this code. That failure would be silent: results shift, nothing errors.
+
+Fix is `ORDER BY path` on the outer SELECT in all three.
+
+Worth doing even after the tie-break in the sibling ticket lands. The tie-break
+makes the final output order independent of candidate order, so the two are not
+redundant defences of the same thing:
+
+- ORDER BY pins what the ranking layer *receives*, which matters for debugging,
+  for reproducible `--full` signal output, and for anything that reads
+  candidates before scoring.
+- The tie-break pins what callers *see*.
+
+Cost is negligible: these batches are small and the temp B-tree is already
+sorting.', 'done', 'medium', NULL, NULL, NULL, '2026-09-09 06:34:37.323', '2026-09-09 09:46:16.710', NULL, '613e7b3618a0853f45807d952f224352', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
