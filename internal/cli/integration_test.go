@@ -1514,20 +1514,37 @@ func TestIntegration_Status_ForceCascadesToSubtree(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("force close exit=%d\nstderr: %s", code, stderr)
 	}
-	// Output lists every closed ticket (the whole subtree).
-	var rows []map[string]any
-	if err := json.Unmarshal(stdout, &rows); err != nil {
+	// Several records changed → the D-30 summary, its ticket_ids naming
+	// every ticket the cascade actually closed (T-91).
+	var summary struct {
+		TicketIDs []string `json:"ticket_ids"`
+		Action    string   `json:"action"`
+		Status    string   `json:"status"`
+	}
+	if err := json.Unmarshal(stdout, &summary); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
 	}
-	got := map[string]string{}
-	for _, r := range rows {
-		id, _ := r["id"].(string)
-		status, _ := r["status"].(string)
-		got[id] = status
+	if summary.Action != "status" || summary.Status != "cancelled" {
+		t.Errorf("summary = %+v, want action=status status=cancelled", summary)
+	}
+	closed := map[string]bool{}
+	for _, id := range summary.TicketIDs {
+		closed[id] = true
 	}
 	for _, id := range []string{"T-1", "T-2", "T-3"} {
-		if got[id] != "cancelled" {
-			t.Errorf("%s = %q after force cascade, want cancelled (full output: %v)", id, got[id], got)
+		if !closed[id] {
+			t.Errorf("%s missing from cascade receipt %v", id, summary.TicketIDs)
+		}
+	}
+	// The receipt names them; show confirms the state landed.
+	stdout2 := pqlIT(t, vault, "ticket", "show", "T-1,T-2,T-3", "--fields", "id,status")
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(stdout2), &rows); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout2)
+	}
+	for _, r := range rows {
+		if r["status"] != "cancelled" {
+			t.Errorf("%v = %v after force cascade, want cancelled", r["id"], r["status"])
 		}
 	}
 }

@@ -612,9 +612,12 @@ pql ticket label T-1,T-2 add urgent
 # {"ticket_ids":["T-1","T-2"],"action":"add","label":"urgent"}
 ```
 
-Not every batch verb has converged on the summary shape yet, so a multi-id
-call may still return N whole records. Budget for that, and prefer batching to
-looping either way.
+Every batch verb follows this rule (`status`, `assign`, `team`, `label`,
+`setparent`, `decision`) — a multi-id call always returns the summary, never
+N whole records. Prefer batching to looping. One nuance on `ticket status
+--force`: the cascade can close descendants beyond the ids you named, and the
+summary's `ticket_ids` lists everything it actually closed — which is the
+receipt doing its job.
 
 An unknown name exits `64` and prints the valid set, so the error is a usable
 lookup if you forget.

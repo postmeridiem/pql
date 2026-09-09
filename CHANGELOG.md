@@ -17,6 +17,19 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Batch mutation verbs now return one summary, never N whole records**
+  (T-91, completing D-30). A multi-id `ticket status`, `assign`, `team`,
+  `setparent` or `decision` used to return every changed record whole —
+  descriptions included, kilobytes per ticket, with `--fields` deliberately
+  rejected — while `ticket label` already returned a compact
+  `{ticket_ids, action, …}` summary. All six now follow the documented count
+  rule: one record changed returns that record whole; several return the
+  summary naming the ids and what was applied. `ticket label` gains the
+  other half of the same rule — a single-id call now returns the whole
+  record where it previously returned the summary.
+
 ### Added
 
 - **`pql ticket redact <id> <value> <replacement>`** — the supported route

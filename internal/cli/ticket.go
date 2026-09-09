@@ -255,7 +255,7 @@ Output is the updated ticket row, so the caller can verify the append.`,
 			if tk == nil {
 				return &exitError{code: diag.NoInput, msg: fmt.Sprintf("ticket %s not found", id)}
 			}
-			return renderTicketResults(cmd, []repo.Ticket{*tk})
+			return renderMutationReceipt(cmd, []repo.Ticket{*tk}, "append", "", "")
 		},
 	}
 	cmd.Flags().StringVar(&fromFile, "file", "", "read the text from this file path")
@@ -579,7 +579,7 @@ ticket it closed.
 			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
 				return err
 			}
-			return renderTicketResults(cmd, results)
+			return renderMutationReceipt(cmd, results, "status", "status", newStatus)
 		},
 	}
 	cmd.Flags().BoolVar(&forceFlag, "force", false,
@@ -827,7 +827,7 @@ func newTicketAssignCmd() *cobra.Command {
 			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
 				return err
 			}
-			return renderTicketResults(cmd, results)
+			return renderMutationReceipt(cmd, results, "assign", "assigned_to", agent)
 		},
 	}
 }
@@ -879,7 +879,7 @@ func newTicketSetParentCmd() *cobra.Command {
 			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
 				return err
 			}
-			return renderTicketResults(cmd, results)
+			return renderMutationReceipt(cmd, results, "setparent", "parent_id", args[1])
 		},
 	}
 }
@@ -937,7 +937,7 @@ record was only just written.`,
 			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
 				return err
 			}
-			return renderTicketResults(cmd, results)
+			return renderMutationReceipt(cmd, results, "decision", "decision_ref", args[1])
 		},
 	}
 }
@@ -1115,7 +1115,7 @@ func newTicketTeamCmd() *cobra.Command {
 			if err := exportThrough(ctx, pdb, cfg.Vault.Path); err != nil {
 				return err
 			}
-			return renderTicketResults(cmd, results)
+			return renderMutationReceipt(cmd, results, "team", "team", team)
 		},
 	}
 }
@@ -1192,20 +1192,20 @@ func newTicketLabelCmd() *cobra.Command {
 				return err
 			}
 
-			type labelResult struct {
-				TicketIDs []string `json:"ticket_ids"`
-				Action    string   `json:"action"`
-				Label     string   `json:"label"`
+			// The receipt follows the same count rule as every other
+			// mutation verb (D-30, T-91): one ticket returns the record
+			// whole, a batch returns the summary this verb originated.
+			var results []repo.Ticket
+			for _, id := range ids {
+				tk, err := repo.GetTicket(ctx, pdb.SQL(), id)
+				if err != nil {
+					return &exitError{code: diag.Software, msg: err.Error()}
+				}
+				if tk != nil {
+					results = append(results, *tk)
+				}
 			}
-			rOpts, err := renderOptsFromFlags(cmd)
-			if err != nil {
-				return &exitError{code: diag.Usage, msg: err.Error()}
-			}
-			rOpts.Out = cmd.OutOrStdout()
-			if _, err := render.One(&labelResult{TicketIDs: ids, Action: action, Label: label}, rOpts); err != nil {
-				return &exitError{code: diag.Software, msg: err.Error()}
-			}
-			return nil
+			return renderMutationReceipt(cmd, results, action, "label", label)
 		},
 	}
 }
@@ -1343,7 +1343,13 @@ func boardColumns(ss planning.StatusSet, statusFlag string, openOnly bool) (map[
 	return wanted, nil
 }
 
-func renderTicketResults(cmd *cobra.Command, results []repo.Ticket) error {
+// renderMutationReceipt renders the D-30 receipt shape. A verb that changed
+// one record returns that record whole — the moment you want everything, so
+// the caller can confirm the change landed. A verb that changed several
+// returns a summary naming the ids and what was applied, the shape `ticket
+// label` established: N full records is not a receipt, it is N answers to a
+// question nobody asked (T-91).
+func renderMutationReceipt(cmd *cobra.Command, results []repo.Ticket, action, valueKey, value string) error {
 	rOpts, err := renderOptsFromFlags(cmd)
 	if err != nil {
 		return &exitError{code: diag.Usage, msg: err.Error()}
@@ -1353,10 +1359,18 @@ func renderTicketResults(cmd *cobra.Command, results []repo.Ticket) error {
 		if _, err := render.One(&results[0], rOpts); err != nil {
 			return &exitError{code: diag.Software, msg: err.Error()}
 		}
-	} else {
-		if _, err := render.Render(results, rOpts); err != nil {
-			return &exitError{code: diag.Software, msg: err.Error()}
-		}
+		return nil
+	}
+	ids := make([]string, len(results))
+	for i := range results {
+		ids[i] = results[i].ID
+	}
+	summary := map[string]any{"ticket_ids": ids, "action": action}
+	if valueKey != "" {
+		summary[valueKey] = value
+	}
+	if _, err := render.One(&summary, rOpts); err != nil {
+		return &exitError{code: diag.Software, msg: err.Error()}
 	}
 	return nil
 }
