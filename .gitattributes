@@ -1,1 +1,10 @@
-.pql/changelog/*.sql merge=union
+# The changelog is append-only replication (D-15): one INSERT per line, each
+# guarded by ON CONFLICT, so the union of two branches is the correct merge and
+# a conflict here is noise. Two clones filing tickets in parallel is the normal
+# case, not an edge one.
+#
+# The pattern needs `**` because the changelog is per-table subdirectories —
+# `.pql/changelog/tickets/2026-09.sql`, not `.pql/changelog/2026-09.sql`. The
+# original rule was written against the flat layout and kept matching nothing
+# after the split, so every parallel filing conflicted by hand instead.
+.pql/changelog/**/*.sql merge=union

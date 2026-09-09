@@ -19,6 +19,15 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ### Fixed
 
+- **The changelog's union merge rule now matches the files it was written for.**
+  `.gitattributes` declared `.pql/changelog/*.sql merge=union`, but a
+  gitattributes glob does not cross a slash and the changelog is per-table
+  subdirectories — so the pattern matched nothing after that split and the union
+  driver never ran. Two clones filing tickets in parallel conflicted by hand
+  every time, which reads as the cost of distributed planning rather than as a
+  glob that quietly stopped matching. The changelog is append-only `INSERT`s
+  guarded by `ON CONFLICT` (D-15), so union is the correct resolution.
+
 - **`pql skill install`'s refusal hint is now covered end to end.** T-121
   shipped a hint naming the files `--force` would replace, but the existing
   refusal test only asserted that stderr mentioned `modified`, so the hint
