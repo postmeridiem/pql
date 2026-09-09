@@ -1414,3 +1414,84 @@ AUDIT NOTE (2026-09-09). Concrete evidence from a structure audit: testdata/coun
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G8AYTGD7JX35YTJSCAP1PEBG', 'assigned_to', NULL, 'claude', NULL, '2026-09-09 09:34:45', '2026-09-09 09:34:45.411', '2026-09-09 09:34:45.411', NULL, '55920b017955e1338d44dfbab90ead2b', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G8AYTGD7JX35YTJSCAP1PEBG', 'status', 'backlog', 'in_progress', NULL, '2026-09-09 09:34:51', '2026-09-09 09:34:51.735', '2026-09-09 09:34:51.735', NULL, '67011964190321c64db9de8b0828723f', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G8AYTGD7JX35YTJSCAP1PEBG', 'status', 'in_progress', 'done', NULL, '2026-09-09 09:36:52', '2026-09-09 09:36:52.082', '2026-09-09 09:36:52.082', NULL, '9b9078b2f1a1b8399b6355364dbaa018', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G66AQKC2Z6RAJZ0GQA725GWW', 'status', 'backlog', 'in_progress', NULL, '2026-09-09 09:41:13', '2026-09-09 09:41:13.041', '2026-09-09 09:41:13.041', NULL, '2e3fe4a0b5dae6a62c3bcc72a6f6cfdf', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G66AQKC2Z6RAJZ0GQA725GWW', 'description', '`pql self-update` cannot succeed on any platform for any release. It constructs the release asset''s name without the version, and goreleaser publishes it with the version.
+
+  internal/cli/selfupdate.go:142   fmt.Sprintf("pql_%s_%s.%s", osName, archName, ext)   -> pql_Linux_x86_64.tar.gz
+  .goreleaser.yaml:32-37           {{ .ProjectName }}_{{ .Version }}_{{ title .Os }}_...  -> pql_2.3.0_Linux_x86_64.tar.gz
+
+OBSERVED on 2.2.0 updating to v2.3.0: exit 69 with {"code":"cli.exit","msg":"no asset \"pql_Linux_x86_64.tar.gz\" in release v2.3.0"}. The release does carry pql_2.3.0_Linux_x86_64.tar.gz, alongside Darwin arm64/x86_64, Linux arm64 and a Windows zip. v2.2.0''s assets follow the same versioned naming, so this is not a regression introduced by the 2.3.0 release — no released binary has been able to update itself.
+
+THE FAILURE IS LOUD, WHICH IS THE GOOD HALF. It exits Unavail rather than reporting success, and the diagnostic quotes the exact name it looked for, which is what made this diagnosable in one step rather than by reading code. A self-updater that silently did nothing would be far worse. Only the resolution is wrong.
+
+CHECK THE WHOLE PATH, NOT ONLY THE LOOKUP. assetName is threaded into three places — the asset match, verifyChecksum(archiveData, assetName, checksumURL), and extractBinary(archiveData, assetName). checksums.txt lists the versioned names, so a fix that only corrects the download lookup moves the failure into checksum verification instead of removing it. Whatever produces the name has to produce the same string all three uses expect.
+
+DESIRED, not a design: self-update resolves an asset that exists, and stays correct if the archive naming changes again. The release''s own version is already in hand as rel.TagName at the point of the lookup, so building the name from it is one option; matching by platform suffix rather than exact equality is another; reading checksums.txt as the manifest of what the release actually shipped is a third, and has the property that the name is no longer inferred at all. Preferring an option that derives the name from the release rather than from a template repeated in two places would keep this from recurring — the defect is precisely that two files independently describe one string.
+
+WORTH A TEST THAT WOULD HAVE CAUGHT IT: nothing asserts that the name self-update constructs matches what .goreleaser.yaml produces. The two live in different languages in different files, which is why they drifted silently. A test that renders the goreleaser template, or that checks the constructed name against a real release''s asset list, closes it.
+
+THE FIX IS SMALLER THAN THE OPTIONS ABOVE SUGGEST: the data is already in the function and is discarded.
+
+runSelfUpdate has both halves before it needs them:
+
+  rel, err := fetchLatestRelease()                             // rel.Assets is the published file list
+  latestVersion := strings.TrimPrefix(rel.TagName, "v")        // the version, five lines above the defect
+  ...
+  assetName := archiveNameForPlatform()                        // ignores both and guesses
+
+It then loops rel.Assets comparing each real name against the constructed one. So the release''s own manifest is already loaded, already parsed, and already being iterated — the bug is not a missing lookup, it is a guess being preferred over data in hand. No extra request, no template rendering, and nothing to keep in step with .goreleaser.yaml.
+
+TWO SHAPES, BOTH USING WHAT IS ALREADY THERE:
+
+  1. Select from rel.Assets by platform suffix. The loop already walks every published name; matching on the OS/arch/extension tail rather than on full equality means the version segment never has to be known, and a future change to the prefix cannot break it. This removes name construction entirely.
+
+  2. Interpolate latestVersion into the constructed name. One variable, already computed. Smaller diff, but it keeps two descriptions of one string and only resynchronises them — the next naming change breaks it again.
+
+The first is preferable for the reason this ticket exists: the defect is that two files independently describe one string, and only the first shape stops describing it twice. Whichever is chosen, the same string must reach verifyChecksum and extractBinary, since checksums.txt lists the versioned names.
+
+Worth noting the diagnostic already proves the list was available — ''no asset "pql_Linux_x86_64.tar.gz" in release v2.3.0'' is printed by code that has just finished iterating the assets it could have chosen from.
+
+RETRACTING THE THIRD OPTION offered above, so this ticket stops recommending a worse path than the one it later argues for.
+
+''Reading checksums.txt as the manifest'' was written before noticing that rel.Assets is already fetched and already iterated in the same function. It costs a second request to obtain a list the code is holding, and it makes the checksum file load-bearing for asset discovery as well as verification — coupling two concerns that are currently independent. There are two shapes, not three, and the suffix match is the one that stops describing the filename twice.', '`pql self-update` cannot succeed on any platform for any release. It constructs the release asset''s name without the version, and goreleaser publishes it with the version.
+
+  internal/cli/selfupdate.go:142   fmt.Sprintf("pql_%s_%s.%s", osName, archName, ext)   -> pql_Linux_x86_64.tar.gz
+  .goreleaser.yaml:32-37           {{ .ProjectName }}_{{ .Version }}_{{ title .Os }}_...  -> pql_2.3.0_Linux_x86_64.tar.gz
+
+OBSERVED on 2.2.0 updating to v2.3.0: exit 69 with {"code":"cli.exit","msg":"no asset \"pql_Linux_x86_64.tar.gz\" in release v2.3.0"}. The release does carry pql_2.3.0_Linux_x86_64.tar.gz, alongside Darwin arm64/x86_64, Linux arm64 and a Windows zip. v2.2.0''s assets follow the same versioned naming, so this is not a regression introduced by the 2.3.0 release — no released binary has been able to update itself.
+
+THE FAILURE IS LOUD, WHICH IS THE GOOD HALF. It exits Unavail rather than reporting success, and the diagnostic quotes the exact name it looked for, which is what made this diagnosable in one step rather than by reading code. A self-updater that silently did nothing would be far worse. Only the resolution is wrong.
+
+CHECK THE WHOLE PATH, NOT ONLY THE LOOKUP. assetName is threaded into three places — the asset match, verifyChecksum(archiveData, assetName, checksumURL), and extractBinary(archiveData, assetName). checksums.txt lists the versioned names, so a fix that only corrects the download lookup moves the failure into checksum verification instead of removing it. Whatever produces the name has to produce the same string all three uses expect.
+
+DESIRED, not a design: self-update resolves an asset that exists, and stays correct if the archive naming changes again. The release''s own version is already in hand as rel.TagName at the point of the lookup, so building the name from it is one option; matching by platform suffix rather than exact equality is another; reading checksums.txt as the manifest of what the release actually shipped is a third, and has the property that the name is no longer inferred at all. Preferring an option that derives the name from the release rather than from a template repeated in two places would keep this from recurring — the defect is precisely that two files independently describe one string.
+
+WORTH A TEST THAT WOULD HAVE CAUGHT IT: nothing asserts that the name self-update constructs matches what .goreleaser.yaml produces. The two live in different languages in different files, which is why they drifted silently. A test that renders the goreleaser template, or that checks the constructed name against a real release''s asset list, closes it.
+
+THE FIX IS SMALLER THAN THE OPTIONS ABOVE SUGGEST: the data is already in the function and is discarded.
+
+runSelfUpdate has both halves before it needs them:
+
+  rel, err := fetchLatestRelease()                             // rel.Assets is the published file list
+  latestVersion := strings.TrimPrefix(rel.TagName, "v")        // the version, five lines above the defect
+  ...
+  assetName := archiveNameForPlatform()                        // ignores both and guesses
+
+It then loops rel.Assets comparing each real name against the constructed one. So the release''s own manifest is already loaded, already parsed, and already being iterated — the bug is not a missing lookup, it is a guess being preferred over data in hand. No extra request, no template rendering, and nothing to keep in step with .goreleaser.yaml.
+
+TWO SHAPES, BOTH USING WHAT IS ALREADY THERE:
+
+  1. Select from rel.Assets by platform suffix. The loop already walks every published name; matching on the OS/arch/extension tail rather than on full equality means the version segment never has to be known, and a future change to the prefix cannot break it. This removes name construction entirely.
+
+  2. Interpolate latestVersion into the constructed name. One variable, already computed. Smaller diff, but it keeps two descriptions of one string and only resynchronises them — the next naming change breaks it again.
+
+The first is preferable for the reason this ticket exists: the defect is that two files independently describe one string, and only the first shape stops describing it twice. Whichever is chosen, the same string must reach verifyChecksum and extractBinary, since checksums.txt lists the versioned names.
+
+Worth noting the diagnostic already proves the list was available — ''no asset "pql_Linux_x86_64.tar.gz" in release v2.3.0'' is printed by code that has just finished iterating the assets it could have chosen from.
+
+RETRACTING THE THIRD OPTION offered above, so this ticket stops recommending a worse path than the one it later argues for.
+
+''Reading checksums.txt as the manifest'' was written before noticing that rel.Assets is already fetched and already iterated in the same function. It costs a second request to obtain a list the code is holding, and it makes the checksum file load-bearing for asset discovery as well as verification — coupling two concerns that are currently independent. There are two shapes, not three, and the suffix match is the one that stops describing the filename twice.
+
+RESOLVED (2026-09-09). Resolution now derives the asset name from the release''s own asset list: platformSuffix() builds only the platform tail (_Linux_x86_64.tar.gz, 386→i386 and windows→zip mirrored from the template) and the lookup picks the unique rel.Assets entry carrying it, refusing loudly on zero or multiple matches. The matched name is what flows to verifyChecksum and extractBinary, so all three uses agree by construction. The test the ticket asked for exists: selfupdate_test.go parses .goreleaser.yaml, renders the real name_template for every platform in the build matrix, and asserts the suffix matcher picks exactly one asset per platform — and that the match is version-agnostic, which is the axis that drifted. Verified end-to-end against the live release: a dev build ran self-update --force, matched pql_2.3.0_Linux_x86_64.tar.gz, passed checksum verification, extracted and atomically replaced itself — the first successful self-update by any pql binary.', NULL, '2026-09-09 09:43:27', '2026-09-09 09:43:27.100', '2026-09-09 09:43:27.100', NULL, 'b2256c6f767181ab51649d87520c00ac', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G66AQKC2Z6RAJZ0GQA725GWW', 'status', 'in_progress', 'done', NULL, '2026-09-09 09:43:27', '2026-09-09 09:43:27.123', '2026-09-09 09:43:27.123', NULL, '8a71e0996c1b2511acbd995f23239880', 2) ON CONFLICT(hash) DO NOTHING;

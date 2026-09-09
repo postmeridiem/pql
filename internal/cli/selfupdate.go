@@ -60,20 +60,30 @@ func runSelfUpdate(cmd *cobra.Command, force bool) error {
 		return nil
 	}
 
-	assetName := archiveNameForPlatform()
+	// The release's own asset list is the authority on names. Matching by
+	// platform suffix instead of reconstructing the full name keeps the
+	// version segment — which drifted once already (T-125) — out of the
+	// equation: goreleaser can rename pql_X.Y.Z_Linux_x86_64.tar.gz's
+	// prefix without breaking this lookup.
+	suffix := platformSuffix()
 	checksumName := "checksums.txt"
 
-	var assetURL, checksumURL string
+	var assetName, assetURL, checksumURL string
 	for _, a := range rel.Assets {
-		if a.Name == assetName {
-			assetURL = a.BrowserDownloadURL
-		}
-		if a.Name == checksumName {
+		switch {
+		case strings.HasSuffix(a.Name, suffix):
+			if assetURL != "" {
+				return &exitError{code: diag.Unavail, msg: fmt.Sprintf(
+					"release %s has more than one asset matching %q (%s, %s); refusing to guess",
+					rel.TagName, "*"+suffix, assetName, a.Name)}
+			}
+			assetName, assetURL = a.Name, a.BrowserDownloadURL
+		case a.Name == checksumName:
 			checksumURL = a.BrowserDownloadURL
 		}
 	}
 	if assetURL == "" {
-		return &exitError{code: diag.Unavail, msg: fmt.Sprintf("no asset %q in release %s", assetName, rel.TagName)}
+		return &exitError{code: diag.Unavail, msg: fmt.Sprintf("no asset matching %q in release %s", "*"+suffix, rel.TagName)}
 	}
 
 	archiveData, err := download(assetURL)
@@ -125,21 +135,29 @@ func fetchLatestRelease() (*ghRelease, error) {
 	return &rel, nil
 }
 
-func archiveNameForPlatform() string {
-	goos := runtime.GOOS
-	arch := runtime.GOARCH
+// platformSuffix returns the tail a release asset's name must carry for
+// this platform, e.g. "_Linux_x86_64.tar.gz". The OS/arch spellings and
+// the windows zip override mirror .goreleaser.yaml's name_template;
+// selfupdate_test.go renders that template and fails if they drift.
+func platformSuffix() string {
+	return platformSuffixFor(runtime.GOOS, runtime.GOARCH)
+}
 
-	osName := strings.Title(goos) //nolint:staticcheck // simple case
+func platformSuffixFor(goos, arch string) string {
+	osName := strings.Title(goos) //nolint:staticcheck // ASCII OS names only
 	archName := arch
-	if archName == "amd64" {
+	switch archName {
+	case "amd64":
 		archName = "x86_64"
+	case "386":
+		archName = "i386"
 	}
 
 	ext := "tar.gz"
 	if goos == "windows" {
 		ext = "zip"
 	}
-	return fmt.Sprintf("pql_%s_%s.%s", osName, archName, ext)
+	return fmt.Sprintf("_%s_%s.%s", osName, archName, ext)
 }
 
 func download(url string) ([]byte, error) {

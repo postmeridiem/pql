@@ -19,6 +19,16 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ### Fixed
 
+- **`pql self-update` can now actually update.** It constructed the release
+  asset's name without the version segment goreleaser has always published
+  (`pql_Linux_x86_64.tar.gz` vs `pql_2.3.0_Linux_x86_64.tar.gz`), so no
+  released binary had ever been able to update itself — every run exited 69
+  with "no asset". Resolution now matches by platform suffix against the
+  release's own asset list, so the published names are the authority and the
+  version plays no part; a test renders `.goreleaser.yaml`'s real
+  `name_template` for every platform in the build matrix and fails if the
+  matcher and the template drift again (T-125).
+
 - **`decisions sync` and `decisions close` no longer break the stderr
   contract.** Style warnings at sync time and README-regeneration failures
   were emitted as plain `warn: …` text, so any caller parsing stderr as
