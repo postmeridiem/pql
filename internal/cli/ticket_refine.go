@@ -224,9 +224,9 @@ so the caller can verify the write took.`,
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 

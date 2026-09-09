@@ -19,6 +19,17 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ### Fixed
 
+- **A ticket mutation can no longer silently re-mint labels from T-1.** On a
+  clone whose committed changelog held history but whose replica had never
+  replayed it (typically: hooks not planted, so the clone-time import never
+  fired), any ticket mutation would create an empty `pql.db` and hand out
+  `T-1` again — a collision that surfaced only at the next replay, after the
+  wrong label had been cited in prose, commits, and consuming repos. Every
+  ticket mutation now runs a guard first and refuses that state with exit 65
+  and a hint naming the remedy (`pql plan import`, then retry). The guard
+  lives in the changelog package, so future writing consumers (the planning
+  MCP) inherit it (T-96).
+
 - **Tied scores in ranked results now order by path instead of by accident.**
   The ranker sorted on score alone with an unstable sort, so candidates with
   equal scores — common, since a link-sparse vault zeroes several signals at

@@ -235,9 +235,9 @@ Output is the updated ticket row, so the caller can verify the append.`,
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -279,9 +279,9 @@ func newTicketNewCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -540,9 +540,9 @@ ticket it closed.
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -695,9 +695,9 @@ rewrites the whole-word mentions in place.`,
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -804,9 +804,9 @@ func newTicketAssignCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -856,9 +856,9 @@ func newTicketSetParentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -914,9 +914,9 @@ record was only just written.`,
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -956,9 +956,9 @@ func newTicketBlockCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -1016,9 +1016,9 @@ func newTicketUnblockCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -1082,9 +1082,9 @@ func newTicketTeamCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 
@@ -1141,9 +1141,9 @@ func newTicketLabelCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			pdb, err := openPlanningDB(ctx, cfg)
+			pdb, err := openPlanningDBForMutation(ctx, cfg)
 			if err != nil {
-				return &exitError{code: diag.Unavail, msg: err.Error()}
+				return err
 			}
 			defer func() { _ = pdb.Close() }()
 

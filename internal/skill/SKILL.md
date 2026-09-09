@@ -473,6 +473,12 @@ The changelog carries a format version. An older one replays with a loud
 *newer* than the binary is refused outright, and the fix is to upgrade pql.
 `pql version --build-info` reports every version axis the binary speaks.
 
+**A ticket mutation against an empty replica beside a populated changelog
+is refused** (exit 65): that state means the clone never replayed — usually
+because the hooks were never planted — and writing would re-mint labels
+from T-1. The diagnostic's hint names the fix: `pql plan import`, then
+retry. Read verbs are unaffected.
+
 ---
 
 # Contracts

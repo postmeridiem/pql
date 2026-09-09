@@ -4,10 +4,37 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/postmeridiem/pql/internal/config"
 	"github.com/postmeridiem/pql/internal/diag"
 	"github.com/postmeridiem/pql/internal/planning"
 	"github.com/postmeridiem/pql/internal/planning/changelog"
 )
+
+// openPlanningDBForMutation opens pql.db for a verb that is about to write
+// to it, refusing in the one state where writing produces a silent label
+// collision: an empty replica beside a committed changelog that holds
+// ticket history (T-96). That state means the clone never replayed —
+// typically because the replication hooks were never planted — and the
+// next allocation would re-mint from T-1. Read verbs and the remedies
+// (plan import, plan rebuild) open the DB directly.
+// Errors are returned as *exitError with the right code and hint already
+// attached — callers must return them as-is, not re-wrap, or the guard's
+// remedy hint is lost.
+func openPlanningDBForMutation(ctx context.Context, cfg *config.Config) (*planning.DB, error) {
+	pdb, err := openPlanningDB(ctx, cfg)
+	if err != nil {
+		return nil, &exitError{code: diag.Unavail, msg: err.Error()}
+	}
+	if err := changelog.GuardReplicaCurrent(ctx, pdb.SQL(), cfg.Vault.Path); err != nil {
+		_ = pdb.Close()
+		return nil, &exitError{
+			code: diag.DataErr,
+			msg:  err.Error(),
+			hint: "run `pql plan import` to replay the committed changelog into the replica (or `pql plan rebuild` for a full rebuild), then retry",
+		}
+	}
+	return pdb, nil
+}
 
 // exportThrough flushes every replicated planning row mutated since the
 // last export marker into <vault>/.pql/changelog/, making the changelog
