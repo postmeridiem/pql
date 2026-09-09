@@ -1654,3 +1654,48 @@ then the recency clock, which needs a design call rather than a patch.
 
 CLOSED (2026-09-09). All three children landed: T-127 (total order — score then path tie-break under a stable sort), T-128 (ORDER BY path in all three gatherCandidates), T-126 (one reference instant per enrichment pass, injectable for tests). Verified: back-to-back identical ''pql related'' runs produce byte-identical output. What remains deliberately out of scope: wall-clock drift of recency between runs separated in time — that is the signal''s semantics per D-11, and moving to a corpus-derived reference is now Q-14.', NULL, '2026-09-09 09:49:16', '2026-09-09 09:49:16.295', '2026-09-09 09:49:16.295', NULL, 'c2819a0221decc65e936e5c317d4de14', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89R35V3EJQDYRRW7K98VWZG', 'status', 'backlog', 'done', NULL, '2026-09-09 09:49:16', '2026-09-09 09:49:16.316', '2026-09-09 09:49:16.316', NULL, '4c8e7aed11d97ecf8ffa7b5878c39592', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G0MRDXFNP425XTEVVMQB21X8', 'status', 'backlog', 'in_progress', NULL, '2026-09-09 10:15:08', '2026-09-09 10:15:08.787', '2026-09-09 10:15:08.787', NULL, '280794f128852dcea0a67f01fcfdf62a', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G0MRDXFNP425XTEVVMQB21X8', 'description', '`make fmt` writes. `make fmt-check` reads. Neither is reachable from any gate, so formatting drifts silently and lands all at once.
+
+Verified across every layer that could plausibly hold it: `pre-push` runs secrets, lint, test and test-race; `lint` runs golangci-lint, goreleaser check and govulncheck; the golangci config sets `default: none` with an explicit enable list that contains no formatter and has no `formatters:` section, which is where the v2 schema puts one; and no CI step runs gofmt either. `fmt-check` is an orphan target.
+
+WHAT THIS COSTS, measured rather than supposed. A single manual `make fmt` rewrote 19 files in one go — months of accumulated drift arriving as one diff nobody can review. `git diff --stat` reported 124 insertions and 77 deletions, which reads as a formatting sweep and invites being committed as one. `git diff -w` reported 6 insertions and 5 deletions. Eleven real lines were hiding inside the whitespace, and finding them took knowing to ask for `-w`.
+
+THE SHARP EDGE. Three of those eleven were semantic, and they are the reason this is worth more than tidiness.
+
+gofmt reformats doc comments and applies the old godoc typographic convention: two apostrophes become a closing curly quote and two backquotes become an opening one. Confirmed on Go 1.25.12, and confirmed to apply to doc comments only — the identical text in a comment inside a function body is untouched.
+
+The affected comments document escaping syntax. That is exactly why they contain those digraphs literally, and exactly why the conversion breaks them. One now tells the reader that a curly quote is un-escaped to an apostrophe, which is not what the code does. Another names a fence character that is not the one the extractor matches.
+
+It compiles. Every test passes. The lint gate is green. Nothing in the toolchain inspects prose inside a comment, so the rewritten comment and a correct one are indistinguishable to every check that exists. T-72 already named this failure mode for a different command: a confident wrong answer is worse than an error, and it is reached by doing the obvious thing.
+
+TWO DECISIONS, and the second is the one that makes this more than a one-line Makefile change.
+
+**Should a format check join the gate?** If yes, it needs a normalizing commit first, or its first run fails on all of the accumulated drift at once and the gate gets bypassed on the day it is added.
+
+**What happens to doc comments that must contain those digraphs?** This matters because a lexer and a markdown extractor have a legitimate need to write them. gofmt does not convert inside an indented block within a doc comment, so that form survives — but it changes how the comment reads, and whether it is worth it differs per comment.
+
+Adding the check without settling the second leaves the repo unable to state its own escaping rules in a doc comment, and a normalizing commit made in ignorance of it would bake the false statements in permanently rather than fixing them. Order matters here: decide the comment form, correct the three, then gate.', '`make fmt` writes. `make fmt-check` reads. Neither is reachable from any gate, so formatting drifts silently and lands all at once.
+
+Verified across every layer that could plausibly hold it: `pre-push` runs secrets, lint, test and test-race; `lint` runs golangci-lint, goreleaser check and govulncheck; the golangci config sets `default: none` with an explicit enable list that contains no formatter and has no `formatters:` section, which is where the v2 schema puts one; and no CI step runs gofmt either. `fmt-check` is an orphan target.
+
+WHAT THIS COSTS, measured rather than supposed. A single manual `make fmt` rewrote 19 files in one go — months of accumulated drift arriving as one diff nobody can review. `git diff --stat` reported 124 insertions and 77 deletions, which reads as a formatting sweep and invites being committed as one. `git diff -w` reported 6 insertions and 5 deletions. Eleven real lines were hiding inside the whitespace, and finding them took knowing to ask for `-w`.
+
+THE SHARP EDGE. Three of those eleven were semantic, and they are the reason this is worth more than tidiness.
+
+gofmt reformats doc comments and applies the old godoc typographic convention: two apostrophes become a closing curly quote and two backquotes become an opening one. Confirmed on Go 1.25.12, and confirmed to apply to doc comments only — the identical text in a comment inside a function body is untouched.
+
+The affected comments document escaping syntax. That is exactly why they contain those digraphs literally, and exactly why the conversion breaks them. One now tells the reader that a curly quote is un-escaped to an apostrophe, which is not what the code does. Another names a fence character that is not the one the extractor matches.
+
+It compiles. Every test passes. The lint gate is green. Nothing in the toolchain inspects prose inside a comment, so the rewritten comment and a correct one are indistinguishable to every check that exists. T-72 already named this failure mode for a different command: a confident wrong answer is worse than an error, and it is reached by doing the obvious thing.
+
+TWO DECISIONS, and the second is the one that makes this more than a one-line Makefile change.
+
+**Should a format check join the gate?** If yes, it needs a normalizing commit first, or its first run fails on all of the accumulated drift at once and the gate gets bypassed on the day it is added.
+
+**What happens to doc comments that must contain those digraphs?** This matters because a lexer and a markdown extractor have a legitimate need to write them. gofmt does not convert inside an indented block within a doc comment, so that form survives — but it changes how the comment reads, and whether it is worth it differs per comment.
+
+Adding the check without settling the second leaves the repo unable to state its own escaping rules in a doc comment, and a normalizing commit made in ignorance of it would bake the false statements in permanently rather than fixing them. Order matters here: decide the comment form, correct the three, then gate.
+
+RESOLVED (2026-09-09). The two prerequisites the body ordered turned out to be already done: commit b9ff24b applied the normalizing sweep and corrected the three doc comments gofmt had broken (lex.go''s escaping doc now carries the digraph in an indented block, the gofmt-stable form; the fence comment reads correctly). What remained was the wiring, done where the body looked for it and found nothing: .golangci.yaml now has a formatters: section enabling gofmt, which golangci-lint v2 runs in check mode during run — so make lint, CI and pre-push all enforce it with no new stage, per D-33 (the script is the definition; the config travels with it). gofmt only, deliberately: the repo does not enforce import grouping, so goimports stays a write-time convenience in make fmt. Verified the gate bites: two lines of real struct-tag drift in decisions.go failed golangci-lint run with ''File is not properly formatted (gofmt)'' before make fmt cleared it. make fmt-check remains as the read-only listing tool.', NULL, '2026-09-09 10:16:54', '2026-09-09 10:16:54.395', '2026-09-09 10:16:54.395', NULL, 'dc5cb13eebd3e7cc48d1e4397c0ddeff', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G0MRDXFNP425XTEVVMQB21X8', 'status', 'in_progress', 'done', NULL, '2026-09-09 10:16:54', '2026-09-09 10:16:54.438', '2026-09-09 10:16:54.438', NULL, '8384e421dad7345ffb55aa58713c3be0', 2) ON CONFLICT(hash) DO NOTHING;

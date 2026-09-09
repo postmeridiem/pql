@@ -7,6 +7,17 @@ run:
   timeout: 5m
   tests: true
 
+# Formatting is part of the gate (T-110): without this, gofmt drift lands
+# silently and arrives all at once — a 19-file sweep once hid 11 real lines,
+# 3 of them semantic (gofmt's doc-comment quote conversion had rewritten
+# escaping docs into false statements). golangci-lint runs formatters in
+# check mode during `run`, so make lint, CI and pre-push all enforce what
+# `make fmt` writes. gofmt only: the repo does not enforce import grouping,
+# so goimports stays a write-time convenience in the fmt target.
+formatters:
+  enable:
+    - gofmt
+
 linters:
   default: none
   enable:

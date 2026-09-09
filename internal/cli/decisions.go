@@ -297,8 +297,8 @@ type decisionShowTree struct {
 	// except what it says was the defect in T-122, where `show` answered
 	// with a header, said nothing about the omission, and sent callers to
 	// slice line ranges out of the file by hand.
-	Body     string           `json:"body,omitempty"`
-	Headings []parser.Heading `json:"headings,omitempty"`
+	Body     string               `json:"body,omitempty"`
+	Headings []parser.Heading     `json:"headings,omitempty"`
 	Refs     []repo.DecisionRef   `json:"refs,omitempty"`
 	Tickets  []repo.TicketSummary `json:"tickets,omitempty"`
 }
