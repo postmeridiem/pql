@@ -20,7 +20,14 @@ func (Recency) Score(ctx *Context, candidatePath string) (float64, error) {
 		return 0, nil
 	}
 
-	age := time.Since(time.Unix(mtime, 0)).Hours()
+	// Score against the batch's shared reference instant, not the moment
+	// this particular candidate happens to be visited (T-126). The
+	// zero-value fallback keeps a Context built without Now correct.
+	ref := ctx.Now
+	if ref.IsZero() {
+		ref = time.Now()
+	}
+	age := ref.Sub(time.Unix(mtime, 0)).Hours()
 	const decayHours = 90 * 24
 	if age <= 0 {
 		return 1.0, nil

@@ -25,6 +25,15 @@ why, and for what that means for `project.yaml`'s `version:`.
   once — came out in whatever arrangement the sort left, a function of
   candidate arrival order. The comparator now breaks ties on path, making the
   order total: the same query returns the same order every time (T-127).
+
+- **The recency signal scores a whole batch against one instant.** Each
+  candidate used to read the wall clock at the moment it was visited, so even
+  a single query's candidates were scored against slightly different "now"s,
+  and tests could not pin time at all. The reference instant is now captured
+  once per enrichment pass and is injectable (T-126). Whether it should come
+  from the corpus instead of the clock — removing wall-time from ranking
+  entirely — is now open question Q-14.
+
 - **Candidate generation pins its row order.** The three ranked verbs'
   candidate queries had no `ORDER BY` and leaned on a SQLite implementation
   detail (the UNION dedup B-tree happening to emit sorted rows) that a SQLite

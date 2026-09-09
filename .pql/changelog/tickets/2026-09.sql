@@ -3046,3 +3046,212 @@ redundant defences of the same thing:
 
 Cost is negligible: these batches are small and the temp B-tree is already
 sorting.', 'done', 'medium', NULL, NULL, NULL, '2026-09-09 06:34:37.323', '2026-09-09 09:46:16.710', NULL, '613e7b3618a0853f45807d952f224352', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QDBQTD7E1H8XZ8B4BDEQ8', 'bug', '06G89R35V3EJQDYRRW7K98VWZG', 'Recency signal derives from wall-clock, so identical queries drift and reorder over time', '`internal/connect/signal/recency.go:23` scores from `time.Since(time.Unix(mtime, 0))`.
+The reference point is the moment the query runs, so an unchanged vault produces
+different scores on every invocation.
+
+This is not merely cosmetic drift — it reorders results, via D-11''s
+max-normalization.
+
+Mechanism. With `raw_i = 1 - age_i/2160` and `normalized_i = raw_i / max(raw)`,
+let all files age by the same δ. Both numerator and denominator shrink by δ, and
+for any candidate below the maximum that ratio *falls*:
+
+    (raw_i - δ) / (raw_max - δ)  <  raw_i / raw_max     for raw_i < raw_max
+
+So the normalized recency spread widens monotonically over time while every
+other signal stays fixed. In a weighted sum against centrality and the rest,
+two candidates whose totals sat close together will eventually swap. Nothing
+about the vault changed.
+
+The 90-day clamp compounds it: files aging past `decayHours` pin to 0 and
+collapse into ties, which then hit the unstable sort in the sibling ticket.
+
+D-11 accepts that "the same file can score differently in different queries…
+rankings are always relative". That reasoning covers batch-relative scoring and
+does not extend to this: here the same file scores differently in *the same*
+query at a different time, and the relative order changes with it.
+
+Exposure is high because recency carries weight 0.25 on `search` and is often
+the only non-zero signal. Observed on pql''s own vault:
+
+    pql search architecture --full
+    → top hit scores exactly 0.25, every signal zero except recency
+
+That result is ordered purely by a float derived from the current time.
+
+Possible directions, cheapest first:
+
+1. Make the reference time injectable — a clock on `signal.Context`, defaulting
+   to `time.Now()`. Tests pin it; production is unchanged. Fixes reproducibility
+   without touching semantics.
+2. Derive the reference from the corpus (e.g. max mtime in the candidate batch)
+   rather than wall-clock, making recency purely a function of the vault.
+3. Let a vault zero the recency weight in its profile. Purely additive, useful
+   for authored corpora where mtime is an install artifact rather than a date.
+
+(1) and (3) are compatible and neither changes behaviour for existing callers.
+(2) is a semantic change and wants its own decision.
+
+Note this touches only the ranking signal. It is independent of the other two
+mtime consumers — `index/indexer.go` change detection and
+`planning/changelog/importer.go` cross-repo sync — which read mtime from
+`os.FileInfo` and the files table directly and never go through this path.', 'in_progress', 'high', NULL, NULL, 'D-11', '2026-09-09 06:31:55.070', '2026-09-09 09:47:06.529', NULL, '930d9708733001e50ed357a273026a1e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QDBQTD7E1H8XZ8B4BDEQ8', 'bug', '06G89R35V3EJQDYRRW7K98VWZG', 'Recency signal derives from wall-clock, so identical queries drift and reorder over time', '`internal/connect/signal/recency.go:23` scores from `time.Since(time.Unix(mtime, 0))`.
+The reference point is the moment the query runs, so an unchanged vault produces
+different scores on every invocation.
+
+This is not merely cosmetic drift — it reorders results, via D-11''s
+max-normalization.
+
+Mechanism. With `raw_i = 1 - age_i/2160` and `normalized_i = raw_i / max(raw)`,
+let all files age by the same δ. Both numerator and denominator shrink by δ, and
+for any candidate below the maximum that ratio *falls*:
+
+    (raw_i - δ) / (raw_max - δ)  <  raw_i / raw_max     for raw_i < raw_max
+
+So the normalized recency spread widens monotonically over time while every
+other signal stays fixed. In a weighted sum against centrality and the rest,
+two candidates whose totals sat close together will eventually swap. Nothing
+about the vault changed.
+
+The 90-day clamp compounds it: files aging past `decayHours` pin to 0 and
+collapse into ties, which then hit the unstable sort in the sibling ticket.
+
+D-11 accepts that "the same file can score differently in different queries…
+rankings are always relative". That reasoning covers batch-relative scoring and
+does not extend to this: here the same file scores differently in *the same*
+query at a different time, and the relative order changes with it.
+
+Exposure is high because recency carries weight 0.25 on `search` and is often
+the only non-zero signal. Observed on pql''s own vault:
+
+    pql search architecture --full
+    → top hit scores exactly 0.25, every signal zero except recency
+
+That result is ordered purely by a float derived from the current time.
+
+Possible directions, cheapest first:
+
+1. Make the reference time injectable — a clock on `signal.Context`, defaulting
+   to `time.Now()`. Tests pin it; production is unchanged. Fixes reproducibility
+   without touching semantics.
+2. Derive the reference from the corpus (e.g. max mtime in the candidate batch)
+   rather than wall-clock, making recency purely a function of the vault.
+3. Let a vault zero the recency weight in its profile. Purely additive, useful
+   for authored corpora where mtime is an install artifact rather than a date.
+
+(1) and (3) are compatible and neither changes behaviour for existing callers.
+(2) is a semantic change and wants its own decision.
+
+Note this touches only the ranking signal. It is independent of the other two
+mtime consumers — `index/indexer.go` change detection and
+`planning/changelog/importer.go` cross-repo sync — which read mtime from
+`os.FileInfo` and the files table directly and never go through this path.
+
+RESOLVED (2026-09-09) via direction (1) from the body: signal.Context gains a Now field, captured once per enrichment pass in connect.Bundle, and recency scores age against it — so a batch is self-consistent (one instant for every candidate, where each Score call used to read the clock itself) and tests pin it exactly (recency_test.go asserts midlife.md at 45 days scores precisely 0.5). Zero-value Now falls back to the wall clock, so a Context built without it stays correct. Direction (2) — corpus-derived reference, which would remove wall-clock from ranking entirely and is a semantic change — is now Q-14 in governance/questions/architecture.md, carrying this ticket''s normalization-spread mechanism as context. Direction (3) — vault-zeroable recency weight — is noted inside Q-14 as additive under either answer.', 'in_progress', 'high', NULL, NULL, 'D-11', '2026-09-09 06:31:55.070', '2026-09-09 09:49:11.341', NULL, '03782ba431b43d638601978b126fbdfd', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QDBQTD7E1H8XZ8B4BDEQ8', 'bug', '06G89R35V3EJQDYRRW7K98VWZG', 'Recency signal derives from wall-clock, so identical queries drift and reorder over time', '`internal/connect/signal/recency.go:23` scores from `time.Since(time.Unix(mtime, 0))`.
+The reference point is the moment the query runs, so an unchanged vault produces
+different scores on every invocation.
+
+This is not merely cosmetic drift — it reorders results, via D-11''s
+max-normalization.
+
+Mechanism. With `raw_i = 1 - age_i/2160` and `normalized_i = raw_i / max(raw)`,
+let all files age by the same δ. Both numerator and denominator shrink by δ, and
+for any candidate below the maximum that ratio *falls*:
+
+    (raw_i - δ) / (raw_max - δ)  <  raw_i / raw_max     for raw_i < raw_max
+
+So the normalized recency spread widens monotonically over time while every
+other signal stays fixed. In a weighted sum against centrality and the rest,
+two candidates whose totals sat close together will eventually swap. Nothing
+about the vault changed.
+
+The 90-day clamp compounds it: files aging past `decayHours` pin to 0 and
+collapse into ties, which then hit the unstable sort in the sibling ticket.
+
+D-11 accepts that "the same file can score differently in different queries…
+rankings are always relative". That reasoning covers batch-relative scoring and
+does not extend to this: here the same file scores differently in *the same*
+query at a different time, and the relative order changes with it.
+
+Exposure is high because recency carries weight 0.25 on `search` and is often
+the only non-zero signal. Observed on pql''s own vault:
+
+    pql search architecture --full
+    → top hit scores exactly 0.25, every signal zero except recency
+
+That result is ordered purely by a float derived from the current time.
+
+Possible directions, cheapest first:
+
+1. Make the reference time injectable — a clock on `signal.Context`, defaulting
+   to `time.Now()`. Tests pin it; production is unchanged. Fixes reproducibility
+   without touching semantics.
+2. Derive the reference from the corpus (e.g. max mtime in the candidate batch)
+   rather than wall-clock, making recency purely a function of the vault.
+3. Let a vault zero the recency weight in its profile. Purely additive, useful
+   for authored corpora where mtime is an install artifact rather than a date.
+
+(1) and (3) are compatible and neither changes behaviour for existing callers.
+(2) is a semantic change and wants its own decision.
+
+Note this touches only the ranking signal. It is independent of the other two
+mtime consumers — `index/indexer.go` change detection and
+`planning/changelog/importer.go` cross-repo sync — which read mtime from
+`os.FileInfo` and the files table directly and never go through this path.
+
+RESOLVED (2026-09-09) via direction (1) from the body: signal.Context gains a Now field, captured once per enrichment pass in connect.Bundle, and recency scores age against it — so a batch is self-consistent (one instant for every candidate, where each Score call used to read the clock itself) and tests pin it exactly (recency_test.go asserts midlife.md at 45 days scores precisely 0.5). Zero-value Now falls back to the wall clock, so a Context built without it stays correct. Direction (2) — corpus-derived reference, which would remove wall-clock from ranking entirely and is a semantic change — is now Q-14 in governance/questions/architecture.md, carrying this ticket''s normalization-spread mechanism as context. Direction (3) — vault-zeroable recency weight — is noted inside Q-14 as additive under either answer.', 'done', 'high', NULL, NULL, 'D-11', '2026-09-09 06:31:55.070', '2026-09-09 09:49:11.360', NULL, 'a83e80d3b9b1edd7327a96d217569ef3', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89R35V3EJQDYRRW7K98VWZG', 'epic', NULL, 'Ranked verbs are not reproducible', '`search`, `related` and `context` can return different results for an unchanged
+vault, across three independent causes. None is a scoring-quality question — the
+issue is that the same inputs do not reliably produce the same output.
+
+Found 2026-09-06 while evaluating pql as the corpus substrate for another
+project that needs byte-reproducible query results for headless testing. That
+project has since gone its own way, so this is filed purely on pql''s own merits:
+several consuming repos call the ranked verbs today, so unreproducible output is
+a live problem rather than a hypothetical one.
+
+Children:
+
+- Recency signal derives from wall-clock (the one that actively changes results)
+- Rank sorts with an unstable sort and no tie-break
+- gatherCandidates has no ORDER BY in any of the three verbs
+
+The last two are latent rather than active: SQLite''s UNION dedup currently emits
+rows in sorted order via a temp B-tree, so candidate order happens to be stable
+today. That is a query-planner implementation detail, not a contract — a SQLite
+upgrade, a new index, or ANALYZE stats can change it with no code change here.
+
+Suggested order of work: the two ordering fixes first (cheap, self-contained,
+and together they make ranking total-ordered regardless of what SQLite does),
+then the recency clock, which needs a design call rather than a patch.
+
+CLOSED (2026-09-09). All three children landed: T-127 (total order — score then path tie-break under a stable sort), T-128 (ORDER BY path in all three gatherCandidates), T-126 (one reference instant per enrichment pass, injectable for tests). Verified: back-to-back identical ''pql related'' runs produce byte-identical output. What remains deliberately out of scope: wall-clock drift of recency between runs separated in time — that is the signal''s semantics per D-11, and moving to a corpus-derived reference is now Q-14.', 'backlog', 'high', NULL, NULL, NULL, '2026-09-09 06:34:53.784', '2026-09-09 09:49:16.295', NULL, 'b1573888d10857cf0022f9346d7349b4', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89R35V3EJQDYRRW7K98VWZG', 'epic', NULL, 'Ranked verbs are not reproducible', '`search`, `related` and `context` can return different results for an unchanged
+vault, across three independent causes. None is a scoring-quality question — the
+issue is that the same inputs do not reliably produce the same output.
+
+Found 2026-09-06 while evaluating pql as the corpus substrate for another
+project that needs byte-reproducible query results for headless testing. That
+project has since gone its own way, so this is filed purely on pql''s own merits:
+several consuming repos call the ranked verbs today, so unreproducible output is
+a live problem rather than a hypothetical one.
+
+Children:
+
+- Recency signal derives from wall-clock (the one that actively changes results)
+- Rank sorts with an unstable sort and no tie-break
+- gatherCandidates has no ORDER BY in any of the three verbs
+
+The last two are latent rather than active: SQLite''s UNION dedup currently emits
+rows in sorted order via a temp B-tree, so candidate order happens to be stable
+today. That is a query-planner implementation detail, not a contract — a SQLite
+upgrade, a new index, or ANALYZE stats can change it with no code change here.
+
+Suggested order of work: the two ordering fixes first (cheap, self-contained,
+and together they make ranking total-ordered regardless of what SQLite does),
+then the recency clock, which needs a design call rather than a patch.
+
+CLOSED (2026-09-09). All three children landed: T-127 (total order — score then path tie-break under a stable sort), T-128 (ORDER BY path in all three gatherCandidates), T-126 (one reference instant per enrichment pass, injectable for tests). Verified: back-to-back identical ''pql related'' runs produce byte-identical output. What remains deliberately out of scope: wall-clock drift of recency between runs separated in time — that is the signal''s semantics per D-11, and moving to a corpus-derived reference is now Q-14.', 'done', 'high', NULL, NULL, NULL, '2026-09-09 06:34:53.784', '2026-09-09 09:49:16.316', NULL, 'd873c0f73f5256f443b48183ba75841e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

@@ -3,6 +3,7 @@ package connect
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/postmeridiem/pql/internal/connect/signal"
 )
@@ -40,6 +41,7 @@ func Bundle(ctx context.Context, db *sql.DB, opts BundleOpts) ([]Enriched, error
 		TargetPath: opts.TargetPath,
 		DB:         db,
 		Ctx:        ctx,
+		Now:        time.Now(),
 	}
 
 	ranked, err := Rank(sigCtx, opts.Candidates, signals, opts.Weights)
