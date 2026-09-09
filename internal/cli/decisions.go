@@ -109,7 +109,7 @@ func newDecisionsSyncCmd() *cobra.Command {
 			if !noStyle {
 				_, _, warnings := parser.Validate(dir, cfg.Vault.Path)
 				for _, w := range warnings {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warn: %s\n", w)
+					diag.Warn("decisions.style", w)
 				}
 			}
 
@@ -118,7 +118,7 @@ func newDecisionsSyncCmd() *cobra.Command {
 			// in step with pql.db. Silent on no-op; failure is non-fatal
 			// (sync succeeded, the README just stayed stale).
 			if _, err := regenerateDQRReadme(ctx, pdb.SQL(), dir); err != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warn: regenerate README: %v\n", err)
+				diag.Warn("decisions.readme_regen", fmt.Sprintf("regenerate README: %v", err))
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)

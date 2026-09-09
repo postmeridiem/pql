@@ -19,6 +19,14 @@ why, and for what that means for `project.yaml`'s `version:`.
 
 ### Fixed
 
+- **`decisions sync` and `decisions close` no longer break the stderr
+  contract.** Style warnings at sync time and README-regeneration failures
+  were emitted as plain `warn: …` text, so any caller parsing stderr as
+  JSON-per-line choked on the one surface that should never surprise it.
+  They now flow through the same diagnostic channel as every other warning
+  (`decisions.style`, `decisions.readme_regen`), which also means `--quiet`
+  finally suppresses them like the flag says it does (T-131).
+
 - **The changelog's union merge rule now matches the files it was written for.**
   `.gitattributes` declared `.pql/changelog/*.sql merge=union`, but a
   gitattributes glob does not cross a slash and the changelog is per-table

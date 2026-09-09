@@ -147,7 +147,7 @@ to insert a link the database already holds.`,
 			// resolved buckets, so skipping this would leave it contradicting
 			// the database. Non-fatal, as in `decisions sync`.
 			if _, err := regenerateDQRReadme(ctx, pdb.SQL(), dir); err != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warn: regenerate README: %v\n", err)
+				diag.Warn("decisions.readme_regen", fmt.Sprintf("regenerate README: %v", err))
 			}
 
 			rOpts, err := renderOptsFromFlags(cmd)
