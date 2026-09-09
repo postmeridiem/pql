@@ -49,8 +49,16 @@ func Rank(ctx *signal.Context, candidates []string, signals []signal.Signal, wei
 		}
 	}
 
-	sort.Slice(enriched, func(i, j int) bool {
-		return enriched[i].Score > enriched[j].Score
+	// Total order: score first, path as tie-break. Ties are common, not
+	// exotic — a link-sparse vault zeroes several signals at once and
+	// files past the recency clamp tie at exactly 0 — and without the
+	// tie-break the arrangement of tied candidates is whatever the sort
+	// leaves, i.e. a function of input order (T-127).
+	sort.SliceStable(enriched, func(i, j int) bool {
+		if enriched[i].Score != enriched[j].Score {
+			return enriched[i].Score > enriched[j].Score
+		}
+		return enriched[i].Path < enriched[j].Path
 	})
 	return enriched, nil
 }

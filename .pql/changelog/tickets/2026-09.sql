@@ -2920,3 +2920,99 @@ RETRACTING THE THIRD OPTION offered above, so this ticket stops recommending a w
 ''Reading checksums.txt as the manifest'' was written before noticing that rel.Assets is already fetched and already iterated in the same function. It costs a second request to obtain a list the code is holding, and it makes the checksum file load-bearing for asset discovery as well as verification — coupling two concerns that are currently independent. There are two shapes, not three, and the suffix match is the one that stops describing the filename twice.
 
 RESOLVED (2026-09-09). Resolution now derives the asset name from the release''s own asset list: platformSuffix() builds only the platform tail (_Linux_x86_64.tar.gz, 386→i386 and windows→zip mirrored from the template) and the lookup picks the unique rel.Assets entry carrying it, refusing loudly on zero or multiple matches. The matched name is what flows to verifyChecksum and extractBinary, so all three uses agree by construction. The test the ticket asked for exists: selfupdate_test.go parses .goreleaser.yaml, renders the real name_template for every platform in the build matrix, and asserts the suffix matcher picks exactly one asset per platform — and that the match is version-agnostic, which is the axis that drifted. Verified end-to-end against the live release: a dev build ran self-update --force, matched pql_2.3.0_Linux_x86_64.tar.gz, passed checksum verification, extracted and atomically replaced itself — the first successful self-update by any pql binary.', 'done', 'high', NULL, NULL, NULL, '2026-09-02 17:29:14.336', '2026-09-09 09:43:27.123', NULL, '18e9f9985547f4188bd859cc2c0d714a', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QXQ7QBFKMY53RAXEGYP1C', 'bug', '06G89R35V3EJQDYRRW7K98VWZG', 'Rank sorts with an unstable sort and no tie-break, so tied scores order arbitrarily', '`internal/connect/rank.go:52` sorts with `sort.Slice` and a comparator that
+compares `Score` alone:
+
+    sort.Slice(enriched, func(i, j int) bool {
+        return enriched[i].Score > enriched[j].Score
+    })
+
+`sort.Slice` is not stable, and the comparator defines only a partial order, so
+tied candidates come out in whatever arrangement pdqsort leaves them in. That is
+a function of the input order, which the sibling ticket shows is itself not
+pinned.
+
+Ties are common rather than exotic. Any link-sparse vault gives centrality,
+link_overlap and tag_overlap of 0 across the whole batch, so the score collapses
+onto one or two signals and clusters. Files aged past the 90-day recency clamp
+tie at exactly 0.
+
+Fix is two lines — a total order plus a stable sort:
+
+    sort.SliceStable(enriched, func(i, j int) bool {
+        if enriched[i].Score != enriched[j].Score {
+            return enriched[i].Score > enriched[j].Score
+        }
+        return enriched[i].Path < enriched[j].Path
+    })
+
+The `Path` tie-break is the load-bearing half: it makes the ordering total, so
+the result no longer depends on candidate order at all. That is worth having
+regardless of what the sibling ticket does about ORDER BY, and it is the cheapest
+way to make ranked output reproducible.
+
+`SliceStable` on its own would only preserve an input order that is not
+guaranteed, so prefer the explicit tie-break over relying on stability.', 'in_progress', 'medium', NULL, NULL, NULL, '2026-09-09 06:34:09.085', '2026-09-09 09:44:40.926', NULL, '631f2701b0b1f84573b444f187138c7e', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89R15HFKK0Y3EFGJXDAQEBG', 'bug', '06G89R35V3EJQDYRRW7K98VWZG', 'gatherCandidates has no ORDER BY in any of the three ranked verbs', 'None of the three `gatherCandidates` functions pins row order:
+
+- `internal/intent/search/search.go:43`
+- `internal/intent/related/related.go:41`
+- `internal/intent/context/context.go:57`
+
+Each is a `SELECT DISTINCT path FROM ( ... UNION ... )` with no ORDER BY. SQLite
+does not guarantee row order without one.
+
+In practice the order is stable today: `UNION` (as opposed to `UNION ALL`)
+requires deduplication, which SQLite currently implements with a temporary
+B-tree, and that happens to emit rows sorted. So this is latent, not an active
+bug — which is precisely why it is worth pinning explicitly rather than leaving
+to chance. The behaviour rests on a query-planner implementation detail, and a
+SQLite upgrade, an added index, or different ANALYZE stats can change it with no
+change to this code. That failure would be silent: results shift, nothing errors.
+
+Fix is `ORDER BY path` on the outer SELECT in all three.
+
+Worth doing even after the tie-break in the sibling ticket lands. The tie-break
+makes the final output order independent of candidate order, so the two are not
+redundant defences of the same thing:
+
+- ORDER BY pins what the ranking layer *receives*, which matters for debugging,
+  for reproducible `--full` signal output, and for anything that reads
+  candidates before scoring.
+- The tie-break pins what callers *see*.
+
+Cost is negligible: these batches are small and the temp B-tree is already
+sorting.', 'in_progress', 'medium', NULL, NULL, NULL, '2026-09-09 06:34:37.323', '2026-09-09 09:44:40.933', NULL, '8940d7e8b1f57721751f6a0766e0acba', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QXQ7QBFKMY53RAXEGYP1C', 'bug', '06G89R35V3EJQDYRRW7K98VWZG', 'Rank sorts with an unstable sort and no tie-break, so tied scores order arbitrarily', '`internal/connect/rank.go:52` sorts with `sort.Slice` and a comparator that
+compares `Score` alone:
+
+    sort.Slice(enriched, func(i, j int) bool {
+        return enriched[i].Score > enriched[j].Score
+    })
+
+`sort.Slice` is not stable, and the comparator defines only a partial order, so
+tied candidates come out in whatever arrangement pdqsort leaves them in. That is
+a function of the input order, which the sibling ticket shows is itself not
+pinned.
+
+Ties are common rather than exotic. Any link-sparse vault gives centrality,
+link_overlap and tag_overlap of 0 across the whole batch, so the score collapses
+onto one or two signals and clusters. Files aged past the 90-day recency clamp
+tie at exactly 0.
+
+Fix is two lines — a total order plus a stable sort:
+
+    sort.SliceStable(enriched, func(i, j int) bool {
+        if enriched[i].Score != enriched[j].Score {
+            return enriched[i].Score > enriched[j].Score
+        }
+        return enriched[i].Path < enriched[j].Path
+    })
+
+The `Path` tie-break is the load-bearing half: it makes the ordering total, so
+the result no longer depends on candidate order at all. That is worth having
+regardless of what the sibling ticket does about ORDER BY, and it is the cheapest
+way to make ranked output reproducible.
+
+`SliceStable` on its own would only preserve an input order that is not
+guaranteed, so prefer the explicit tie-break over relying on stability.', 'done', 'medium', NULL, NULL, NULL, '2026-09-09 06:34:09.085', '2026-09-09 09:46:10.086', NULL, '65e030ace029922ab14b652c93e009be', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
