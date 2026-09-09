@@ -2377,3 +2377,88 @@ redundant defences of the same thing:
 
 Cost is negligible: these batches are small and the temp B-tree is already
 sorting.', 'backlog', 'medium', NULL, NULL, NULL, '2026-09-09 06:34:37.323', '2026-09-09 06:34:58.174', NULL, 'f6bc8b7fb5bf3bd6e2a3d76f5a45c2d6', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89S0F3600NPD1978YNJP9CR', 'task', NULL, 'plan export cannot regenerate the changelog, so redacting ticket prose means rebuild-and-refile', NULL, 'backlog', 'medium', NULL, NULL, NULL, '2026-09-09 06:38:53.722', '2026-09-09 06:38:53.722', NULL, '32be0591eb8c3bbb5b4e674de418b720', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;
+INSERT INTO tickets (record_id, type, parent_record_id, title, description, status, priority, assigned_to, team, decision_ref, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89S0F3600NPD1978YNJP9CR', 'task', NULL, 'plan export cannot regenerate the changelog, so redacting ticket prose means rebuild-and-refile', 'Found 2026-09-09 while removing sibling-repo names and a hostname from a ticket
+description before pushing. `make secrets` caught it, which is the system
+working — CLAUDE.md is explicit that ticket prose is published prose, and the
+gate ran before anything left the machine. What is missing is the route from
+"caught it" back to a clean changelog.
+
+WHY THE OBVIOUS FIXES DO NOT WORK
+
+Fixing forward makes it worse. `ticket refine write` appends a ticket_history
+row whose `old_value` is the previous description, so correcting a leaked
+description writes the leaked text into the changelog a second time. The
+outgoing diff then contains two copies rather than none.
+
+Wiping and re-exporting does not work either. `plan export` emits "every
+replicated planning row that has been modified since the last export", so it is
+watermark-driven. Restoring the changelog files to an earlier state and
+re-running it re-emits only rows touched since the watermark — in this case two
+rows out of the fifteen or so that were needed. The rest stayed in pql.db,
+absent from the changelog, with no supported way to get them back out.
+
+WHAT IT ACTUALLY TOOK
+
+    git reset --soft origin/main
+    git checkout origin/main -- .pql/changelog
+    rm .pql/pql.db
+    pql plan rebuild --verify
+    # then re-create four tickets by hand, re-entering every description,
+    # and re-attach the parent links
+
+That works and `--verify` reported 0 rows lost, but it is a hand-rolled
+procedure recovered from reading the exporter''s help text under time pressure,
+and the re-entry step is transcription with no check on it. Anyone hitting this
+without the descriptions still in front of them loses the prose.
+
+THE ASYMMETRY
+
+`plan rebuild` reconstructs pql.db from the changelog and can be forced at any
+time. There is no inverse. The pair is documented as replication, but only one
+direction can be regenerated on demand — the other is append-only and
+watermarked, so pql.db''s current state cannot be re-expressed as changelog
+content once the watermark has passed it.
+
+THE DESIGN QUESTION UNDERNEATH, which is why this is not just a missing flag
+
+Is the changelog an append-only *log*, or a materialised *replica*?
+
+- As a log, redaction is illegitimate by construction and the honest answer is
+  that scrubbing prose requires rewriting git history, with the D-16 hashes and
+  LWW guards recomputed. A `--force-full` export would be a footgun that
+  silently rewrites replicated history other clones have already replayed.
+- As a replica, regenerating it from pql.db is the natural operation and its
+  absence is the defect.
+
+D-15 and D-16 lean toward log (monthly append files, inline LWW guards, content
+hashes, ON CONFLICT DO NOTHING on replay), but `plan rebuild` treats pql.db as
+fully derivable from it, which is replica-shaped. The two readings have not had
+to disagree until now.
+
+Worth noting the blast radius differs by case. Redacting a ticket that has never
+been pushed — this case — touches nothing another clone has seen, and a full
+regeneration is safe. Redacting one that has been replayed elsewhere is a
+distributed-state problem and probably out of scope for any flag.
+
+DESIRED, not a design
+
+Someone who has just been told by `make secrets` that a ticket description
+leaks should have a supported route to fix it that does not involve re-entering
+prose. Shapes worth weighing:
+
+- A full/forced export that rewrites the month''s files from pql.db, refusing (or
+  loudly warning) when the affected rows appear in commits already pushed.
+- A redact verb scoped to descriptions, which rewrites the row and its history
+  entries in place rather than appending.
+- Nothing in the tool, and instead a documented procedure in CLAUDE.md next to
+  the "ticket prose is published prose" table — cheapest, and honest if the log
+  reading wins.
+
+The third is a legitimate outcome. What is not legitimate is the current state,
+where the gate reliably catches the problem and the recovery is undocumented.
+
+RELATED
+
+D-15, D-16 - changelog replication and the guards that make replay safe.
+T-123     - the other place the single-writer assumption shows at the seam.', 'backlog', 'medium', NULL, NULL, NULL, '2026-09-09 06:38:53.722', '2026-09-09 06:39:18.723', NULL, '45998b48df550fb66a0bbb9ddc7bbea8', 2) ON CONFLICT(record_id) DO UPDATE SET type=excluded.type, parent_record_id=excluded.parent_record_id, title=excluded.title, description=excluded.description, status=excluded.status, priority=excluded.priority, assigned_to=excluded.assigned_to, team=excluded.team, decision_ref=excluded.decision_ref, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, hash=excluded.hash, canonical_version=excluded.canonical_version WHERE excluded.updated_at >= tickets.updated_at;

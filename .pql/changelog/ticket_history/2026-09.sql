@@ -1003,3 +1003,87 @@ then the recency clock, which needs a design call rather than a patch.', NULL, '
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QDBQTD7E1H8XZ8B4BDEQ8', 'parent_id', NULL, 'T-129', NULL, '2026-09-09 06:34:58', '2026-09-09 06:34:58.166', '2026-09-09 06:34:58.166', NULL, '750b6f0d1256d064eaaa05a26d1785fe', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89R15HFKK0Y3EFGJXDAQEBG', 'parent_id', NULL, 'T-129', NULL, '2026-09-09 06:34:58', '2026-09-09 06:34:58.174', '2026-09-09 06:34:58.174', NULL, '21d9be37ee3d22792d1a3b68bdb1a68b', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89QXQ7QBFKMY53RAXEGYP1C', 'parent_id', NULL, 'T-129', NULL, '2026-09-09 06:34:58', '2026-09-09 06:34:58.174', '2026-09-09 06:34:58.174', NULL, '93a7008d7f59eaf9f715d5ea5d0c2ff0', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06G89S0F3600NPD1978YNJP9CR', 'description', NULL, 'Found 2026-09-09 while removing sibling-repo names and a hostname from a ticket
+description before pushing. `make secrets` caught it, which is the system
+working — CLAUDE.md is explicit that ticket prose is published prose, and the
+gate ran before anything left the machine. What is missing is the route from
+"caught it" back to a clean changelog.
+
+WHY THE OBVIOUS FIXES DO NOT WORK
+
+Fixing forward makes it worse. `ticket refine write` appends a ticket_history
+row whose `old_value` is the previous description, so correcting a leaked
+description writes the leaked text into the changelog a second time. The
+outgoing diff then contains two copies rather than none.
+
+Wiping and re-exporting does not work either. `plan export` emits "every
+replicated planning row that has been modified since the last export", so it is
+watermark-driven. Restoring the changelog files to an earlier state and
+re-running it re-emits only rows touched since the watermark — in this case two
+rows out of the fifteen or so that were needed. The rest stayed in pql.db,
+absent from the changelog, with no supported way to get them back out.
+
+WHAT IT ACTUALLY TOOK
+
+    git reset --soft origin/main
+    git checkout origin/main -- .pql/changelog
+    rm .pql/pql.db
+    pql plan rebuild --verify
+    # then re-create four tickets by hand, re-entering every description,
+    # and re-attach the parent links
+
+That works and `--verify` reported 0 rows lost, but it is a hand-rolled
+procedure recovered from reading the exporter''s help text under time pressure,
+and the re-entry step is transcription with no check on it. Anyone hitting this
+without the descriptions still in front of them loses the prose.
+
+THE ASYMMETRY
+
+`plan rebuild` reconstructs pql.db from the changelog and can be forced at any
+time. There is no inverse. The pair is documented as replication, but only one
+direction can be regenerated on demand — the other is append-only and
+watermarked, so pql.db''s current state cannot be re-expressed as changelog
+content once the watermark has passed it.
+
+THE DESIGN QUESTION UNDERNEATH, which is why this is not just a missing flag
+
+Is the changelog an append-only *log*, or a materialised *replica*?
+
+- As a log, redaction is illegitimate by construction and the honest answer is
+  that scrubbing prose requires rewriting git history, with the D-16 hashes and
+  LWW guards recomputed. A `--force-full` export would be a footgun that
+  silently rewrites replicated history other clones have already replayed.
+- As a replica, regenerating it from pql.db is the natural operation and its
+  absence is the defect.
+
+D-15 and D-16 lean toward log (monthly append files, inline LWW guards, content
+hashes, ON CONFLICT DO NOTHING on replay), but `plan rebuild` treats pql.db as
+fully derivable from it, which is replica-shaped. The two readings have not had
+to disagree until now.
+
+Worth noting the blast radius differs by case. Redacting a ticket that has never
+been pushed — this case — touches nothing another clone has seen, and a full
+regeneration is safe. Redacting one that has been replayed elsewhere is a
+distributed-state problem and probably out of scope for any flag.
+
+DESIRED, not a design
+
+Someone who has just been told by `make secrets` that a ticket description
+leaks should have a supported route to fix it that does not involve re-entering
+prose. Shapes worth weighing:
+
+- A full/forced export that rewrites the month''s files from pql.db, refusing (or
+  loudly warning) when the affected rows appear in commits already pushed.
+- A redact verb scoped to descriptions, which rewrites the row and its history
+  entries in place rather than appending.
+- Nothing in the tool, and instead a documented procedure in CLAUDE.md next to
+  the "ticket prose is published prose" table — cheapest, and honest if the log
+  reading wins.
+
+The third is a legitimate outcome. What is not legitimate is the current state,
+where the gate reliably catches the problem and the recovery is undocumented.
+
+RELATED
+
+D-15, D-16 - changelog replication and the guards that make replay safe.
+T-123     - the other place the single-writer assumption shows at the seam.', NULL, '2026-09-09 06:39:18', '2026-09-09 06:39:18.723', '2026-09-09 06:39:18.723', NULL, 'f1ef7d75cdc7ca3d4decb1f264db022b', 2) ON CONFLICT(hash) DO NOTHING;
