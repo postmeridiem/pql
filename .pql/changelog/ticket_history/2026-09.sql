@@ -2383,3 +2383,53 @@ Held back from 2.2.0 deliberately. It changes ten verbs'' output shapes with rea
 
 RESOLVED (2026-09-09). All six batch-capable verbs converge on one renderer (renderMutationReceipt): one record changed returns that record whole, several return the summary shape ticket label established — {ticket_ids, action, <value-key>: <applied>}, with the applied value keyed semantically (status, assigned_to, team, parent_id, decision_ref, label). ticket label itself gained the missing half: a single-id call now returns the whole record where it previously returned the summary regardless of count. status --force''s cascade receipt lists every ticket actually closed, not just the ids named. block/unblock keep their pair receipt, append and refine write keep their documented single-record shapes, new keeps its {id}. The skill''s ''not every batch verb has converged'' caveat is replaced by the rule stated plainly, and the integration test that pinned the old N-records cascade shape now asserts the summary and confirms state via show — which is the documented receipt workflow. Shape change ships in the next minor per this ticket''s own hold-back note.', NULL, '2026-09-09 10:48:59', '2026-09-09 10:48:59.799', '2026-09-09 10:48:59.799', NULL, 'b52c11ac580bb5a70315ee37727e2d54', 2) ON CONFLICT(hash) DO NOTHING;
 INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06FY5C83X7F5WDSXK11XWKM47C', 'status', 'in_progress', 'done', NULL, '2026-09-09 10:48:59', '2026-09-09 10:48:59.831', '2026-09-09 10:48:59.831', NULL, 'd844fe7a0d6741980e83535d510eaab5', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06GCTEGNA7CSH8H9VHM3KKC024', 'description', NULL, 'From a pql-driven session in a downstream repo, filing detailed tickets (multi-paragraph specs) took two calls every time: `pql ticket new <type> <title> --description "..."` cannot take a file, so long descriptions either go through shell quoting (fragile, and command substitution trips agent permission allowlists) or through a second `pql ticket append <id> --file <path>` call.
+
+`ticket append` already has the right input modes (`--file`, `--stdin`, mutually exclusive with the positional text). Mirror them on `ticket new`:
+
+- `pql ticket new <type> <title> --description-file <path>`
+- `pql ticket new <type> <title> --description-stdin`
+
+mutually exclusive with `--description`. Same encoding handling as `append --file`.
+
+Acceptance: a ticket created with `--description-file` has exactly the file''s contents as its description (no trailing-newline drift); passing two description sources is a usage error; the changelog entry records the description like any other create.', NULL, '2026-09-23 07:45:37', '2026-09-23 07:45:37.299', '2026-09-23 07:45:37.299', NULL, 'f06fe3f8d76c5a3c5c255b49e4da54fc', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06GCTEGRSZ9911SRAF9RBDHWJ8', 'description', NULL, 'Batch ids are comma-separated (`pql ticket status T-1,T-2 done`, `pql ticket show T-1,T-2`), but the natural first guess is space-separated. `pql ticket status T-592 T-593 review` fails with cobra''s generic `accepts 2 arg(s), received 3`, which says nothing about the comma syntax. Agents driving pql hit this repeatedly and fall back to one call per id (or a shell loop, which trips permission allowlists).
+
+Options, pick one:
+1. Accept space-separated ids where the grammar is unambiguous: for `status`, every positional but the last is an id; for `show`, every positional is an id. Commas keep working.
+2. Keep the grammar, but when extra positionals all look like ticket ids, fail with a hint: `use commas to batch: pql ticket status T-592,T-593 review`.
+
+(1) is friendlier; (2) is the minimal fix. Apply the same treatment to the other comma-batching verbs (assign, label, team, setparent, …) so the rule is uniform.
+
+Acceptance: `pql ticket status T-1 T-2 done` either works or names the comma syntax in its error; same for `ticket show T-1 T-2`; covered by CLI tests.', NULL, '2026-09-23 07:45:38', '2026-09-23 07:45:38.153', '2026-09-23 07:45:38.153', NULL, 'e30e54100b17e877b011fa595b036cf1', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06GCTEGW5RJJJ44ZGKJ8F1RFH4', 'description', NULL, '`pql ticket new task "..." --decision D-110` where D-110 is written in the markdown but not yet synced into pql.db fails with the raw SQLite error:
+
+    {"level":"error","code":"cli.exit","msg":"repo: create ticket: constraint failed: FOREIGN KEY constraint failed (787)"}
+
+It doesn''t say which reference is missing (the decision? the parent?) or what to do. The same raw error is likely for an unknown `--parent`.
+
+Fix: check the references before the insert (or map the FK failure) and name them:
+
+- `decision D-110 not found in the planning DB — if it exists in the markdown, run "pql decisions sync"`
+- `parent T-9999 not found`
+
+Exit with the usual user-error code, not `cli.exit`. Worth auditing the other verbs that take a decision/ticket reference (`ticket decision`, `setparent`, `block`) for the same raw error.
+
+Acceptance: each unknown-reference case names the missing id and suggests the fix; no raw `constraint failed` text reaches the user; covered by CLI tests.', NULL, '2026-09-23 07:45:38', '2026-09-23 07:45:38.643', '2026-09-23 07:45:38.643', NULL, 'dc8eee4a3dcfa8634b35817131b2a73c', 2) ON CONFLICT(hash) DO NOTHING;
+INSERT INTO ticket_history (ticket_record_id, field, old_value, new_value, changed_by, changed_at, created_at, updated_at, deleted_at, hash, canonical_version) VALUES ('06GCTEGZ3106HDDASVEHMHCF9C', 'description', NULL, 'Follow-up to T-58. T-58 made a linked git worktree its own vault root, which is right for the markdown side: DQR edits in the worktree are what `decisions validate` should see. But the planning DB (`.pql/pql.db`) is gitignored, user-authored state, so a fresh worktree has none. Inside a worktree every planning read is empty ("ticket T-1 not found") and every write lands in a throwaway DB that no other checkout sees.
+
+Field report (a downstream repo running several agents in parallel worktrees, 2026-09-23):
+- `pql ticket show` / `status` from inside the worktrees saw no tickets.
+- The replication pre-commit shim that `pql init` plants sources `<toplevel>/.pql/hooks/pre-commit`, which is also untracked, so it is missing in the worktree and **every `git commit` in the worktree fails**. The only way through is `--no-verify`, which the repo forbids. The workaround was for agents to never commit (patch files applied from the main checkout).
+- Had the hook run, its `plan export` from an empty worktree DB would have staged a changelog export that deletes every ticket.
+
+Proposal: split resolution in a linked worktree (`git rev-parse --git-dir` ≠ `--git-common-dir`):
+1. **Markdown / DQR / index:** the worktree root, as T-58 does now.
+2. **Planning state (`pql.db`):** the main checkout''s `.pql/pql.db` (the worktree containing the common dir). Tickets are shared state, so every checkout should read and write one DB, and the changelog export stays single-writer.
+3. **Hook shims:** resolve the hook script via the common dir, not `--show-toplevel`, so they exist in every worktree.
+4. **Changelog export in a worktree:** don''t export (or export nothing to stage). The main checkout owns `.pql/changelog/`; worktree branches committing their own exports would conflict on every merge. The pre-commit shim in a worktree should succeed as a no-op.
+5. `pql doctor` should report both roots when they differ (markdown root vs planning root).
+
+Open question: a user who wants per-worktree ticket sandboxes (experiments) — an explicit `--db` / config opt-out would cover it.
+
+Acceptance: from a linked worktree, `pql ticket list` returns the main checkout''s tickets; a ticket created in the worktree is visible from main immediately; `git commit` in a worktree succeeds with the hooks installed and stages no `.pql/changelog` changes; `decisions validate` still reads the worktree''s markdown; `pql doctor` shows both roots; integration tests cover a worktree inside and outside the main checkout.', NULL, '2026-09-23 07:45:39', '2026-09-23 07:45:39.282', '2026-09-23 07:45:39.282', NULL, '58fc9cfe6108e61bbdebf4749e5e4eb7', 2) ON CONFLICT(hash) DO NOTHING;
