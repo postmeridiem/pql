@@ -43,7 +43,7 @@ env:
   # publish. They were: the publish step used the action's `version: latest`
   # while every other goreleaser invocation in this repo pinned v2.16.0 (T-70).
   # ci.yaml pins the same two versions for its own jobs — bump them together.
-  GORELEASER_VERSION: v2.16.0
+  GORELEASER_VERSION: v2.18.3
   GOLANGCI_LINT_VERSION: v2.15.0
 
 jobs:
