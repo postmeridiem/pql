@@ -2,7 +2,7 @@ module github.com/postmeridiem/pql
 
 go 1.25.12
 
-toolchain go1.26.6
+toolchain go1.27.2
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0

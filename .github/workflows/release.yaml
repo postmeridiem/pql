@@ -44,7 +44,7 @@ env:
   # while every other goreleaser invocation in this repo pinned v2.16.0 (T-70).
   # ci.yaml pins the same two versions for its own jobs — bump them together.
   GORELEASER_VERSION: v2.16.0
-  GOLANGCI_LINT_VERSION: v2.12.2
+  GOLANGCI_LINT_VERSION: v2.15.0
 
 jobs:
   # The gate. ci.yaml runs the same checks on every push, but `needs:` cannot
